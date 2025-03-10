@@ -729,6 +729,8 @@ DEFINE_uint32(uncache_aggressiveness,
               "obsolete. 0 = disabled, 1 = minimum, 100 = moderate, 10000 = "
               "normal max");
 
+DEFINE_uint32(space_amplification_percent_limit_hard, 0, "");
+
 DEFINE_bool(use_data_block_hash_index, false,
             "if use kDataBlockBinaryAndHash "
             "instead of kDataBlockBinarySearch. "
@@ -4325,6 +4327,8 @@ class Benchmark {
     options.max_bytes_for_level_multiplier =
         FLAGS_max_bytes_for_level_multiplier;
     options.uncache_aggressiveness = FLAGS_uncache_aggressiveness;
+    options.space_amplification_percent_limit_hard =
+        FLAGS_space_amplification_percent_limit_hard;
     Status s =
         CreateMemTableRepFactory(config_options, &options.memtable_factory);
     if (!s.ok()) {

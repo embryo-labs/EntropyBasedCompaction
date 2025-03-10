@@ -394,6 +394,10 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
   // around 300.
   uint32_t uncache_aggressiveness = 0;
 
+  // 0: disabled
+  // Default: 0
+  uint32_t space_amplification_percent_limit_hard = 0;
+
   // Create ColumnFamilyOptions with default values for all fields
   ColumnFamilyOptions();
   // Create ColumnFamilyOptions from Options

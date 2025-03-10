@@ -953,6 +953,36 @@ ColumnFamilyData::GetWriteStallConditionAndCause(
     return {WriteStallCondition::kDelayed,
             WriteStallCause::kPendingCompactionBytes};
   }
+  const VersionStorageInfo* storage_info = current_->storage_info();
+  size_t num_non_empty_levels = storage_info->num_non_empty_levels();
+  if (mutable_cf_options.space_amplification_percent_limit_hard != 0 &&
+      num_non_empty_levels > 0) {
+    uint64_t additional_size = 0;
+    uint64_t last_sorted_run_size;
+    if (num_non_empty_levels == 1) {
+      const auto& l0_files = storage_info->LevelFiles(0);
+      if (l0_files.empty()) {
+        last_sorted_run_size = 0;
+      } else {
+        for (size_t i = 0; i < l0_files.size() - 1; ++i) {
+          additional_size += l0_files[i]->fd.file_size;
+        }
+        last_sorted_run_size = l0_files.back()->fd.file_size;
+      }
+    } else {
+      for (size_t level = 0; level < num_non_empty_levels - 1; ++level) {
+        additional_size += storage_info->NumLevelBytes(level);
+      }
+      last_sorted_run_size =
+          storage_info->NumLevelBytes(num_non_empty_levels - 1);
+    }
+    if (additional_size * 100 >
+        mutable_cf_options.space_amplification_percent_limit_hard *
+            last_sorted_run_size) {
+      return {WriteStallCondition::kStopped,
+              WriteStallCause::kSpaceAmplification};
+    }
+  }
   return {WriteStallCondition::kNormal, WriteStallCause::kNone};
 }
 
@@ -1007,6 +1037,13 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
           "[%s] Stopping writes because of estimated pending compaction "
           "bytes %" PRIu64,
           name_.c_str(), compaction_needed_bytes);
+    } else if (write_stall_condition == WriteStallCondition::kStopped &&
+               write_stall_cause == WriteStallCause::kSpaceAmplification) {
+      write_controller_token_ = write_controller->GetStopToken();
+      internal_stats_->AddCFStats(InternalStats::SPACE_AMP_LIMIT_STOPS, 1);
+      ROCKS_LOG_WARN(ioptions_.logger,
+                     "[%s] Stopping writes because of space amplification",
+                     name_.c_str());
     } else if (write_stall_condition == WriteStallCondition::kDelayed &&
                write_stall_cause == WriteStallCause::kMemtableLimit) {
       write_controller_token_ =

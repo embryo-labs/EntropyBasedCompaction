@@ -90,6 +90,7 @@ enum class WriteStallCause {
   kL0FileCountLimit,
   kPendingCompactionBytes,
   kCFScopeWriteStallCauseEnumMax,
+  kSpaceAmplification,
   // End of CF-scope write stall causes
 
   // Beginning of DB-scope write stall causes
