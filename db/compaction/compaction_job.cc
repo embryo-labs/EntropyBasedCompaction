@@ -73,6 +73,8 @@ const char* GetCompactionReasonString(CompactionReason compaction_reason) {
       return "UniversalSizeRatio";
     case CompactionReason::kUniversalSortedRunNum:
       return "UniversalSortedRunNum";
+    case CompactionReason::kUniversalPolicy:
+      return "UniversalCustom";
     case CompactionReason::kFIFOMaxSize:
       return "FIFOMaxSize";
     case CompactionReason::kFIFOReduceNumFiles:
@@ -1804,11 +1806,19 @@ Status CompactionJob::InstallCompactionResults(
     *compaction_released = true;
   };
 
-  return versions_->LogAndApply(
+  Status ret = versions_->LogAndApply(
       compaction->column_family_data(), mutable_cf_options, read_options,
       write_options, edit, db_mutex_, db_directory_,
       /*new_descriptor_log=*/false,
       /*column_family_options=*/nullptr, manifest_wcb);
+  if (ret.ok()) {
+    if (compaction->merging_info().has_value()) {
+      auto merging_info = compaction->merging_info().value();
+      assert(merging_info->merging);
+      merging_info->merging = false;
+    }
+  }
+  return ret;
 }
 
 void CompactionJob::RecordCompactionIOStats() {

@@ -578,6 +578,14 @@ class ColumnFamilyData {
     return (mem_->IsEmpty() ? 0 : 1) + imm_.NumNotFlushed();
   }
 
+  const std::list<UniversalCompactionPolicy::SortedRunInfo>& sorted_run_status()
+      const {
+    return sorted_run_status_;
+  }
+  std::list<UniversalCompactionPolicy::SortedRunInfo>& sorted_run_status() {
+    return sorted_run_status_;
+  }
+
  private:
   friend class ColumnFamilySet;
   ColumnFamilyData(uint32_t id, const std::string& name,
@@ -688,6 +696,8 @@ class ColumnFamilyData {
   bool mempurge_used_;
 
   std::atomic<uint64_t> next_epoch_number_;
+
+  std::list<UniversalCompactionPolicy::SortedRunInfo> sorted_run_status_;
 };
 
 // ColumnFamilySet has interesting thread-safety requirements

@@ -7,6 +7,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include "rocksdb/compaction_policy_lazy_leveling.h"
 #ifdef GFLAGS
 #ifdef NUMA
 #include <numa.h>
@@ -531,6 +532,9 @@ DEFINE_int32(compaction_pri,
              (int32_t)ROCKSDB_NAMESPACE::Options().compaction_pri,
              "priority of files to compaction: by size or by data age");
 
+DEFINE_string(universal_compaction_policy, "original",
+              "original/lazy-leveling");
+
 DEFINE_int32(universal_size_ratio, 0,
              "Percentage flexibility while comparing file size "
              "(for universal compaction only).");
@@ -558,6 +562,9 @@ DEFINE_bool(universal_allow_trivial_move, false,
 
 DEFINE_bool(universal_incremental, false,
             "Enable incremental compactions in universal compaction.");
+
+DEFINE_int32(lazy_leveling_size_ratio, 5, "");
+DEFINE_int32(lazy_leveling_num_levels, 4, "");
 
 DEFINE_int32(
     universal_stop_style,
@@ -4718,6 +4725,11 @@ class Benchmark {
         FLAGS_universal_incremental;
     options.compaction_options_universal.stop_style =
         static_cast<CompactionStopStyle>(FLAGS_universal_stop_style);
+    if (FLAGS_universal_compaction_policy == "lazy-leveling") {
+      options.compaction_options_universal.policy =
+          std::make_shared<CompactionPolicyLazyLeveling>(
+              FLAGS_lazy_leveling_size_ratio, FLAGS_lazy_leveling_num_levels);
+    }
     if (FLAGS_thread_status_per_interval > 0) {
       options.enable_thread_tracking = true;
     }

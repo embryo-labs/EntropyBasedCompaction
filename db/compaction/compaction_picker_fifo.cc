@@ -34,7 +34,7 @@ uint64_t GetTotalFilesSize(const std::vector<FileMetaData*>& files) {
 }  // anonymous namespace
 
 bool FIFOCompactionPicker::NeedsCompaction(
-    const VersionStorageInfo* vstorage) const {
+    const ColumnFamilyData* cfd, const VersionStorageInfo* vstorage) const {
   const int kLevel0 = 0;
   return vstorage->CompactionScore(kLevel0) >= 1;
 }
@@ -424,7 +424,8 @@ Compaction* FIFOCompactionPicker::PickTemperatureChangeCompaction(
 }
 
 Compaction* FIFOCompactionPicker::PickCompaction(
-    const std::string& cf_name, const MutableCFOptions& mutable_cf_options,
+    ColumnFamilyData* cfd, const std::string& cf_name,
+    const MutableCFOptions& mutable_cf_options,
     const MutableDBOptions& mutable_db_options,
     const std::vector<SequenceNumber>& /* existing_snapshots */,
     const SnapshotChecker* /* snapshot_checker */, VersionStorageInfo* vstorage,
@@ -447,7 +448,8 @@ Compaction* FIFOCompactionPicker::PickCompaction(
 }
 
 Compaction* FIFOCompactionPicker::CompactRange(
-    const std::string& cf_name, const MutableCFOptions& mutable_cf_options,
+    ColumnFamilyData* cfd, const std::string& cf_name,
+    const MutableCFOptions& mutable_cf_options,
     const MutableDBOptions& mutable_db_options, VersionStorageInfo* vstorage,
     int input_level, int output_level,
     const CompactRangeOptions& /*compact_range_options*/,
@@ -463,7 +465,7 @@ Compaction* FIFOCompactionPicker::CompactRange(
   *compaction_end = nullptr;
   LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, ioptions_.logger);
   Compaction* c =
-      PickCompaction(cf_name, mutable_cf_options, mutable_db_options,
+      PickCompaction(cfd, cf_name, mutable_cf_options, mutable_db_options,
                      /*existing_snapshots*/ {}, /*snapshot_checker*/ nullptr,
                      vstorage, &log_buffer);
   log_buffer.FlushBufferToLog();

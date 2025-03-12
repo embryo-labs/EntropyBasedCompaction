@@ -20,7 +20,7 @@
 namespace ROCKSDB_NAMESPACE {
 
 bool LevelCompactionPicker::NeedsCompaction(
-    const VersionStorageInfo* vstorage) const {
+    const ColumnFamilyData* cfd, const VersionStorageInfo* vstorage) const {
   if (!vstorage->ExpiredTtlFiles().empty()) {
     return true;
   }
@@ -55,14 +55,16 @@ enum class CompactToNextLevel {
 // A class to build a leveled compaction step-by-step.
 class LevelCompactionBuilder {
  public:
-  LevelCompactionBuilder(const std::string& cf_name,
+  LevelCompactionBuilder(const ColumnFamilyData* cfd,
+                         const std::string& cf_name,
                          VersionStorageInfo* vstorage,
                          CompactionPicker* compaction_picker,
                          LogBuffer* log_buffer,
                          const MutableCFOptions& mutable_cf_options,
                          const ImmutableOptions& ioptions,
                          const MutableDBOptions& mutable_db_options)
-      : cf_name_(cf_name),
+      : cfd_(cfd),
+        cf_name_(cf_name),
         vstorage_(vstorage),
         compaction_picker_(compaction_picker),
         log_buffer_(log_buffer),
@@ -136,6 +138,7 @@ class LevelCompactionBuilder {
       const autovector<std::pair<int, FileMetaData*>>& level_files,
       CompactToNextLevel compact_to_next_level);
 
+  const ColumnFamilyData* cfd_;
   const std::string& cf_name_;
   VersionStorageInfo* vstorage_;
   CompactionPicker* compaction_picker_;
@@ -573,7 +576,7 @@ Compaction* LevelCompactionBuilder::GetCompaction() {
   // takes running compactions into account (by skipping files that are already
   // being compacted). Since we just changed compaction score, we recalculate it
   // here
-  vstorage_->ComputeCompactionScore(ioptions_, mutable_cf_options_);
+  vstorage_->ComputeCompactionScore(cfd_, ioptions_, mutable_cf_options_);
   return c;
 }
 
@@ -974,12 +977,13 @@ bool LevelCompactionBuilder::PickSizeBasedIntraL0Compaction() {
 }  // namespace
 
 Compaction* LevelCompactionPicker::PickCompaction(
-    const std::string& cf_name, const MutableCFOptions& mutable_cf_options,
+    ColumnFamilyData* cfd, const std::string& cf_name,
+    const MutableCFOptions& mutable_cf_options,
     const MutableDBOptions& mutable_db_options,
     const std::vector<SequenceNumber>& /*existing_snapshots */,
     const SnapshotChecker* /*snapshot_checker*/, VersionStorageInfo* vstorage,
     LogBuffer* log_buffer) {
-  LevelCompactionBuilder builder(cf_name, vstorage, this, log_buffer,
+  LevelCompactionBuilder builder(cfd, cf_name, vstorage, this, log_buffer,
                                  mutable_cf_options, ioptions_,
                                  mutable_db_options);
   return builder.PickCompaction();

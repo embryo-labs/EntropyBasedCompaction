@@ -61,7 +61,8 @@ class CompactionPicker {
   // timestamps is not enabled. The other compaction styles do not pass or use
   // `existing_snapshots` or `snapshot_checker`.
   virtual Compaction* PickCompaction(
-      const std::string& cf_name, const MutableCFOptions& mutable_cf_options,
+      ColumnFamilyData* cfd, const std::string& cf_name,
+      const MutableCFOptions& mutable_cf_options,
       const MutableDBOptions& mutable_db_options,
       const std::vector<SequenceNumber>& existing_snapshots,
       const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
@@ -74,7 +75,8 @@ class CompactionPicker {
   // Client is responsible for compaction_end storage -- when called,
   // *compaction_end should point to valid InternalKey!
   virtual Compaction* CompactRange(
-      const std::string& cf_name, const MutableCFOptions& mutable_cf_options,
+      ColumnFamilyData* cfd, const std::string& cf_name,
+      const MutableCFOptions& mutable_cf_options,
       const MutableDBOptions& mutable_db_options, VersionStorageInfo* vstorage,
       int input_level, int output_level,
       const CompactRangeOptions& compact_range_options,
@@ -85,7 +87,8 @@ class CompactionPicker {
   // The maximum allowed output level.  Default value is NumberLevels() - 1.
   virtual int MaxOutputLevel() const { return NumberLevels() - 1; }
 
-  virtual bool NeedsCompaction(const VersionStorageInfo* vstorage) const = 0;
+  virtual bool NeedsCompaction(const ColumnFamilyData* cfd,
+                               const VersionStorageInfo* vstorage) const = 0;
 
   // Sanitize the input set of compaction input files and convert it to
   // `std::vector<CompactionInputFiles>` in the output parameter
@@ -259,7 +262,7 @@ class NullCompactionPicker : public CompactionPicker {
 
   // Always return "nullptr"
   Compaction* PickCompaction(
-      const std::string& /*cf_name*/,
+      ColumnFamilyData*, const std::string& /*cf_name*/,
       const MutableCFOptions& /*mutable_cf_options*/,
       const MutableDBOptions& /*mutable_db_options*/,
       const std::vector<SequenceNumber>& /*existing_snapshots*/,
@@ -269,7 +272,8 @@ class NullCompactionPicker : public CompactionPicker {
   }
 
   // Always return "nullptr"
-  Compaction* CompactRange(const std::string& /*cf_name*/,
+  Compaction* CompactRange(ColumnFamilyData* cfd,
+                           const std::string& /*cf_name*/,
                            const MutableCFOptions& /*mutable_cf_options*/,
                            const MutableDBOptions& /*mutable_db_options*/,
                            VersionStorageInfo* /*vstorage*/,
@@ -285,7 +289,8 @@ class NullCompactionPicker : public CompactionPicker {
   }
 
   // Always returns false.
-  bool NeedsCompaction(const VersionStorageInfo* /*vstorage*/) const override {
+  bool NeedsCompaction(const ColumnFamilyData*,
+                       const VersionStorageInfo* /*vstorage*/) const override {
     return false;
   }
 };

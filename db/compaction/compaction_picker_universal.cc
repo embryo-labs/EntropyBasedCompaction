@@ -33,13 +33,15 @@ namespace {
 class UniversalCompactionBuilder {
  public:
   UniversalCompactionBuilder(
-      const ImmutableOptions& ioptions, const InternalKeyComparator* icmp,
-      const std::string& cf_name, const MutableCFOptions& mutable_cf_options,
+      ColumnFamilyData* cfd, const ImmutableOptions& ioptions,
+      const InternalKeyComparator* icmp, const std::string& cf_name,
+      const MutableCFOptions& mutable_cf_options,
       const MutableDBOptions& mutable_db_options,
       const std::vector<SequenceNumber>& existing_snapshots,
       const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
       UniversalCompactionPicker* picker, LogBuffer* log_buffer)
-      : ioptions_(ioptions),
+      : cfd_(cfd),
+        ioptions_(ioptions),
         icmp_(icmp),
         cf_name_(cf_name),
         mutable_cf_options_(mutable_cf_options),
@@ -101,6 +103,8 @@ class UniversalCompactionBuilder {
     // triggered compaction pick this type of file.
     bool level_has_marked_standalone_rangedel;
   };
+
+  Compaction* PickCompactionWithPolicy();
 
   // Pick Universal compaction to limit read amplification
   Compaction* PickCompactionToReduceSortedRuns(
@@ -249,6 +253,7 @@ class UniversalCompactionBuilder {
     return num_l0_to_exclude;
   }
 
+  ColumnFamilyData* cfd_;
   const ImmutableOptions& ioptions_;
   const InternalKeyComparator* icmp_;
   double score_;
@@ -414,7 +419,13 @@ bool UniversalCompactionBuilder::IsInputFilesNonOverlapping(Compaction* c) {
 }
 
 bool UniversalCompactionPicker::NeedsCompaction(
-    const VersionStorageInfo* vstorage) const {
+    const ColumnFamilyData* cfd, const VersionStorageInfo* vstorage) const {
+  UniversalCompactionPolicy* policy =
+      cfd->GetCurrentMutableCFOptions()
+          ->compaction_options_universal.policy.get();
+  if (policy) {
+    return policy->PickCompaction(cfd->sorted_run_status()).has_value();
+  }
   const int kLevel0 = 0;
   if (vstorage->CompactionScore(kLevel0) >= 1) {
     return true;
@@ -429,13 +440,14 @@ bool UniversalCompactionPicker::NeedsCompaction(
 }
 
 Compaction* UniversalCompactionPicker::PickCompaction(
-    const std::string& cf_name, const MutableCFOptions& mutable_cf_options,
+    ColumnFamilyData* cfd, const std::string& cf_name,
+    const MutableCFOptions& mutable_cf_options,
     const MutableDBOptions& mutable_db_options,
     const std::vector<SequenceNumber>& existing_snapshots,
     const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
     LogBuffer* log_buffer) {
   UniversalCompactionBuilder builder(
-      ioptions_, icmp_, cf_name, mutable_cf_options, mutable_db_options,
+      cfd, ioptions_, icmp_, cf_name, mutable_cf_options, mutable_db_options,
       existing_snapshots, snapshot_checker, vstorage, this, log_buffer);
   return builder.PickCompaction();
 }
@@ -565,13 +577,18 @@ bool UniversalCompactionBuilder::ShouldSkipMarkedFile(
 // Universal style of compaction. Pick files that are contiguous in
 // time-range to compact.
 Compaction* UniversalCompactionBuilder::PickCompaction() {
-  const int kLevel0 = 0;
-  score_ = vstorage_->CompactionScore(kLevel0);
   int max_output_level =
       vstorage_->MaxOutputLevel(ioptions_.allow_ingest_behind);
   max_run_size_ = 0;
   sorted_runs_ =
       CalculateSortedRuns(*vstorage_, max_output_level, &max_run_size_);
+  UniversalCompactionPolicy* policy =
+      mutable_cf_options_.compaction_options_universal.policy.get();
+  if (policy) {
+    return PickCompactionWithPolicy();
+  }
+  const int kLevel0 = 0;
+  score_ = vstorage_->CompactionScore(kLevel0);
   int file_num_compaction_trigger =
       mutable_cf_options_.level0_file_num_compaction_trigger;
 
@@ -754,7 +771,7 @@ Compaction* UniversalCompactionBuilder::PickCompaction() {
   RecordInHistogram(ioptions_.stats, NUM_FILES_IN_SINGLE_COMPACTION, num_files);
 
   picker_->RegisterCompaction(c);
-  vstorage_->ComputeCompactionScore(ioptions_, mutable_cf_options_);
+  vstorage_->ComputeCompactionScore(cfd_, ioptions_, mutable_cf_options_);
 
   TEST_SYNC_POINT_CALLBACK("UniversalCompactionBuilder::PickCompaction:Return",
                            c);
@@ -793,6 +810,85 @@ uint32_t UniversalCompactionBuilder::GetPathId(
     accumulated_size += target_size;
   }
   return p;
+}
+
+Compaction* UniversalCompactionBuilder::PickCompactionWithPolicy() {
+  UniversalCompactionPolicy* policy =
+      mutable_cf_options_.compaction_options_universal.policy.get();
+  assert(policy != nullptr);
+  auto& sorted_run_status = cfd_->sorted_run_status();
+  auto ret = policy->PickCompaction(sorted_run_status);
+  if (!ret.has_value()) return nullptr;
+  auto [a, b] = ret.value();
+  std::vector<CompactionInputFiles> inputs(1);
+  int output_level;
+  if (b == sorted_run_status.end()) {
+    output_level = 1;
+    --b;
+    if (vstorage_->NumLevelFiles(1) > 0) {
+      inputs.emplace_back();
+      inputs.back().level = 1;
+      auto files = vstorage_->LevelFiles(1);
+      for (const FileMetaData* file : files) {
+        if (file->being_compacted) {
+          return nullptr;
+        }
+      }
+      inputs.back().files = std::move(files);
+    }
+  } else {
+    output_level = 0;
+  }
+  inputs[0].level = 0;
+  size_t i = 0;
+  auto it = sorted_run_status.begin();
+  while (it != a) {
+    assert(!it->merging);
+    assert(!sorted_runs_[i].file->being_compacted);
+    ++i;
+    ++it;
+  }
+  size_t num_units = 0;
+  for (;;) {
+    assert(!it->merging);
+    num_units += it->num_units;
+    auto file = sorted_runs_[i].file;
+    assert(!file->being_compacted);
+    inputs[0].files.push_back(file);
+    if (it == b) break;
+    ++i;
+    ++it;
+  }
+  std::optional<std::list<UniversalCompactionPolicy::SortedRunInfo>::iterator>
+      merging_info;
+  if (output_level == 0) {
+    // Erase [a, b)
+    auto b_mut = sorted_run_status.erase(a, b);
+    b_mut->merging = true;
+    b_mut->num_units = num_units;
+    merging_info = std::make_optional(b_mut);
+  } else {
+    sorted_run_status.erase(a, sorted_run_status.end());
+  }
+  return new Compaction(
+      vstorage_, ioptions_, mutable_cf_options_, mutable_db_options_,
+      std::move(inputs), output_level,
+      MaxFileSizeForLevel(mutable_cf_options_, output_level,
+                          kCompactionStyleUniversal),
+      GetMaxOverlappingBytes(),
+      GetCompressionType(vstorage_, mutable_cf_options_, output_level, 1,
+                         /* multi path not supported yet */ false),
+      /* compression not supported yet */ kNoCompression,
+      GetCompressionOptions(mutable_cf_options_, vstorage_, output_level,
+                            /* compression not supported yet */ false),
+      mutable_cf_options_.default_write_temperature,
+      /* max_subcompactions */ 0, /* grandparents not supported yet */ {},
+      /* earliest_snapshot */ std::nullopt,
+      /* snapshot_checker */ nullptr,
+      /* is manual */ false, /* trim_ts */ "", /*score*/ 2333,
+      false /* deletion_compaction */,
+      /* l0_files_might_overlap */ true, CompactionReason::kUniversalPolicy,
+      BlobGarbageCollectionPolicy::kUseDefault, -1, merging_info);
 }
 
 //

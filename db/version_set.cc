@@ -3422,7 +3422,7 @@ bool ShouldChangeFileTemperature(const ImmutableOptions& ioptions,
 }  // anonymous namespace
 
 void VersionStorageInfo::ComputeCompactionScore(
-    const ImmutableOptions& immutable_options,
+    const ColumnFamilyData* cfd, const ImmutableOptions& immutable_options,
     const MutableCFOptions& mutable_cf_options) {
   double total_downcompact_bytes = 0.0;
   // Historically, score is defined as actual bytes in a level divided by
@@ -3435,183 +3435,203 @@ void VersionStorageInfo::ComputeCompactionScore(
   // if it is larger than 1.0.
   const double kScoreScale = 10.0;
   int max_output_level = MaxOutputLevel(immutable_options.allow_ingest_behind);
-  for (int level = 0; level <= MaxInputLevel(); level++) {
-    double score;
-    if (level == 0) {
-      // We treat level-0 specially by bounding the number of files
-      // instead of number of bytes for two reasons:
-      //
-      // (1) With larger write-buffer sizes, it is nice not to do too
-      // many level-0 compactions.
-      //
-      // (2) The files in level-0 are merged on every read and
-      // therefore we wish to avoid too many files when the individual
-      // file size is small (perhaps because of a small write-buffer
-      // setting, or very high compression ratios, or lots of
-      // overwrites/deletions).
-      int num_sorted_runs = 0;
-      uint64_t total_size = 0;
-      for (auto* f : files_[level]) {
-        total_downcompact_bytes += static_cast<double>(f->fd.GetFileSize());
-        if (!f->being_compacted) {
-          total_size += f->compensated_file_size;
-          num_sorted_runs++;
-        }
-      }
-      if (compaction_style_ == kCompactionStyleUniversal) {
-        // For universal compaction, we use level0 score to indicate
-        // compaction score for the whole DB. Adding other levels as if
-        // they are L0 files.
-        for (int i = 1; i <= max_output_level; i++) {
-          // It's possible that a subset of the files in a level may be in a
-          // compaction, due to delete triggered compaction or trivial move.
-          // In that case, the below check may not catch a level being
-          // compacted as it only checks the first file. The worst that can
-          // happen is a scheduled compaction thread will find nothing to do.
-          if (!files_[i].empty() && !files_[i][0]->being_compacted) {
+  UniversalCompactionPolicy* custom_compaction_policy =
+      mutable_cf_options.compaction_options_universal.policy.get();
+  if (custom_compaction_policy) {
+    assert(compaction_level_.size() == 2);
+    assert(compaction_score_.size() == 2);
+    compaction_level_[0] = 0;
+    if (custom_compaction_policy->PickCompaction(cfd->sorted_run_status())
+            .has_value()) {
+      compaction_score_[0] = 2;
+    } else {
+      compaction_score_[0] = 1;
+    }
+    compaction_level_[1] = 1;
+    compaction_score_[1] = 1;
+  } else {
+    for (int level = 0; level <= MaxInputLevel(); level++) {
+      double score;
+      if (level == 0) {
+        // We treat level-0 specially by bounding the number of files
+        // instead of number of bytes for two reasons:
+        //
+        // (1) With larger write-buffer sizes, it is nice not to do too
+        // many level-0 compactions.
+        //
+        // (2) The files in level-0 are merged on every read and
+        // therefore we wish to avoid too many files when the individual
+        // file size is small (perhaps because of a small write-buffer
+        // setting, or very high compression ratios, or lots of
+        // overwrites/deletions).
+        int num_sorted_runs = 0;
+        uint64_t total_size = 0;
+        for (auto* f : files_[level]) {
+          total_downcompact_bytes += static_cast<double>(f->fd.GetFileSize());
+          if (!f->being_compacted) {
+            total_size += f->compensated_file_size;
             num_sorted_runs++;
           }
         }
-      }
-
-      if (compaction_style_ == kCompactionStyleFIFO) {
-        score = static_cast<double>(total_size) /
-                mutable_cf_options.compaction_options_fifo.max_table_files_size;
-        if (score < 1 &&
-            mutable_cf_options.compaction_options_fifo.allow_compaction) {
-          score = std::max(
-              static_cast<double>(num_sorted_runs) /
-                  mutable_cf_options.level0_file_num_compaction_trigger,
-              score);
-        }
-        if (score < 1 && mutable_cf_options.ttl > 0) {
-          score =
-              std::max(static_cast<double>(GetExpiredTtlFilesCount(
-                           immutable_options, mutable_cf_options, files_[0])),
-                       score);
-        }
-        if (score < 1 &&
-            ShouldChangeFileTemperature(immutable_options, mutable_cf_options,
-                                        files_[0])) {
-          // For FIFO, just need a large enough score to trigger compaction.
-          const double kScoreForNeedCompaction = 1.1;
-          score = kScoreForNeedCompaction;
-        }
-      } else {
-        // For universal compaction, if a user configures `max_read_amp`, then
-        // the score may be a false positive signal.
-        // `level0_file_num_compaction_trigger` is used as a trigger to check
-        // if there is any compaction work to do.
-        score = static_cast<double>(num_sorted_runs) /
-                mutable_cf_options.level0_file_num_compaction_trigger;
-        if (compaction_style_ == kCompactionStyleLevel && num_levels() > 1) {
-          // Level-based involves L0->L0 compactions that can lead to oversized
-          // L0 files. Take into account size as well to avoid later giant
-          // compactions to the base level.
-          // If score in L0 is always too high, L0->LBase will always be
-          // prioritized over LBase->LBase+1 compaction and LBase will
-          // accumulate to too large. But if L0 score isn't high enough, L0 will
-          // accumulate and data is not moved to LBase fast enough. The score
-          // calculation below takes into account L0 size vs LBase size.
-          if (immutable_options.level_compaction_dynamic_level_bytes) {
-            if (total_size >= mutable_cf_options.max_bytes_for_level_base) {
-              // When calculating estimated_compaction_needed_bytes, we assume
-              // L0 is qualified as pending compactions. We will need to make
-              // sure that it qualifies for compaction.
-              // It might be guaranteed by logic below anyway, but we are
-              // explicit here to make sure we don't stop writes with no
-              // compaction scheduled.
-              score = std::max(score, 1.01);
+        if (compaction_style_ == kCompactionStyleUniversal) {
+          // For universal compaction, we use level0 score to indicate
+          // compaction score for the whole DB. Adding other levels as if
+          // they are L0 files.
+          for (int i = 1; i <= max_output_level; i++) {
+            // It's possible that a subset of the files in a level may be in a
+            // compaction, due to delete triggered compaction or trivial move.
+            // In that case, the below check may not catch a level being
+            // compacted as it only checks the first file. The worst that can
+            // happen is a scheduled compaction thread will find nothing to do.
+            if (!files_[i].empty() && !files_[i][0]->being_compacted) {
+              num_sorted_runs++;
             }
-            if (total_size > level_max_bytes_[base_level_]) {
-              // In this case, we compare L0 size with actual LBase size and
-              // make sure score is more than 1.0 (10.0 after scaled) if L0 is
-              // larger than LBase. Since LBase score = LBase size /
-              // (target size + total_downcompact_bytes) where
-              // total_downcompact_bytes = total_size > LBase size,
-              // LBase score is lower than 10.0. So L0->LBase is prioritized
-              // over LBase -> LBase+1.
-              uint64_t base_level_size = 0;
-              for (auto f : files_[base_level_]) {
-                base_level_size += f->compensated_file_size;
-              }
-              score = std::max(score, static_cast<double>(total_size) /
-                                          static_cast<double>(std::max(
-                                              base_level_size,
-                                              level_max_bytes_[base_level_])));
-            }
-            if (score > 1.0) {
-              score *= kScoreScale;
-            }
-          } else {
-            score = std::max(score,
-                             static_cast<double>(total_size) /
-                                 mutable_cf_options.max_bytes_for_level_base);
           }
         }
-      }
-    } else {  // level > 0
-      // Compute the ratio of current size to size limit.
-      uint64_t level_bytes_no_compacting = 0;
-      uint64_t level_total_bytes = 0;
-      for (auto f : files_[level]) {
-        level_total_bytes += f->fd.GetFileSize();
-        if (!f->being_compacted) {
-          level_bytes_no_compacting += f->compensated_file_size;
+
+        if (compaction_style_ == kCompactionStyleFIFO) {
+          score =
+              static_cast<double>(total_size) /
+              mutable_cf_options.compaction_options_fifo.max_table_files_size;
+          if (score < 1 &&
+              mutable_cf_options.compaction_options_fifo.allow_compaction) {
+            score = std::max(
+                static_cast<double>(num_sorted_runs) /
+                    mutable_cf_options.level0_file_num_compaction_trigger,
+                score);
+          }
+          if (score < 1 && mutable_cf_options.ttl > 0) {
+            score =
+                std::max(static_cast<double>(GetExpiredTtlFilesCount(
+                             immutable_options, mutable_cf_options, files_[0])),
+                         score);
+          }
+          if (score < 1 &&
+              ShouldChangeFileTemperature(immutable_options, mutable_cf_options,
+                                          files_[0])) {
+            // For FIFO, just need a large enough score to trigger compaction.
+            const double kScoreForNeedCompaction = 1.1;
+            score = kScoreForNeedCompaction;
+          }
+        } else {
+          // For universal compaction, if a user configures `max_read_amp`, then
+          // the score may be a false positive signal.
+          // `level0_file_num_compaction_trigger` is used as a trigger to check
+          // if there is any compaction work to do.
+          score = static_cast<double>(num_sorted_runs) /
+                  mutable_cf_options.level0_file_num_compaction_trigger;
+          if (compaction_style_ == kCompactionStyleLevel && num_levels() > 1) {
+            // Level-based involves L0->L0 compactions that can lead to
+            // oversized L0 files. Take into account size as well to avoid later
+            // giant compactions to the base level. If score in L0 is always too
+            // high, L0->LBase will always be prioritized over LBase->LBase+1
+            // compaction and LBase will accumulate to too large. But if L0
+            // score isn't high enough, L0 will accumulate and data is not moved
+            // to LBase fast enough. The score calculation below takes into
+            // account L0 size vs LBase size.
+            if (immutable_options.level_compaction_dynamic_level_bytes) {
+              if (total_size >= mutable_cf_options.max_bytes_for_level_base) {
+                // When calculating estimated_compaction_needed_bytes, we assume
+                // L0 is qualified as pending compactions. We will need to make
+                // sure that it qualifies for compaction.
+                // It might be guaranteed by logic below anyway, but we are
+                // explicit here to make sure we don't stop writes with no
+                // compaction scheduled.
+                score = std::max(score, 1.01);
+              }
+              if (total_size > level_max_bytes_[base_level_]) {
+                // In this case, we compare L0 size with actual LBase size and
+                // make sure score is more than 1.0 (10.0 after scaled) if L0 is
+                // larger than LBase. Since LBase score = LBase size /
+                // (target size + total_downcompact_bytes) where
+                // total_downcompact_bytes = total_size > LBase size,
+                // LBase score is lower than 10.0. So L0->LBase is prioritized
+                // over LBase -> LBase+1.
+                uint64_t base_level_size = 0;
+                for (auto f : files_[base_level_]) {
+                  base_level_size += f->compensated_file_size;
+                }
+                score = std::max(
+                    score,
+                    static_cast<double>(total_size) /
+                        static_cast<double>(std::max(
+                            base_level_size, level_max_bytes_[base_level_])));
+              }
+              if (score > 1.0) {
+                score *= kScoreScale;
+              }
+            } else {
+              score = std::max(score,
+                               static_cast<double>(total_size) /
+                                   mutable_cf_options.max_bytes_for_level_base);
+            }
+          }
         }
-      }
-      if (!immutable_options.level_compaction_dynamic_level_bytes) {
-        score = static_cast<double>(level_bytes_no_compacting) /
-                MaxBytesForLevel(level);
-      } else {
-        if (level_bytes_no_compacting < MaxBytesForLevel(level)) {
+      } else {  // level > 0
+        // Compute the ratio of current size to size limit.
+        uint64_t level_bytes_no_compacting = 0;
+        uint64_t level_total_bytes = 0;
+        for (auto f : files_[level]) {
+          level_total_bytes += f->fd.GetFileSize();
+          if (!f->being_compacted) {
+            level_bytes_no_compacting += f->compensated_file_size;
+          }
+        }
+        if (!immutable_options.level_compaction_dynamic_level_bytes) {
           score = static_cast<double>(level_bytes_no_compacting) /
                   MaxBytesForLevel(level);
         } else {
-          // If there are a large mount of data being compacted down to the
-          // current level soon, we would de-prioritize compaction from
-          // a level where the incoming data would be a large ratio. We do
-          // it by dividing level size not by target level size, but
-          // the target size and the incoming compaction bytes.
-          score = static_cast<double>(level_bytes_no_compacting) /
-                  (MaxBytesForLevel(level) + total_downcompact_bytes) *
-                  kScoreScale;
+          if (level_bytes_no_compacting < MaxBytesForLevel(level)) {
+            score = static_cast<double>(level_bytes_no_compacting) /
+                    MaxBytesForLevel(level);
+          } else {
+            // If there are a large mount of data being compacted down to the
+            // current level soon, we would de-prioritize compaction from
+            // a level where the incoming data would be a large ratio. We do
+            // it by dividing level size not by target level size, but
+            // the target size and the incoming compaction bytes.
+            score = static_cast<double>(level_bytes_no_compacting) /
+                    (MaxBytesForLevel(level) + total_downcompact_bytes) *
+                    kScoreScale;
+          }
+          // Drain unnecessary levels, but with lower priority compared to
+          // when L0 is eligible. Only non-empty levels can be unnecessary.
+          // If there is no unnecessary levels, lowest_unnecessary_level_ = -1.
+          if (level_bytes_no_compacting > 0 &&
+              level <= lowest_unnecessary_level_) {
+            score = std::max(
+                score,
+                kScoreScale *
+                    (1.001 + 0.001 * (lowest_unnecessary_level_ - level)));
+          }
         }
-        // Drain unnecessary levels, but with lower priority compared to
-        // when L0 is eligible. Only non-empty levels can be unnecessary.
-        // If there is no unnecessary levels, lowest_unnecessary_level_ = -1.
-        if (level_bytes_no_compacting > 0 &&
-            level <= lowest_unnecessary_level_) {
-          score = std::max(
-              score, kScoreScale *
-                         (1.001 + 0.001 * (lowest_unnecessary_level_ - level)));
+        if (level <= lowest_unnecessary_level_) {
+          total_downcompact_bytes += level_total_bytes;
+        } else if (level_total_bytes > MaxBytesForLevel(level)) {
+          total_downcompact_bytes +=
+              static_cast<double>(level_total_bytes - MaxBytesForLevel(level));
         }
       }
-      if (level <= lowest_unnecessary_level_) {
-        total_downcompact_bytes += level_total_bytes;
-      } else if (level_total_bytes > MaxBytesForLevel(level)) {
-        total_downcompact_bytes +=
-            static_cast<double>(level_total_bytes - MaxBytesForLevel(level));
+      compaction_level_[level] = level;
+      compaction_score_[level] = score;
+    }
+
+    // sort all the levels based on their score. Higher scores get listed
+    // first. Use bubble sort because the number of entries are small.
+    for (int i = 0; i < num_levels() - 2; i++) {
+      for (int j = i + 1; j < num_levels() - 1; j++) {
+        if (compaction_score_[i] < compaction_score_[j]) {
+          double score = compaction_score_[i];
+          int level = compaction_level_[i];
+          compaction_score_[i] = compaction_score_[j];
+          compaction_level_[i] = compaction_level_[j];
+          compaction_score_[j] = score;
+          compaction_level_[j] = level;
+        }
       }
     }
-    compaction_level_[level] = level;
-    compaction_score_[level] = score;
   }
 
-  // sort all the levels based on their score. Higher scores get listed
-  // first. Use bubble sort because the number of entries are small.
-  for (int i = 0; i < num_levels() - 2; i++) {
-    for (int j = i + 1; j < num_levels() - 1; j++) {
-      if (compaction_score_[i] < compaction_score_[j]) {
-        double score = compaction_score_[i];
-        int level = compaction_level_[i];
-        compaction_score_[i] = compaction_score_[j];
-        compaction_level_[i] = compaction_level_[j];
-        compaction_score_[j] = score;
-        compaction_level_[j] = level;
-      }
-    }
-  }
   ComputeFilesMarkedForCompaction(max_output_level);
   ComputeBottommostFilesMarkedForCompaction(
       immutable_options.allow_ingest_behind);
@@ -5255,7 +5275,7 @@ void VersionSet::AppendVersion(ColumnFamilyData* column_family_data,
                                Version* v) {
   // compute new compaction score
   v->storage_info()->ComputeCompactionScore(
-      *column_family_data->ioptions(),
+      column_family_data, *column_family_data->ioptions(),
       *column_family_data->GetLatestMutableCFOptions());
 
   // Mark v finalized

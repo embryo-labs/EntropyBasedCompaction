@@ -602,7 +602,8 @@ void CompactionPicker::GetGrandparents(
 }
 
 Compaction* CompactionPicker::CompactRange(
-    const std::string& cf_name, const MutableCFOptions& mutable_cf_options,
+    ColumnFamilyData* cfd, const std::string& cf_name,
+    const MutableCFOptions& mutable_cf_options,
     const MutableDBOptions& mutable_db_options, VersionStorageInfo* vstorage,
     int input_level, int output_level,
     const CompactRangeOptions& compact_range_options, const InternalKey* begin,
@@ -688,7 +689,7 @@ Compaction* CompactionPicker::CompactRange(
         compact_range_options.blob_garbage_collection_age_cutoff);
 
     RegisterCompaction(c);
-    vstorage->ComputeCompactionScore(ioptions_, mutable_cf_options);
+    vstorage->ComputeCompactionScore(cfd, ioptions_, mutable_cf_options);
     return c;
   }
 
@@ -885,7 +886,7 @@ Compaction* CompactionPicker::CompactRange(
   // takes running compactions into account (by skipping files that are already
   // being compacted). Since we just changed compaction score, we recalculate it
   // here
-  vstorage->ComputeCompactionScore(ioptions_, mutable_cf_options);
+  vstorage->ComputeCompactionScore(cfd, ioptions_, mutable_cf_options);
 
   return compaction;
 }

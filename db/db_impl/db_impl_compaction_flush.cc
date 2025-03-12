@@ -1551,7 +1551,7 @@ Status DBImpl::CompactFilesImpl(
   // takes running compactions into account (by skipping files that are already
   // being compacted). Since we just changed compaction score, we recalculate it
   // here.
-  version->storage_info()->ComputeCompactionScore(*cfd->ioptions(),
+  version->storage_info()->ComputeCompactionScore(cfd, *cfd->ioptions(),
                                                   *c->mutable_cf_options());
 
   compaction_job.Prepare();
@@ -3711,7 +3711,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
           c->column_family_data()
               ->current()
               ->storage_info()
-              ->ComputeCompactionScore(*(c->immutable_options()),
+              ->ComputeCompactionScore(cfd, *(c->immutable_options()),
                                        *(c->mutable_cf_options()));
           AddToCompactionQueue(cfd);
 
@@ -4043,7 +4043,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
       c->column_family_data()
           ->current()
           ->storage_info()
-          ->ComputeCompactionScore(*(c->immutable_options()),
+          ->ComputeCompactionScore(cfd, *(c->immutable_options()),
                                    *(c->mutable_cf_options()));
       if (!cfd->queued_for_compaction()) {
         AddToCompactionQueue(cfd);

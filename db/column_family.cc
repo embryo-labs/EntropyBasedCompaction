@@ -1208,7 +1208,7 @@ void ColumnFamilyData::CreateNewMemtable(
 
 bool ColumnFamilyData::NeedsCompaction() const {
   return !mutable_cf_options_.disable_auto_compactions &&
-         compaction_picker_->NeedsCompaction(current_->storage_info());
+         compaction_picker_->NeedsCompaction(this, current_->storage_info());
 }
 
 Compaction* ColumnFamilyData::PickCompaction(
@@ -1217,7 +1217,7 @@ Compaction* ColumnFamilyData::PickCompaction(
     const std::vector<SequenceNumber>& existing_snapshots,
     const SnapshotChecker* snapshot_checker, LogBuffer* log_buffer) {
   auto* result = compaction_picker_->PickCompaction(
-      GetName(), mutable_options, mutable_db_options, existing_snapshots,
+      this, GetName(), mutable_options, mutable_db_options, existing_snapshots,
       snapshot_checker, current_->storage_info(), log_buffer);
   if (result != nullptr) {
     result->FinalizeInputInfo(current_);
@@ -1303,7 +1303,7 @@ Compaction* ColumnFamilyData::CompactRange(
     InternalKey** compaction_end, bool* conflict,
     uint64_t max_file_num_to_ignore, const std::string& trim_ts) {
   auto* result = compaction_picker_->CompactRange(
-      GetName(), mutable_cf_options, mutable_db_options,
+      this, GetName(), mutable_cf_options, mutable_db_options,
       current_->storage_info(), input_level, output_level,
       compact_range_options, begin, end, compaction_end, conflict,
       max_file_num_to_ignore, trim_ts);

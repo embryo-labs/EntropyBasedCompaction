@@ -288,7 +288,9 @@ Compaction::Compaction(
     const std::string& _trim_ts, double _score, bool _deletion_compaction,
     bool l0_files_might_overlap, CompactionReason _compaction_reason,
     BlobGarbageCollectionPolicy _blob_garbage_collection_policy,
-    double _blob_garbage_collection_age_cutoff)
+    double _blob_garbage_collection_age_cutoff,
+    std::optional<std::list<UniversalCompactionPolicy::SortedRunInfo>::iterator>
+        merging_info)
     : input_vstorage_(vstorage),
       start_level_(_inputs[0].level),
       output_level_(_output_level),
@@ -338,6 +340,7 @@ Compaction::Compaction(
                   _blob_garbage_collection_age_cutoff > 1
               ? mutable_cf_options()->blob_garbage_collection_age_cutoff
               : _blob_garbage_collection_age_cutoff),
+      merging_info_(merging_info),
       penultimate_level_(
           // For simplicity, we don't support the concept of "penultimate level"
           // with `CompactionReason::kExternalSstIngestion` and

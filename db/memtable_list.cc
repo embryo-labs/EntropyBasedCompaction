@@ -639,6 +639,10 @@ Status MemTableList::TryInstallMemtableFlushResults(
         // needed or investigate more.
         vset->WakeUpWaitingManifestWriters();
       }
+      for (size_t i = 0; i < num_mem_to_flush; ++i) {
+        cfd->sorted_run_status().push_front(
+            UniversalCompactionPolicy::SortedRunInfo{false, 1});
+      }
     }
   }
   commit_in_progress_ = false;

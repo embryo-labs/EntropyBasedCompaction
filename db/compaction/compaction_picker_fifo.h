@@ -19,13 +19,14 @@ class FIFOCompactionPicker : public CompactionPicker {
       : CompactionPicker(ioptions, icmp) {}
 
   Compaction* PickCompaction(
-      const std::string& cf_name, const MutableCFOptions& mutable_cf_options,
+      ColumnFamilyData* cfd, const std::string& cf_name,
+      const MutableCFOptions& mutable_cf_options,
       const MutableDBOptions& mutable_db_options,
       const std::vector<SequenceNumber>& /* existing_snapshots */,
       const SnapshotChecker* /* snapshot_checker */,
       VersionStorageInfo* version, LogBuffer* log_buffer) override;
 
-  Compaction* CompactRange(const std::string& cf_name,
+  Compaction* CompactRange(ColumnFamilyData* cfd, const std::string& cf_name,
                            const MutableCFOptions& mutable_cf_options,
                            const MutableDBOptions& mutable_db_options,
                            VersionStorageInfo* vstorage, int input_level,
@@ -39,7 +40,8 @@ class FIFOCompactionPicker : public CompactionPicker {
   // The maximum allowed output level.  Always returns 0.
   int MaxOutputLevel() const override { return 0; }
 
-  bool NeedsCompaction(const VersionStorageInfo* vstorage) const override;
+  bool NeedsCompaction(const ColumnFamilyData* cfd,
+                       const VersionStorageInfo* vstorage) const override;
 
  private:
   Compaction* PickTTLCompaction(const std::string& cf_name,

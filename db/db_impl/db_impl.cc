@@ -5064,7 +5064,7 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
       }
     }
     if (!deleted_files.empty()) {
-      vstorage->ComputeCompactionScore(*cfd->ioptions(),
+      vstorage->ComputeCompactionScore(cfd, *cfd->ioptions(),
                                        *cfd->GetLatestMutableCFOptions());
     }
     if (edit.GetDeletedFiles().empty()) {
