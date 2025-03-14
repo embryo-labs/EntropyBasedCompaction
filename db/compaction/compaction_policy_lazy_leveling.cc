@@ -12,32 +12,33 @@ std::optional<std::pair<
 CompactionPolicyLazyLeveling::PickCompaction(
     const std::list<SortedRunInfo> &status) {
   auto a = status.begin();
-  size_t level = 1;
+  size_t level = 0;
   size_t size = 1;
   auto b = status.begin();
   // num = b - a;
-  size_t diff = 0;
+  size_t num = 0;
   while (b != status.end()) {
     if (b->merging) break;
     if (b->size != size) {
-      if (diff >= size_ratio_) break;
+      if (num >= num_sorted_runs_[level]) break;
       a = b;
-      diff = 0;
+      num = 0;
       do {
+        assert(level < num_sorted_runs_.size());
+        size *= num_sorted_runs_[level];
         ++level;
-        size *= size_ratio_;
       } while (size < b->size);
       assert(size == b->size);
     }
     ++b;
-    ++diff;
+    ++num;
   }
-  if (diff < size_ratio_) return std::nullopt;
-  while (diff > size_ratio_) {
+  if (num < num_sorted_runs_[level]) return std::nullopt;
+  while (num > num_sorted_runs_[level]) {
     ++a;
-    --diff;
+    --num;
   }
-  if (level == num_levels_ - 1) {
+  if (level == num_sorted_runs_.size() - 1) {
     assert(b == status.end());
   } else {
     --b;

@@ -567,8 +567,7 @@ DEFINE_bool(universal_allow_trivial_move, false,
 DEFINE_bool(universal_incremental, false,
             "Enable incremental compactions in universal compaction.");
 
-DEFINE_int32(lazy_leveling_size_ratio, 5, "");
-DEFINE_int32(lazy_leveling_num_levels, 4, "");
+DEFINE_string(lazy_leveling_num_sorted_runs, "5,5,5", "");
 
 DEFINE_int32(
     universal_stop_style,
@@ -4730,9 +4729,16 @@ class Benchmark {
     options.compaction_options_universal.stop_style =
         static_cast<CompactionStopStyle>(FLAGS_universal_stop_style);
     if (FLAGS_universal_compaction_policy == "lazy-leveling") {
+      std::vector<std::string> num_sorted_runs_str =
+          ROCKSDB_NAMESPACE::StringSplit(FLAGS_lazy_leveling_num_sorted_runs,
+                                         ',');
+      std::vector<size_t> num_sorted_runs;
+      for (const std::string& item : num_sorted_runs_str) {
+        num_sorted_runs.push_back(std::stoi(item));
+      }
       options.compaction_options_universal.policy =
           std::make_shared<CompactionPolicyLazyLeveling>(
-              FLAGS_lazy_leveling_size_ratio, FLAGS_lazy_leveling_num_levels);
+              std::move(num_sorted_runs));
     } else if (FLAGS_universal_compaction_policy == "steady") {
       assert(!FLAGS_steady_policy_file.empty());
       auto policy_json =
