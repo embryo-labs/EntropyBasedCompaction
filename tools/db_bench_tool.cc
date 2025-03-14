@@ -7,7 +7,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "rocksdb/compaction_policy_lazy_leveling.h"
 #ifdef GFLAGS
 #ifdef NUMA
 #include <numa.h>
@@ -35,6 +34,7 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <queue>
 #include <thread>
@@ -49,6 +49,8 @@
 #include "port/port.h"
 #include "port/stack_trace.h"
 #include "rocksdb/cache.h"
+#include "rocksdb/compaction_policy_lazy_leveling.h"
+#include "rocksdb/compaction_policy_steady.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
@@ -533,7 +535,9 @@ DEFINE_int32(compaction_pri,
              "priority of files to compaction: by size or by data age");
 
 DEFINE_string(universal_compaction_policy, "original",
-              "original/lazy-leveling");
+              "original/lazy-leveling/steady");
+
+DEFINE_string(steady_policy_file, "", "");
 
 DEFINE_int32(universal_size_ratio, 0,
              "Percentage flexibility while comparing file size "
@@ -4729,6 +4733,25 @@ class Benchmark {
       options.compaction_options_universal.policy =
           std::make_shared<CompactionPolicyLazyLeveling>(
               FLAGS_lazy_leveling_size_ratio, FLAGS_lazy_leveling_num_levels);
+    } else if (FLAGS_universal_compaction_policy == "steady") {
+      assert(!FLAGS_steady_policy_file.empty());
+      auto policy_json =
+          nlohmann::json::parse(std::ifstream(FLAGS_steady_policy_file));
+      size_t policy_s = policy_json["s"];
+      size_t R = policy_json["R"];
+      std::unordered_map<size_t, std::vector<CompactionPolicySteady::Step>>
+          rounds;
+      for (auto round : policy_json["rounds"]) {
+        size_t n = round["n"];
+        std::vector<CompactionPolicySteady::Step> steps;
+        for (auto step : round["steps"]) {
+          steps.emplace_back(step["total"], step["compact"]);
+        }
+        rounds.emplace(n, std::move(steps));
+      }
+      options.compaction_options_universal.policy =
+          std::make_shared<CompactionPolicySteady>(policy_s, R,
+                                                   std::move(rounds));
     }
     if (FLAGS_thread_status_per_interval > 0) {
       options.enable_thread_tracking = true;

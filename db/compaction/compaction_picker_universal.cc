@@ -817,6 +817,15 @@ Compaction* UniversalCompactionBuilder::PickCompactionWithPolicy() {
       mutable_cf_options_.compaction_options_universal.policy.get();
   assert(policy != nullptr);
   auto& sorted_run_status = cfd_->sorted_run_status();
+  for (auto it = sorted_run_status.begin(); it != sorted_run_status.end();
+       ++it) {
+    if (it->merging) {
+      printf("merging ");
+    }
+    printf("%" PRIu64 ",", it->size);
+  }
+  printf("\n");
+  fflush(stdout);
   auto ret = policy->PickCompaction(sorted_run_status);
   if (!ret.has_value()) return nullptr;
   auto [a, b] = ret.value();
@@ -848,10 +857,10 @@ Compaction* UniversalCompactionBuilder::PickCompactionWithPolicy() {
     ++i;
     ++it;
   }
-  size_t num_units = 0;
+  size_t size = 0;
   for (;;) {
     assert(!it->merging);
-    num_units += it->num_units;
+    size += it->size;
     auto file = sorted_runs_[i].file;
     assert(!file->being_compacted);
     inputs[0].files.push_back(file);
@@ -865,7 +874,7 @@ Compaction* UniversalCompactionBuilder::PickCompactionWithPolicy() {
     // Erase [a, b)
     auto b_mut = sorted_run_status.erase(a, b);
     b_mut->merging = true;
-    b_mut->num_units = num_units;
+    b_mut->size = size;
     merging_info = std::make_optional(b_mut);
   } else {
     sorted_run_status.erase(a, sorted_run_status.end());

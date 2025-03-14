@@ -38,6 +38,7 @@ LIB_SOURCES =                                                   \
   db/compaction/compaction_job.cc                               \
   db/compaction/compaction_picker.cc                            \
   db/compaction/compaction_policy_lazy_leveling.cc              \
+  db/compaction/compaction_policy_steady.cc                     \
   db/compaction/compaction_picker_fifo.cc                       \
   db/compaction/compaction_picker_level.cc                      \
   db/compaction/compaction_picker_universal.cc                  \

@@ -13,7 +13,7 @@ class UniversalCompactionPolicy {
   struct SortedRunInfo {
     bool merging;
     // uint64_t num_bytes;
-    uint64_t num_units;
+    uint64_t size;
   };
   virtual ~UniversalCompactionPolicy() {}
 
