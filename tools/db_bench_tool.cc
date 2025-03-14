@@ -567,7 +567,7 @@ DEFINE_bool(universal_allow_trivial_move, false,
 DEFINE_bool(universal_incremental, false,
             "Enable incremental compactions in universal compaction.");
 
-DEFINE_string(lazy_leveling_num_sorted_runs, "5,5,5", "");
+DEFINE_string(lazy_leveling_num_sorted_runs, "5,3,3,3", "");
 
 DEFINE_int32(
     universal_stop_style,
