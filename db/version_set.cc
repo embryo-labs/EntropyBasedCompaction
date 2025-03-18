@@ -3438,17 +3438,21 @@ void VersionStorageInfo::ComputeCompactionScore(
   UniversalCompactionPolicy* custom_compaction_policy =
       mutable_cf_options.compaction_options_universal.policy.get();
   if (custom_compaction_policy) {
-    assert(compaction_level_.size() == 2);
-    assert(compaction_score_.size() == 2);
-    compaction_level_[0] = 0;
+    assert(compaction_level_.size() == compaction_score_.size());
+    assert(compaction_level_.size() == (size_t)num_levels());
+    for (size_t i = 0; i < (size_t)num_levels(); ++i) {
+      compaction_level_[i] = i;
+      compaction_score_[i] = 0;
+    }
     if (custom_compaction_policy->PickCompaction(cfd->sorted_run_status())
             .has_value()) {
-      compaction_score_[0] = 2;
-    } else {
-      compaction_score_[0] = 1;
+      compaction_score_[0] += 2;
     }
-    compaction_level_[1] = 1;
-    compaction_score_[1] = 1;
+    if (num_levels() == 3) {
+      if (files_[1].size() > 0) {
+        compaction_score_[0] += 2;
+      }
+    }
   } else {
     for (int level = 0; level <= MaxInputLevel(); level++) {
       double score;

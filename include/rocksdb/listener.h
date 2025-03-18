@@ -123,6 +123,7 @@ enum class CompactionReason : int {
   // [Universal] number of sorted runs > level0_file_num_compaction_trigger
   kUniversalSortedRunNum,
   kUniversalPolicy,
+  kUniversalIncrementalLastLevelCompaction,
   // [FIFO] total size > max_table_files_size
   kFIFOMaxSize,
   // [FIFO] reduce number of files.

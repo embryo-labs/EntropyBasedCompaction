@@ -75,6 +75,8 @@ const char* GetCompactionReasonString(CompactionReason compaction_reason) {
       return "UniversalSortedRunNum";
     case CompactionReason::kUniversalPolicy:
       return "UniversalCustom";
+    case CompactionReason::kUniversalIncrementalLastLevelCompaction:
+      return "UniversalIncrementalLastLevelCompaction";
     case CompactionReason::kFIFOMaxSize:
       return "FIFOMaxSize";
     case CompactionReason::kFIFOReduceNumFiles:

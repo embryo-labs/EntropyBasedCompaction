@@ -585,6 +585,17 @@ class ColumnFamilyData {
   std::list<UniversalCompactionPolicy::SortedRunInfo>& sorted_run_status() {
     return sorted_run_status_;
   }
+  void print_sorted_run_status() const {
+    for (auto it = sorted_run_status_.begin(); it != sorted_run_status_.end();
+         ++it) {
+      if (it->merging) {
+        printf("merging ");
+      }
+      printf("%" PRIu64 ",", it->size);
+    }
+    printf("\n");
+    fflush(stdout);
+  }
 
  private:
   friend class ColumnFamilySet;
