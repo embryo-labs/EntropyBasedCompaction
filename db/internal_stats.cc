@@ -435,6 +435,8 @@ const std::string DB::Properties::kBlobCacheUsage =
     rocksdb_prefix + blob_cache_usage;
 const std::string DB::Properties::kBlobCachePinnedUsage =
     rocksdb_prefix + blob_cache_pinned_usage;
+const std::string DB::Properties::kNumMergingSortedRuns =
+    rocksdb_prefix + "num-merging-sorted-runs";
 
 const std::string InternalStats::kPeriodicCFStats =
     DB::Properties::kCFStats + ".periodic";
@@ -623,6 +625,9 @@ const UnorderedMap<std::string, DBPropertyInfo>
           nullptr}},
         {DB::Properties::kBlobCachePinnedUsage,
          {false, nullptr, &InternalStats::HandleBlobCachePinnedUsage, nullptr,
+          nullptr}},
+        {DB::Properties::kNumMergingSortedRuns,
+         {true, nullptr, &InternalStats::HandleNumMergingSortedRuns, nullptr,
           nullptr}},
 };
 
@@ -955,6 +960,30 @@ bool InternalStats::HandleBlobCachePinnedUsage(uint64_t* value, DBImpl* /*db*/,
     return true;
   }
   return false;
+}
+
+bool InternalStats::HandleNumMergingSortedRuns(uint64_t* value, DBImpl* /*db*/,
+                                               Version* version) {
+  *value = 0;
+  VersionStorageInfo* storage_info = version->storage_info();
+  if (storage_info->num_levels() == 0) {
+    return true;
+  }
+  const auto& l0_files = storage_info->LevelFiles(0);
+  for (const auto& file : l0_files) {
+    if (file->being_compacted) {
+      *value += 1;
+    }
+  }
+  if (version->GetMutableCFOptions().compaction_options_universal.policy) {
+    assert(storage_info->num_levels() >= 2 && storage_info->num_levels() <= 3);
+    if (storage_info->num_levels() == 3) {
+      if (storage_info->NumLevelFiles(1) > 0) {
+        *value += 1;
+      }
+    }
+  }
+  return true;
 }
 
 const DBPropertyInfo* GetPropertyInfo(const Slice& property) {

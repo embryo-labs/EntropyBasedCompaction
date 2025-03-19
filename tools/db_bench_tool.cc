@@ -2089,9 +2089,10 @@ struct DBWithColumnFamilies {
 // A class that reports stats to CSV file.
 class ReporterAgent {
  public:
-  ReporterAgent(Env* env, const std::string& fname,
+  ReporterAgent(DB* db, Env* env, const std::string& fname,
                 uint64_t report_interval_secs)
-      : env_(env),
+      : db_(db),
+        env_(env),
         total_ops_done_(0),
         last_report_(0),
         report_interval_secs_(report_interval_secs),
@@ -2127,7 +2128,10 @@ class ReporterAgent {
   }
 
  private:
-  std::string Header() const { return "secs_elapsed,interval_qps"; }
+  std::string Header() const {
+    return "secs_elapsed,interval_qps,num-visible-sorted-runs," +
+           DB::Properties::kNumMergingSortedRuns;
+  }
   void SleepAndReport() {
     auto* clock = env_->GetSystemClock().get();
     auto time_started = clock->NowMicros();
@@ -2147,9 +2151,27 @@ class ReporterAgent {
       auto secs_elapsed =
           (clock->NowMicros() - time_started + kMicrosInSecond / 2) /
           kMicrosInSecond;
+
+      uint64_t num_visible_sorted_runs;
+      std::string tmp;
+      if (db_->GetProperty(DB::Properties::kNumFilesAtLevelPrefix + "0",
+                           &tmp)) {
+        size_t num_levels = db_->NumberLevels();
+        assert(num_levels > 0);
+        num_visible_sorted_runs = std::atoi(tmp.c_str()) + num_levels - 1;
+      } else {
+        num_visible_sorted_runs = 0;
+      }
+
+      uint64_t num_merging_sorted_runs;
+      db_->GetIntProperty(DB::Properties::kNumMergingSortedRuns,
+                          &num_merging_sorted_runs);
+
       std::string report =
           std::to_string(secs_elapsed) + "," +
-          std::to_string(total_ops_done_snapshot - last_report_) + "\n";
+          std::to_string(total_ops_done_snapshot - last_report_) + ',' +
+          std::to_string(num_visible_sorted_runs) + ',' +
+          std::to_string(num_merging_sorted_runs) + "\n";
       auto s = report_file_->Append(report);
       if (s.ok()) {
         s = report_file_->Flush();
@@ -2164,6 +2186,7 @@ class ReporterAgent {
     }
   }
 
+  DB* db_;
   Env* env_;
   std::unique_ptr<WritableFile> report_file_;
   std::atomic<int64_t> total_ops_done_;
@@ -4025,8 +4048,8 @@ class Benchmark {
 
     std::unique_ptr<ReporterAgent> reporter_agent;
     if (FLAGS_report_interval_seconds > 0) {
-      reporter_agent.reset(new ReporterAgent(FLAGS_env, FLAGS_report_file,
-                                             FLAGS_report_interval_seconds));
+      reporter_agent.reset(new ReporterAgent(
+          db_.db, FLAGS_env, FLAGS_report_file, FLAGS_report_interval_seconds));
     }
 
     ThreadArg* arg = new ThreadArg[n];

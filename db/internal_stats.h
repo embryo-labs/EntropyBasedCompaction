@@ -914,6 +914,8 @@ class InternalStats {
   bool HandleBlobCacheUsage(uint64_t* value, DBImpl* db, Version* version);
   bool HandleBlobCachePinnedUsage(uint64_t* value, DBImpl* db,
                                   Version* version);
+  bool HandleNumMergingSortedRuns(uint64_t* value, DBImpl* db,
+                                  Version* version);
 
   // Total number of background errors encountered. Every time a flush task
   // or compaction task fails, this counter is incremented. The failure can
