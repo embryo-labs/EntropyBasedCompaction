@@ -1330,7 +1330,8 @@ class DB {
     //      entries being pinned in blob cache.
     static const std::string kBlobCachePinnedUsage;
 
-    static const std::string kNumMergingSortedRuns;
+    static const std::string kNumTopLevelSortedRuns;
+    static const std::string kNumMergingMainLevelSortedRuns;
   };
 
   // DB implementations export properties about their state via this method.

@@ -2129,8 +2129,8 @@ class ReporterAgent {
 
  private:
   std::string Header() const {
-    return "secs_elapsed,interval_qps,num-visible-sorted-runs," +
-           DB::Properties::kNumMergingSortedRuns;
+    return "secs_elapsed,interval_qps,num-main-level-sorted-runs," +
+           DB::Properties::kNumMergingMainLevelSortedRuns;
   }
   void SleepAndReport() {
     auto* clock = env_->GetSystemClock().get();
@@ -2152,26 +2152,32 @@ class ReporterAgent {
           (clock->NowMicros() - time_started + kMicrosInSecond / 2) /
           kMicrosInSecond;
 
-      uint64_t num_visible_sorted_runs;
+      uint64_t num_top_level_sorted_runs;
+      bool good = db_->GetIntProperty(DB::Properties::kNumTopLevelSortedRuns,
+                                      &num_top_level_sorted_runs);
+      assert(good);
+
+      uint64_t num_main_level_sorted_runs;
       std::string tmp;
       if (db_->GetProperty(DB::Properties::kNumFilesAtLevelPrefix + "0",
                            &tmp)) {
         size_t num_levels = db_->NumberLevels();
         assert(num_levels > 0);
-        num_visible_sorted_runs = std::atoi(tmp.c_str()) + num_levels - 1;
+        num_main_level_sorted_runs =
+            std::atoi(tmp.c_str()) - num_top_level_sorted_runs + num_levels - 1;
       } else {
-        num_visible_sorted_runs = 0;
+        num_main_level_sorted_runs = 0;
       }
 
-      uint64_t num_merging_sorted_runs;
-      db_->GetIntProperty(DB::Properties::kNumMergingSortedRuns,
-                          &num_merging_sorted_runs);
+      uint64_t num_merging_main_level_sorted_runs;
+      db_->GetIntProperty(DB::Properties::kNumMergingMainLevelSortedRuns,
+                          &num_merging_main_level_sorted_runs);
 
       std::string report =
           std::to_string(secs_elapsed) + "," +
           std::to_string(total_ops_done_snapshot - last_report_) + ',' +
-          std::to_string(num_visible_sorted_runs) + ',' +
-          std::to_string(num_merging_sorted_runs) + "\n";
+          std::to_string(num_main_level_sorted_runs) + ',' +
+          std::to_string(num_merging_main_level_sorted_runs) + "\n";
       auto s = report_file_->Append(report);
       if (s.ok()) {
         s = report_file_->Flush();
