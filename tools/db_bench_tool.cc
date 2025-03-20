@@ -862,7 +862,7 @@ DEFINE_int64(writes, -1,
              "Number of write operations to do. If negative, do --num reads.");
 
 DEFINE_bool(finish_after_writes, false,
-            "Write thread terminates after all writes are finished");
+            "All threads terminate after all writes are finished");
 
 DEFINE_bool(sync, false, "Sync all writes to disk");
 
@@ -2086,6 +2086,29 @@ struct DBWithColumnFamilies {
   }
 };
 
+enum OperationType : unsigned char {
+  kRead = 0,
+  kWrite,
+  kDelete,
+  kSeek,
+  kMerge,
+  kUpdate,
+  kCompress,
+  kUncompress,
+  kCrc,
+  kHash,
+  kOthers,
+  kOperationTypeEnumMax,
+};
+
+static std::unordered_map<OperationType, std::string, std::hash<unsigned char>>
+    OperationTypeString = {{kRead, "read"},         {kWrite, "write"},
+                           {kDelete, "delete"},     {kSeek, "seek"},
+                           {kMerge, "merge"},       {kUpdate, "update"},
+                           {kCompress, "compress"}, {kCompress, "uncompress"},
+                           {kCrc, "crc"},           {kHash, "hash"},
+                           {kOthers, "op"}};
+
 // A class that reports stats to CSV file.
 class ReporterAgent {
  public:
@@ -2123,8 +2146,9 @@ class ReporterAgent {
   }
 
   // thread safe
-  void ReportFinishedOps(int64_t num_ops) {
+  void ReportFinishedOps(int64_t num_ops, enum OperationType op_type) {
     total_ops_done_.fetch_add(num_ops);
+    count_[op_type].fetch_add(1, std::memory_order_relaxed);
   }
 
  private:
@@ -2133,6 +2157,8 @@ class ReporterAgent {
            DB::Properties::kNumMergingMainLevelSortedRuns;
   }
   void SleepAndReport() {
+    std::unordered_map<OperationType, std::unique_ptr<WritableFile>>
+        op_report_file;
     auto* clock = env_->GetSystemClock().get();
     auto time_started = clock->NowMicros();
     while (true) {
@@ -2189,6 +2215,43 @@ class ReporterAgent {
         break;
       }
       last_report_ = total_ops_done_snapshot;
+
+      for (size_t i = 0; i < kOperationTypeEnumMax; ++i) {
+        OperationType op = static_cast<OperationType>(i);
+        uint64_t total_count = count_[op].load(std::memory_order_relaxed);
+        if (total_count == 0) continue;
+        uint64_t count = total_count - last_count_[op];
+        last_count_[op] = total_count;
+        auto it = op_report_file.find(op);
+        if (it == op_report_file.end()) {
+          std::string fname = OperationTypeString[op] + "-count";
+          std::unique_ptr<WritableFile> file;
+          s = env_->NewWritableFile(fname, &file, EnvOptions());
+          if (s.ok()) {
+            s = file->Append("secs_elapsed count\n");
+          }
+          if (s.ok()) {
+            s = file->Flush();
+          }
+          if (!s.ok()) {
+            fprintf(stderr, "Can't open %s: %s\n", fname.c_str(),
+                    s.ToString().c_str());
+            abort();
+          }
+          auto res = op_report_file.emplace(op, std::move(file));
+          assert(res.second);
+          it = res.first;
+        }
+        report =
+            std::to_string(secs_elapsed) + ' ' + std::to_string(count) + '\n';
+        s = it->second->Append(report);
+        if (!s.ok()) {
+          fprintf(stderr,
+                  "Can't write to report file (%s), stopping the reporting\n",
+                  s.ToString().c_str());
+          return;
+        }
+      }
     }
   }
 
@@ -2198,34 +2261,16 @@ class ReporterAgent {
   std::atomic<int64_t> total_ops_done_;
   int64_t last_report_;
   const uint64_t report_interval_secs_;
+
+  std::atomic<uint64_t> count_[kOperationTypeEnumMax] = {0};
+  uint64_t last_count_[kOperationTypeEnumMax] = {0};
+
   ROCKSDB_NAMESPACE::port::Thread reporting_thread_;
   std::mutex mutex_;
   // will notify on stop
   std::condition_variable stop_cv_;
   bool stop_;
 };
-
-enum OperationType : unsigned char {
-  kRead = 0,
-  kWrite,
-  kDelete,
-  kSeek,
-  kMerge,
-  kUpdate,
-  kCompress,
-  kUncompress,
-  kCrc,
-  kHash,
-  kOthers
-};
-
-static std::unordered_map<OperationType, std::string, std::hash<unsigned char>>
-    OperationTypeString = {{kRead, "read"},         {kWrite, "write"},
-                           {kDelete, "delete"},     {kSeek, "seek"},
-                           {kMerge, "merge"},       {kUpdate, "update"},
-                           {kCompress, "compress"}, {kCompress, "uncompress"},
-                           {kCrc, "crc"},           {kHash, "hash"},
-                           {kOthers, "op"}};
 
 class CombinedStats;
 class Stats {
@@ -2359,7 +2404,7 @@ class Stats {
   void FinishedOps(DBWithColumnFamilies* db_with_cfh, DB* db, int64_t num_ops,
                    enum OperationType op_type = kOthers) {
     if (reporter_agent_) {
-      reporter_agent_->ReportFinishedOps(num_ops);
+      reporter_agent_->ReportFinishedOps(num_ops, op_type);
     }
     if (FLAGS_histogram) {
       uint64_t now = clock_->NowMicros();
@@ -6189,7 +6234,17 @@ class Benchmark {
     }
 
     Duration duration(FLAGS_duration, reads_);
-    while (!duration.Done(1)) {
+    for (;;) {
+      if (FLAGS_finish_after_writes) {
+        MutexLock l(&thread->shared->mu);
+        if (thread->shared->num_done > 0) {
+          break;
+        }
+      } else {
+        if (duration.Done(1)) {
+          break;
+        }
+      }
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
       // We use same key_rand as seed for key and column family so that we can
       // deterministically find the cfh corresponding to a particular key, as it
@@ -6934,7 +6989,17 @@ class Benchmark {
 
     Duration duration(FLAGS_duration, reads_);
     char value_buffer[256];
-    while (!duration.Done(1)) {
+    for (;;) {
+      if (FLAGS_finish_after_writes) {
+        MutexLock l(&thread->shared->mu);
+        if (thread->shared->num_done > 0) {
+          break;
+        }
+      } else {
+        if (duration.Done(1)) {
+          break;
+        }
+      }
       int64_t seek_pos = thread->rand.Next() % FLAGS_num;
       GenerateKeyFromIntForSeek(static_cast<uint64_t>(seek_pos), FLAGS_num,
                                 &key);
