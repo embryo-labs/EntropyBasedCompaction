@@ -618,11 +618,18 @@ Status MemTableList::TryInstallMemtableFlushResults(
                                       to_delete, mu);
       };
       if (write_edits) {
+        // Ideally we should place sorted_run_status in vstorage and modify it
+        // in LogAndApply
+        for (size_t i = 0; i < num_mem_to_flush; ++i) {
+          cfd->sorted_run_status().push_front(
+              UniversalCompactionPolicy::SortedRunInfo{false, 1});
+        }
         // this can release and reacquire the mutex.
         s = vset->LogAndApply(
             cfd, mutable_cf_options, read_options, write_options, edit_list, mu,
             db_directory, /*new_descriptor_log=*/false,
             /*column_family_options=*/nullptr, manifest_write_cb);
+        assert(s.ok());
       } else {
         // If write_edit is false (e.g: successful mempurge),
         // then remove old memtables, wake up manifest write queue threads,
@@ -638,10 +645,6 @@ Status MemTableList::TryInstallMemtableFlushResults(
         // TODO(bjlemaire): explain full reason WakeUpWaitingManifestWriters
         // needed or investigate more.
         vset->WakeUpWaitingManifestWriters();
-      }
-      for (size_t i = 0; i < num_mem_to_flush; ++i) {
-        cfd->sorted_run_status().push_front(
-            UniversalCompactionPolicy::SortedRunInfo{false, 1});
       }
     }
   }
