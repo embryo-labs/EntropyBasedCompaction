@@ -20,25 +20,28 @@ std::optional<std::pair<
     std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator,
     std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator>>
 CompactionPolicySteady::PickCompaction(const std::list<SortedRunInfo> &status) {
-  // See if we need to trigger a compaction from the top level to the main level
-  size_t num_top_level_sorted_runs = 0;
   auto a = status.begin();
-  while (a != status.end() && a->size == 1) {
-    assert(!a->merging);
-    ++num_top_level_sorted_runs;
-    ++a;
-  }
-  if (num_top_level_sorted_runs >= s_) {
-    assert(a != status.begin());
-    --a;
-    auto b = a;
-    for (size_t i = 1; i < s_; ++i) {
-      --a;
+  size_t num_top_level_sorted_runs = 0;
+  if (s_ > 1) {
+    // See if we need to trigger a compaction from the top level to the main
+    // level
+    while (a != status.end() && a->size == 1) {
+      assert(!a->merging);
+      ++num_top_level_sorted_runs;
+      ++a;
     }
-    return std::make_optional<std::pair<
-        std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator,
-        std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator>>(
-        a, b);
+    if (num_top_level_sorted_runs >= s_) {
+      assert(a != status.begin());
+      --a;
+      auto b = a;
+      for (size_t i = 1; i < s_; ++i) {
+        --a;
+      }
+      return std::make_optional<std::pair<
+          std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator,
+          std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator>>(
+          a, b);
+    }
   }
 
   // We don't allow multiple compactions in the main level yet

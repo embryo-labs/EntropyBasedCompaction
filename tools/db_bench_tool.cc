@@ -569,6 +569,8 @@ DEFINE_bool(universal_incremental, false,
 
 DEFINE_string(lazy_leveling_num_sorted_runs, "5,3,3,3", "");
 
+DEFINE_uint64(main_level_size_threshold, 0, "");
+
 DEFINE_int32(
     universal_stop_style,
     (int32_t)ROCKSDB_NAMESPACE::CompactionOptionsUniversal().stop_style,
@@ -4413,6 +4415,7 @@ class Benchmark {
     options.uncache_aggressiveness = FLAGS_uncache_aggressiveness;
     options.space_amplification_percent_limit_hard =
         FLAGS_space_amplification_percent_limit_hard;
+    options.main_level_size_threshold = FLAGS_main_level_size_threshold;
     Status s =
         CreateMemTableRepFactory(config_options, &options.memtable_factory);
     if (!s.ok()) {

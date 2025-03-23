@@ -304,6 +304,7 @@ void UpdateColumnFamilyOptions(const MutableCFOptions& moptions,
   cf_opts->uncache_aggressiveness = moptions.uncache_aggressiveness;
   cf_opts->space_amplification_percent_limit_hard =
       moptions.space_amplification_percent_limit_hard;
+  cf_opts->main_level_size_threshold = moptions.main_level_size_threshold;
 }
 
 void UpdateColumnFamilyOptions(const ImmutableCFOptions& ioptions,

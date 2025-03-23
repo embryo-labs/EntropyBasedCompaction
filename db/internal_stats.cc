@@ -975,7 +975,7 @@ bool InternalStats::HandleNumTopLevelSortedRuns(uint64_t* value, DBImpl* /*db*/,
     return true;
   }
   uint64_t main_level_size_threshold =
-      version->GetMutableCFOptions().write_buffer_size * 1.1;
+      version->GetMutableCFOptions().main_level_size_threshold;
   const auto& l0_files = storage_info->LevelFiles(0);
   for (const auto& file : l0_files) {
     if (file->fd.file_size <= main_level_size_threshold) {

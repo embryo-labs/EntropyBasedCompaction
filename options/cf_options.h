@@ -175,7 +175,8 @@ struct MutableCFOptions {
             options.bottommost_file_compaction_delay),
         uncache_aggressiveness(options.uncache_aggressiveness),
         space_amplification_percent_limit_hard(
-            options.space_amplification_percent_limit_hard) {
+            options.space_amplification_percent_limit_hard),
+        main_level_size_threshold(options.main_level_size_threshold) {
     RefreshDerivedOptions(options.num_levels, options.compaction_style);
   }
 
@@ -231,7 +232,8 @@ struct MutableCFOptions {
         memtable_max_range_deletions(0),
         bottommost_file_compaction_delay(0),
         uncache_aggressiveness(0),
-        space_amplification_percent_limit_hard(0) {}
+        space_amplification_percent_limit_hard(0),
+        main_level_size_threshold(0) {}
 
   explicit MutableCFOptions(const Options& options);
 
@@ -337,6 +339,7 @@ struct MutableCFOptions {
   uint32_t uncache_aggressiveness;
 
   uint32_t space_amplification_percent_limit_hard;
+  uint64_t main_level_size_threshold;
 
   // Derived options
   // Per-level target file size.
