@@ -290,7 +290,8 @@ Compaction::Compaction(
     BlobGarbageCollectionPolicy _blob_garbage_collection_policy,
     double _blob_garbage_collection_age_cutoff,
     std::optional<std::list<UniversalCompactionPolicy::SortedRunInfo>::iterator>
-        merging_info)
+        merging_info,
+    Env::IOPriority io_priority)
     : input_vstorage_(vstorage),
       start_level_(_inputs[0].level),
       output_level_(_output_level),
@@ -341,6 +342,7 @@ Compaction::Compaction(
               ? mutable_cf_options()->blob_garbage_collection_age_cutoff
               : _blob_garbage_collection_age_cutoff),
       merging_info_(merging_info),
+      io_priority_(io_priority),
       penultimate_level_(
           // For simplicity, we don't support the concept of "penultimate level"
           // with `CompactionReason::kExternalSstIngestion` and

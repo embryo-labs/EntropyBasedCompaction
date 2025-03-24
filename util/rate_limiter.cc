@@ -58,7 +58,6 @@ GenericRateLimiter::GenericRateLimiter(
       stop_(false),
       exit_cv_(&request_mutex_),
       requests_to_wait_(0),
-      available_bytes_(0),
       next_refill_us_(NowMicrosMonotonicLocked()),
       fairness_(fairness > 100 ? 100 : fairness),
       rnd_((uint32_t)time(nullptr)),
@@ -70,6 +69,11 @@ GenericRateLimiter::GenericRateLimiter(
   for (int i = Env::IO_LOW; i < Env::IO_TOTAL; ++i) {
     total_requests_[i] = 0;
     total_bytes_through_[i] = 0;
+  }
+  auto refill_bytes_per_period =
+      refill_bytes_per_period_.load(std::memory_order_relaxed);
+  for (int pri = Env::IO_LOW; pri < Env::IO_TOTAL; ++pri) {
+    available_bytes_[pri] = refill_bytes_per_period;
   }
 }
 
@@ -147,10 +151,10 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
 
   ++total_requests_[pri];
 
-  if (available_bytes_ > 0) {
-    int64_t bytes_through = std::min(available_bytes_, bytes);
+  if (available_bytes_[pri] > 0) {
+    int64_t bytes_through = std::min(available_bytes_[pri], bytes);
     total_bytes_through_[pri] += bytes_through;
-    available_bytes_ -= bytes_through;
+    available_bytes_[pri] -= bytes_through;
     bytes -= bytes_through;
   }
 
@@ -231,45 +235,6 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
   }
 }
 
-std::vector<Env::IOPriority>
-GenericRateLimiter::GeneratePriorityIterationOrderLocked() {
-  std::vector<Env::IOPriority> pri_iteration_order(Env::IO_TOTAL /* 4 */);
-  // We make Env::IO_USER a superior priority by always iterating its queue
-  // first
-  pri_iteration_order[0] = Env::IO_USER;
-
-  bool high_pri_iterated_after_mid_low_pri = rnd_.OneIn(fairness_);
-  TEST_SYNC_POINT_CALLBACK(
-      "GenericRateLimiter::GeneratePriorityIterationOrderLocked::"
-      "PostRandomOneInFairnessForHighPri",
-      &high_pri_iterated_after_mid_low_pri);
-  bool mid_pri_itereated_after_low_pri = rnd_.OneIn(fairness_);
-  TEST_SYNC_POINT_CALLBACK(
-      "GenericRateLimiter::GeneratePriorityIterationOrderLocked::"
-      "PostRandomOneInFairnessForMidPri",
-      &mid_pri_itereated_after_low_pri);
-
-  if (high_pri_iterated_after_mid_low_pri) {
-    pri_iteration_order[3] = Env::IO_HIGH;
-    pri_iteration_order[2] =
-        mid_pri_itereated_after_low_pri ? Env::IO_MID : Env::IO_LOW;
-    pri_iteration_order[1] =
-        (pri_iteration_order[2] == Env::IO_MID) ? Env::IO_LOW : Env::IO_MID;
-  } else {
-    pri_iteration_order[1] = Env::IO_HIGH;
-    pri_iteration_order[3] =
-        mid_pri_itereated_after_low_pri ? Env::IO_MID : Env::IO_LOW;
-    pri_iteration_order[2] =
-        (pri_iteration_order[3] == Env::IO_MID) ? Env::IO_LOW : Env::IO_MID;
-  }
-
-  TEST_SYNC_POINT_CALLBACK(
-      "GenericRateLimiter::GeneratePriorityIterationOrderLocked::"
-      "PreReturnPriIterationOrder",
-      &pri_iteration_order);
-  return pri_iteration_order;
-}
-
 void GenericRateLimiter::RefillBytesAndGrantRequestsLocked() {
   TEST_SYNC_POINT_CALLBACK(
       "GenericRateLimiter::RefillBytesAndGrantRequestsLocked", &request_mutex_);
@@ -277,19 +242,20 @@ void GenericRateLimiter::RefillBytesAndGrantRequestsLocked() {
   // Carry over the left over quota from the last period
   auto refill_bytes_per_period =
       refill_bytes_per_period_.load(std::memory_order_relaxed);
-  assert(available_bytes_ == 0);
-  available_bytes_ = refill_bytes_per_period;
+  auto remain = refill_bytes_per_period;
 
-  std::vector<Env::IOPriority> pri_iteration_order =
-      GeneratePriorityIterationOrderLocked();
-
-  for (int i = Env::IO_LOW; i < Env::IO_TOTAL; ++i) {
-    assert(!pri_iteration_order.empty());
-    Env::IOPriority current_pri = pri_iteration_order[i];
+  for (int i = Env::IO_TOTAL - 1; i >= 0; --i) {
+    Env::IOPriority current_pri = static_cast<Env::IOPriority>(i);
+    if (available_bytes_[current_pri] < refill_bytes_per_period) {
+      auto refill = std::min(
+          remain, refill_bytes_per_period - available_bytes_[current_pri]);
+      remain -= refill;
+      available_bytes_[current_pri] += refill;
+    }
     auto* queue = &queue_[current_pri];
     while (!queue->empty()) {
       auto* next_req = queue->front();
-      if (available_bytes_ < next_req->request_bytes) {
+      if (available_bytes_[current_pri] < next_req->request_bytes) {
         // Grant partial request_bytes even if request is for more than
         // `available_bytes_`, which can happen in a few situations:
         //
@@ -297,11 +263,11 @@ void GenericRateLimiter::RefillBytesAndGrantRequestsLocked() {
         // - The rate was dynamically reduced while requests were already
         //   enqueued
         // - The burst size was explicitly set to be larger than the refill size
-        next_req->request_bytes -= available_bytes_;
-        available_bytes_ = 0;
+        next_req->request_bytes -= available_bytes_[current_pri];
+        available_bytes_[current_pri] = 0;
         break;
       }
-      available_bytes_ -= next_req->request_bytes;
+      available_bytes_[current_pri] -= next_req->request_bytes;
       next_req->request_bytes = 0;
       total_bytes_through_[current_pri] += next_req->bytes;
       queue->pop_front();

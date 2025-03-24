@@ -111,7 +111,6 @@ class GenericRateLimiter : public RateLimiter {
  private:
   static constexpr int kMicrosecondsPerSecond = 1000000;
   void RefillBytesAndGrantRequestsLocked();
-  std::vector<Env::IOPriority> GeneratePriorityIterationOrderLocked();
   int64_t CalculateRefillBytesPerPeriodLocked(int64_t rate_bytes_per_sec);
   Status TuneLocked();
   void SetBytesPerSecondLocked(int64_t bytes_per_second);
@@ -137,7 +136,7 @@ class GenericRateLimiter : public RateLimiter {
 
   int64_t total_requests_[Env::IO_TOTAL];
   int64_t total_bytes_through_[Env::IO_TOTAL];
-  int64_t available_bytes_;
+  int64_t available_bytes_[Env::IO_TOTAL];
   int64_t next_refill_us_;
 
   int32_t fairness_;

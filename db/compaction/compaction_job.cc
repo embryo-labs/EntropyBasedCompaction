@@ -1142,7 +1142,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   // (b) CompactionFilter::Decision::kRemoveAndSkipUntil.
   read_options.total_order_seek = true;
 
-  const WriteOptions write_options(Env::IOPriority::IO_LOW,
+  const WriteOptions write_options(sub_compact->compaction->io_priority(),
                                    Env::IOActivity::kCompaction);
 
   // Remove the timestamps from boundaries because boundaries created in
@@ -1725,7 +1725,8 @@ Status CompactionJob::InstallCompactionResults(
   db_mutex_->AssertHeld();
 
   const ReadOptions read_options(Env::IOActivity::kCompaction);
-  const WriteOptions write_options(Env::IOActivity::kCompaction);
+  const WriteOptions write_options(compact_->compaction->io_priority(),
+                                   Env::IOActivity::kCompaction);
 
   auto* compaction = compact_->compaction;
   assert(compaction);
@@ -1818,6 +1819,7 @@ Status CompactionJob::InstallCompactionResults(
       auto merging_info = compaction->merging_info().value();
       assert(merging_info->merging);
       merging_info->merging = false;
+      compaction->column_family_data()->print_sorted_run_status();
     }
   }
   return ret;
@@ -1978,7 +1980,8 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
 
   // TODO(hx235): pass in the correct `oldest_key_time` instead of `0`
   const ReadOptions read_options(Env::IOActivity::kCompaction);
-  const WriteOptions write_options(Env::IOActivity::kCompaction);
+  const WriteOptions write_options(sub_compact->compaction->io_priority(),
+                                   Env::IOActivity::kCompaction);
   TableBuilderOptions tboptions(
       *cfd->ioptions(), *(sub_compact->compaction->mutable_cf_options()),
       read_options, write_options, cfd->internal_comparator(),
@@ -2199,7 +2202,7 @@ Env::IOPriority CompactionJob::GetRateLimiterPriority() {
     }
   }
 
-  return Env::IO_LOW;
+  return compact_->compaction->io_priority();
 }
 
 }  // namespace ROCKSDB_NAMESPACE

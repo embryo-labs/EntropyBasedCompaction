@@ -440,10 +440,12 @@ class Env : public Customizable {
   // Priority for requesting bytes in rate limiter scheduler
   enum IOPriority {
     IO_LOW = 0,
-    IO_MID = 1,
-    IO_HIGH = 2,
-    IO_USER = 3,
-    IO_TOTAL = 4
+    IO_FLATTEN,
+    IO_MAIN_LEVEL,
+    IO_MID,
+    IO_HIGH,
+    IO_USER,
+    IO_TOTAL
   };
 
   // EXPERIMENTAL

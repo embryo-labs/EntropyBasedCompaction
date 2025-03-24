@@ -2156,9 +2156,12 @@ class ReporterAgent {
  private:
   std::string Header() const {
     return "secs_elapsed,interval_qps,num-main-level-sorted-runs," +
-           DB::Properties::kNumMergingMainLevelSortedRuns;
+           DB::Properties::kNumMergingMainLevelSortedRuns +
+           ",IO_LOW,IO_FLATTEN,IO_MAIN_LEVEL,IO_HIGH,IO_USER";
   }
   void SleepAndReport() {
+    Options options = db_->GetOptions();
+    RateLimiter* rate_limiter = options.rate_limiter.get();
     std::unordered_map<OperationType, std::unique_ptr<WritableFile>>
         op_report_file;
     auto* clock = env_->GetSystemClock().get();
@@ -2201,11 +2204,25 @@ class ReporterAgent {
       db_->GetIntProperty(DB::Properties::kNumMergingMainLevelSortedRuns,
                           &num_merging_main_level_sorted_runs);
 
+      uint64_t bytes_through[Env::IO_TOTAL];
+      for (int pri = Env::IO_LOW; pri < Env::IO_TOTAL; ++pri) {
+        uint64_t total = rate_limiter->GetTotalBytesThrough(
+            static_cast<Env::IOPriority>(pri));
+        bytes_through[pri] = total - last_bytes_through_[pri];
+        last_bytes_through_[pri] = total;
+      }
+      assert(bytes_through[Env::IO_MID] == 0);
+
       std::string report =
           std::to_string(secs_elapsed) + "," +
           std::to_string(total_ops_done_snapshot - last_report_) + ',' +
           std::to_string(num_main_level_sorted_runs) + ',' +
-          std::to_string(num_merging_main_level_sorted_runs) + "\n";
+          std::to_string(num_merging_main_level_sorted_runs) + ',' +
+          std::to_string(bytes_through[Env::IO_LOW]) + ',' +
+          std::to_string(bytes_through[Env::IO_FLATTEN]) + ',' +
+          std::to_string(bytes_through[Env::IO_MAIN_LEVEL]) + ',' +
+          std::to_string(bytes_through[Env::IO_HIGH]) + ',' +
+          std::to_string(bytes_through[Env::IO_USER]) + "\n";
       auto s = report_file_->Append(report);
       if (s.ok()) {
         s = report_file_->Flush();
@@ -2266,6 +2283,8 @@ class ReporterAgent {
 
   std::atomic<uint64_t> count_[kOperationTypeEnumMax] = {0};
   uint64_t last_count_[kOperationTypeEnumMax] = {0};
+
+  uint64_t last_bytes_through_[Env::IO_TOTAL] = {0};
 
   ROCKSDB_NAMESPACE::port::Thread reporting_thread_;
   std::mutex mutex_;

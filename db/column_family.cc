@@ -1701,6 +1701,25 @@ void ColumnFamilyData::RecoverEpochNumbers() {
   vstorage->RecoverEpochNumbers(this);
 }
 
+void ColumnFamilyData::print_sorted_run_status() const {
+  std::string s;
+  for (auto it = sorted_run_status_.begin(); it != sorted_run_status_.end();
+       ++it) {
+    if (it->merging) {
+      s += "merging ";
+    }
+    s += std::to_string(it->size);
+    s += ',';
+  }
+  printf("%f %s\n",
+         std::chrono::duration_cast<std::chrono::nanoseconds>(
+             std::chrono::system_clock::now().time_since_epoch())
+                 .count() /
+             1e9,
+         s.c_str());
+  fflush(stdout);
+}
+
 ColumnFamilySet::ColumnFamilySet(const std::string& dbname,
                                  const ImmutableDBOptions* db_options,
                                  const FileOptions& file_options,

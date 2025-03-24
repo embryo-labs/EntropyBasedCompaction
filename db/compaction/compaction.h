@@ -103,7 +103,8 @@ class Compaction {
              double blob_garbage_collection_age_cutoff = -1,
              std::optional<
                  std::list<UniversalCompactionPolicy::SortedRunInfo>::iterator>
-                 merging_info = std::nullopt);
+                 merging_info = std::nullopt,
+             Env::IOPriority io_priority = Env::IOPriority::IO_LOW);
 
   // The type of the penultimate level output range
   enum class PenultimateOutputRangeType : int {
@@ -423,6 +424,8 @@ class Compaction {
     return merging_info_;
   }
 
+  Env::IOPriority io_priority() const { return io_priority_; }
+
   // start and end are sub compact range. Null if no boundary.
   // This is used to calculate the newest_key_time table property after
   // compaction.
@@ -616,6 +619,8 @@ class Compaction {
 
   std::optional<std::list<UniversalCompactionPolicy::SortedRunInfo>::iterator>
       merging_info_;
+
+  Env::IOPriority io_priority_;
 
   // only set when per_key_placement feature is enabled, -1 (kInvalidLevel)
   // means not supported.

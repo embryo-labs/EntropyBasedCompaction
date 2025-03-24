@@ -905,7 +905,9 @@ Compaction* UniversalCompactionBuilder::PickCompactionWithPolicy() {
       /* is manual */ false, /* trim_ts */ "", /*score*/ 2333,
       false /* deletion_compaction */,
       /* l0_files_might_overlap */ true, CompactionReason::kUniversalPolicy,
-      BlobGarbageCollectionPolicy::kUseDefault, -1, merging_info);
+      BlobGarbageCollectionPolicy::kUseDefault, -1, merging_info,
+      output_level == 1 ? Env::IOPriority::IO_FLATTEN
+                        : Env::IOPriority::IO_MAIN_LEVEL);
 }
 
 Compaction* UniversalCompactionBuilder::PickIncrementalLastLevelCompaction() {
