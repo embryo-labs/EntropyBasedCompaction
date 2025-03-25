@@ -2148,9 +2148,12 @@ class ReporterAgent {
   }
 
   // thread safe
-  void ReportFinishedOps(int64_t num_ops, enum OperationType op_type) {
+  void ReportFinishedOps(int64_t num_ops, enum OperationType op_type,
+                         uint64_t micros) {
     total_ops_done_.fetch_add(num_ops);
-    count_[op_type].fetch_add(1, std::memory_order_relaxed);
+    auto& count_time = count_time_[op_type];
+    count_time.count.fetch_add(num_ops, std::memory_order_relaxed);
+    count_time.micros.fetch_add(micros, std::memory_order_relaxed);
   }
 
  private:
@@ -2237,17 +2240,19 @@ class ReporterAgent {
 
       for (size_t i = 0; i < kOperationTypeEnumMax; ++i) {
         OperationType op = static_cast<OperationType>(i);
-        uint64_t total_count = count_[op].load(std::memory_order_relaxed);
-        if (total_count == 0) continue;
-        uint64_t count = total_count - last_count_[op];
-        last_count_[op] = total_count;
+        CountTime count_time(
+            count_time_[op].count.load(std::memory_order_relaxed),
+            count_time_[op].micros.load(std::memory_order_relaxed));
+        if (count_time.count == 0) continue;
+        CountTime diff = count_time - last_count_time_[op];
+        last_count_time_[op] = count_time;
         auto it = op_report_file.find(op);
         if (it == op_report_file.end()) {
-          std::string fname = OperationTypeString[op] + "-count";
+          std::string fname = OperationTypeString[op] + "-count-time";
           std::unique_ptr<WritableFile> file;
           s = env_->NewWritableFile(fname, &file, EnvOptions());
           if (s.ok()) {
-            s = file->Append("secs_elapsed count\n");
+            s = file->Append("secs_elapsed count micros\n");
           }
           if (s.ok()) {
             s = file->Flush();
@@ -2261,8 +2266,9 @@ class ReporterAgent {
           assert(res.second);
           it = res.first;
         }
-        report =
-            std::to_string(secs_elapsed) + ' ' + std::to_string(count) + '\n';
+        report = std::to_string(secs_elapsed) + ' ' +
+                 std::to_string(diff.count) + ' ' +
+                 std::to_string(diff.micros) + '\n';
         s = it->second->Append(report);
         if (!s.ok()) {
           fprintf(stderr,
@@ -2281,8 +2287,23 @@ class ReporterAgent {
   int64_t last_report_;
   const uint64_t report_interval_secs_;
 
-  std::atomic<uint64_t> count_[kOperationTypeEnumMax] = {0};
-  uint64_t last_count_[kOperationTypeEnumMax] = {0};
+  struct AtomicCountTime {
+    std::atomic<uint64_t> count;
+    std::atomic<uint64_t> micros;
+    AtomicCountTime() : count(0), micros(0) {}
+  };
+  AtomicCountTime count_time_[kOperationTypeEnumMax];
+  struct CountTime {
+    uint64_t count;
+    uint64_t micros;
+    CountTime() : count(0), micros(0) {}
+    CountTime(uint64_t _count, uint64_t _micros)
+        : count(_count), micros(_micros) {}
+    CountTime operator-(const CountTime& rhs) const {
+      return CountTime(count - rhs.count, micros - rhs.micros);
+    }
+  };
+  CountTime last_count_time_[kOperationTypeEnumMax];
 
   uint64_t last_bytes_through_[Env::IO_TOTAL] = {0};
 
@@ -2424,12 +2445,13 @@ class Stats {
 
   void FinishedOps(DBWithColumnFamilies* db_with_cfh, DB* db, int64_t num_ops,
                    enum OperationType op_type = kOthers) {
-    if (reporter_agent_) {
-      reporter_agent_->ReportFinishedOps(num_ops, op_type);
-    }
-    if (FLAGS_histogram) {
+    if (FLAGS_histogram || reporter_agent_) {
       uint64_t now = clock_->NowMicros();
       uint64_t micros = now - last_op_finish_;
+
+      if (reporter_agent_) {
+        reporter_agent_->ReportFinishedOps(num_ops, op_type, micros);
+      }
 
       if (hist_.find(op_type) == hist_.end()) {
         auto hist_temp = std::make_shared<HistogramImpl>();
