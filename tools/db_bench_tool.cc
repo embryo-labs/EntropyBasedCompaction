@@ -2166,7 +2166,7 @@ class ReporterAgent {
     Options options = db_->GetOptions();
     RateLimiter* rate_limiter = options.rate_limiter.get();
     std::unordered_map<OperationType, std::unique_ptr<WritableFile>>
-        op_report_file;
+        op_count_time;
     auto* clock = env_->GetSystemClock().get();
     auto time_started = clock->NowMicros();
     while (true) {
@@ -2216,17 +2216,16 @@ class ReporterAgent {
       }
       assert(bytes_through[Env::IO_MID] == 0);
 
-      std::string report =
-          std::to_string(secs_elapsed) + "," +
-          std::to_string(total_ops_done_snapshot - last_report_) + ',' +
-          std::to_string(num_main_level_sorted_runs) + ',' +
-          std::to_string(num_merging_main_level_sorted_runs) + ',' +
-          std::to_string(bytes_through[Env::IO_LOW]) + ',' +
-          std::to_string(bytes_through[Env::IO_FLATTEN]) + ',' +
-          std::to_string(bytes_through[Env::IO_MAIN_LEVEL]) + ',' +
-          std::to_string(bytes_through[Env::IO_HIGH]) + ',' +
-          std::to_string(bytes_through[Env::IO_USER]) + "\n";
-      auto s = report_file_->Append(report);
+      std::ostringstream report;
+      report << secs_elapsed << ',' << (total_ops_done_snapshot - last_report_)
+             << ',' << num_main_level_sorted_runs << ','
+             << num_merging_main_level_sorted_runs << ','
+             << bytes_through[Env::IO_LOW] << ','
+             << bytes_through[Env::IO_FLATTEN] << ','
+             << bytes_through[Env::IO_MAIN_LEVEL] << ','
+             << bytes_through[Env::IO_HIGH] << ','
+             << bytes_through[Env::IO_USER] << '\n';
+      auto s = report_file_->Append(report.str());
       if (s.ok()) {
         s = report_file_->Flush();
       }
@@ -2246,13 +2245,13 @@ class ReporterAgent {
         if (count_time.count == 0) continue;
         CountTime diff = count_time - last_count_time_[op];
         last_count_time_[op] = count_time;
-        auto it = op_report_file.find(op);
-        if (it == op_report_file.end()) {
-          std::string fname = OperationTypeString[op] + "-count-time";
+        auto it = op_count_time.find(op);
+        if (it == op_count_time.end()) {
+          std::string fname = OperationTypeString[op] + "-count-time.csv";
           std::unique_ptr<WritableFile> file;
           s = env_->NewWritableFile(fname, &file, EnvOptions());
           if (s.ok()) {
-            s = file->Append("secs_elapsed count micros\n");
+            s = file->Append("secs_elapsed,count,micros\n");
           }
           if (s.ok()) {
             s = file->Flush();
@@ -2262,14 +2261,14 @@ class ReporterAgent {
                     s.ToString().c_str());
             abort();
           }
-          auto res = op_report_file.emplace(op, std::move(file));
+          auto res = op_count_time.emplace(op, std::move(file));
           assert(res.second);
           it = res.first;
         }
-        report = std::to_string(secs_elapsed) + ' ' +
-                 std::to_string(diff.count) + ' ' +
-                 std::to_string(diff.micros) + '\n';
-        s = it->second->Append(report);
+        report.str("");
+        report << secs_elapsed << ',' << diff.count << ',' << diff.micros
+               << '\n';
+        s = it->second->Append(report.str());
         if (!s.ok()) {
           fprintf(stderr,
                   "Can't write to report file (%s), stopping the reporting\n",
