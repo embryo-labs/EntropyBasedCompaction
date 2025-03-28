@@ -6366,6 +6366,7 @@ class Benchmark {
           read % 256 == 255) {
         thread->shared->read_rate_limiter->Request(
             256, Env::IO_HIGH, nullptr /* stats */, RateLimiter::OpType::kRead);
+        thread->stats.ResetLastOpTime();
       }
 
       thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kRead);
@@ -7030,6 +7031,9 @@ class Benchmark {
     std::unique_ptr<const char[]> lower_bound_key_guard;
     Slice lower_bound = AllocateKey(&lower_bound_key_guard);
 
+    const size_t batch = std::min(
+        (int64_t)256, thread->shared->read_rate_limiter->GetSingleBurstBytes());
+
     Duration duration(FLAGS_duration, reads_);
     char value_buffer[256];
     for (;;) {
@@ -7110,9 +7114,11 @@ class Benchmark {
       }
 
       if (thread->shared->read_rate_limiter.get() != nullptr &&
-          read % 256 == 255) {
-        thread->shared->read_rate_limiter->Request(
-            256, Env::IO_HIGH, nullptr /* stats */, RateLimiter::OpType::kRead);
+          read % batch == (batch - 1)) {
+        thread->shared->read_rate_limiter->Request(batch, Env::IO_HIGH,
+                                                   nullptr /* stats */,
+                                                   RateLimiter::OpType::kRead);
+        thread->stats.ResetLastOpTime();
       }
 
       thread->stats.FinishedOps(&db_, db_.db, 1, kSeek);
