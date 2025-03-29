@@ -7031,8 +7031,14 @@ class Benchmark {
     std::unique_ptr<const char[]> lower_bound_key_guard;
     Slice lower_bound = AllocateKey(&lower_bound_key_guard);
 
-    const size_t batch = std::min(
-        (int64_t)256, thread->shared->read_rate_limiter->GetSingleBurstBytes());
+    size_t batch;
+    if (thread->shared->read_rate_limiter) {
+      batch =
+          std::min((int64_t)256,
+                   thread->shared->read_rate_limiter->GetSingleBurstBytes());
+    } else {
+      batch = 256;
+    }
 
     Duration duration(FLAGS_duration, reads_);
     char value_buffer[256];
