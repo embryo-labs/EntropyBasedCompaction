@@ -2158,9 +2158,14 @@ class ReporterAgent {
 
  private:
   std::string Header() const {
-    return "secs_elapsed,interval_qps,num-main-level-sorted-runs," +
-           DB::Properties::kNumMergingMainLevelSortedRuns +
-           ",IO_LOW,IO_FLATTEN,IO_MAIN_LEVEL,IO_HIGH,IO_USER";
+    Options options = db_->GetOptions();
+    std::ostringstream header;
+    header << "secs_elapsed,interval_qps,num-main-level-sorted-runs,"
+           << DB::Properties::kNumMergingMainLevelSortedRuns;
+    if (options.rate_limiter.get()) {
+      header << ",IO_LOW,IO_FLATTEN,IO_MAIN_LEVEL,IO_HIGH,IO_USER";
+    }
+    return header.str();
   }
   void SleepAndReport() {
     Options options = db_->GetOptions();
@@ -2207,24 +2212,29 @@ class ReporterAgent {
       db_->GetIntProperty(DB::Properties::kNumMergingMainLevelSortedRuns,
                           &num_merging_main_level_sorted_runs);
 
-      uint64_t bytes_through[Env::IO_TOTAL];
-      for (int pri = Env::IO_LOW; pri < Env::IO_TOTAL; ++pri) {
-        uint64_t total = rate_limiter->GetTotalBytesThrough(
-            static_cast<Env::IOPriority>(pri));
-        bytes_through[pri] = total - last_bytes_through_[pri];
-        last_bytes_through_[pri] = total;
-      }
-      assert(bytes_through[Env::IO_MID] == 0);
-
       std::ostringstream report;
       report << secs_elapsed << ',' << (total_ops_done_snapshot - last_report_)
              << ',' << num_main_level_sorted_runs << ','
-             << num_merging_main_level_sorted_runs << ','
-             << bytes_through[Env::IO_LOW] << ','
-             << bytes_through[Env::IO_FLATTEN] << ','
-             << bytes_through[Env::IO_MAIN_LEVEL] << ','
-             << bytes_through[Env::IO_HIGH] << ','
-             << bytes_through[Env::IO_USER] << '\n';
+             << num_merging_main_level_sorted_runs;
+
+      if (rate_limiter) {
+        uint64_t bytes_through[Env::IO_TOTAL];
+        for (int pri = Env::IO_LOW; pri < Env::IO_TOTAL; ++pri) {
+          uint64_t total = rate_limiter->GetTotalBytesThrough(
+              static_cast<Env::IOPriority>(pri));
+          bytes_through[pri] = total - last_bytes_through_[pri];
+          last_bytes_through_[pri] = total;
+        }
+        assert(bytes_through[Env::IO_MID] == 0);
+
+        report << ',' << bytes_through[Env::IO_LOW] << ','
+               << bytes_through[Env::IO_FLATTEN] << ','
+               << bytes_through[Env::IO_MAIN_LEVEL] << ','
+               << bytes_through[Env::IO_HIGH] << ','
+               << bytes_through[Env::IO_USER];
+      }
+      report << '\n';
+
       auto s = report_file_->Append(report.str());
       if (s.ok()) {
         s = report_file_->Flush();
