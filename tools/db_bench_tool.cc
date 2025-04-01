@@ -122,6 +122,7 @@ DEFINE_string(
     "seekrandom,"
     "seekrandomwhilewriting,"
     "seekrandomwhilemerging,"
+    "queuedseekrandomwhilewriting,"
     "readseq,"
     "readreverse,"
     "compact,"
@@ -211,6 +212,7 @@ DEFINE_string(
     "overwrite\n"
     "\tseekrandomwhilemerging -- seekrandom and 1 thread doing "
     "merge\n"
+    "\tqueuedseekrandomwhilewriting\n"
     "\tcrc32c        -- repeated crc32c of <block size> data\n"
     "\txxhash        -- repeated xxHash of <block size> data\n"
     "\txxhash64      -- repeated xxHash64 of <block size> data\n"
@@ -2453,10 +2455,17 @@ class Stats {
   }
 
   void FinishedOps(DBWithColumnFamilies* db_with_cfh, DB* db, int64_t num_ops,
-                   enum OperationType op_type = kOthers) {
+                   enum OperationType op_type = kOthers,
+                   std::optional<uint64_t> _micros = std::nullopt) {
     if (FLAGS_histogram || reporter_agent_) {
-      uint64_t now = clock_->NowMicros();
-      uint64_t micros = now - last_op_finish_;
+      uint64_t micros;
+      if (_micros.has_value()) {
+        micros = _micros.value();
+      } else {
+        uint64_t now = clock_->NowMicros();
+        micros = now - last_op_finish_;
+        last_op_finish_ = now;
+      }
 
       if (reporter_agent_) {
         reporter_agent_->ReportFinishedOps(num_ops, op_type, micros);
@@ -2472,7 +2481,6 @@ class Stats {
         fprintf(stderr, "long op: %" PRIu64 " micros%30s\r", micros, "");
         fflush(stderr);
       }
-      last_op_finish_ = now;
     }
 
     done_ += num_ops;
@@ -3785,6 +3793,9 @@ class Benchmark {
       } else if (name == "seekrandomwhilemerging") {
         num_threads++;  // Add extra thread for merging
         method = &Benchmark::SeekRandomWhileMerging;
+      } else if (name == "queuedseekrandomwhilewriting") {
+        num_threads++;  // Add extra thread for writing
+        method = &Benchmark::QueuedSeekRandomWhileWriting;
       } else if (name == "readrandomsmall") {
         reads_ /= 1000;
         method = &Benchmark::ReadRandom;
@@ -7163,6 +7174,54 @@ class Benchmark {
       SeekRandom(thread);
     } else {
       BGWriter(thread, kMerge);
+    }
+  }
+
+  void QueuedSeekRandom(ThreadState* thread) {
+    ReadOptions options = read_options_;
+    std::unique_ptr<const char[]> key_guard;
+    Slice key = AllocateKey(&key_guard);
+
+    assert(FLAGS_benchmark_read_rate_limit > 0);
+    uint64_t per_sec = FLAGS_benchmark_read_rate_limit / FLAGS_threads;
+    std::chrono::nanoseconds interval(1000000000 / per_sec);
+    auto arrive_time = std::chrono::steady_clock::now();
+
+    Duration duration(FLAGS_duration, reads_);
+    char value_buffer[256];
+    for (;;) {
+      if (FLAGS_finish_after_writes) {
+        MutexLock l(&thread->shared->mu);
+        if (thread->shared->num_done > 0) {
+          break;
+        }
+      } else {
+        if (duration.Done(1)) {
+          break;
+        }
+      }
+      int64_t seek_pos = thread->rand.Next() % FLAGS_num;
+      GenerateKeyFromIntForSeek(static_cast<uint64_t>(seek_pos), FLAGS_num,
+                                &key);
+      std::unique_ptr<Iterator> iter(db_.db->NewIterator(options));
+      iter->Seek(key);
+      auto now = std::chrono::steady_clock::now();
+      uint64_t micros = std::chrono::duration_cast<std::chrono::microseconds>(
+                            now - arrive_time)
+                            .count();
+      thread->stats.FinishedOps(&db_, db_.db, 1, kSeek, micros);
+      arrive_time += interval;
+      if (now < arrive_time) {
+        std::this_thread::sleep_for(arrive_time - now);
+      }
+    }
+  }
+
+  void QueuedSeekRandomWhileWriting(ThreadState* thread) {
+    if (thread->tid > 0) {
+      QueuedSeekRandom(thread);
+    } else {
+      BGWriter(thread, kWrite);
     }
   }
 
