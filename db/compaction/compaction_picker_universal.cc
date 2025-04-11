@@ -835,23 +835,9 @@ Compaction* UniversalCompactionBuilder::PickCompactionWithPolicy() {
     output_level = 1;
     --b;
     assert(vstorage_->num_levels() >= 2);
-    if (vstorage_->num_levels() == 2) {
-      if (vstorage_->NumLevelFiles(1) > 0) {
-        auto files = vstorage_->LevelFiles(1);
-        inputs.emplace_back();
-        inputs.back().level = 1;
-        for (const FileMetaData* file : files) {
-          if (file->being_compacted) {
-            return nullptr;
-          }
-        }
-        inputs.back().files = std::move(files);
-      }
-    } else {
-      if (vstorage_->NumLevelFiles(1) > 0) {
-        // The last global compaction is not finished yet.
-        return nullptr;
-      }
+    if (vstorage_->NumLevelFiles(1) > 0) {
+      // The last global compaction is not finished yet.
+      return nullptr;
     }
   } else {
     output_level = 0;
