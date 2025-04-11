@@ -9,7 +9,7 @@ bool CompactionPolicySteady::IsPreMergeStatus(
   for (auto [it_expected, it_coming] =
            std::make_tuple(pre_merge_status_.rbegin(), status.rbegin());
        it_expected != pre_merge_status_.rend(); ++it_expected, ++it_coming) {
-    if (it_coming == status.rend() || it_coming->size != *it_expected) {
+    if (it_coming == status.rend() || it_coming->count != *it_expected) {
       return false;
     }
   }
@@ -25,7 +25,7 @@ CompactionPolicySteady::PickCompaction(const std::list<SortedRunInfo> &status) {
   if (s_ > 1) {
     // See if we need to trigger a compaction from the top level to the main
     // level
-    while (a != status.end() && a->size == 1) {
+    while (a != status.end() && a->count == 1) {
       assert(!a->merging);
       ++num_top_level_sorted_runs;
       ++a;

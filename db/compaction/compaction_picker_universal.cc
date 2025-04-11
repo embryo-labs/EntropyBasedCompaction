@@ -854,7 +854,7 @@ Compaction* UniversalCompactionBuilder::PickCompactionWithPolicy() {
   size_t size = 0;
   for (;;) {
     assert(!it->merging);
-    size += it->size;
+    size += it->count;
     auto file = sorted_runs_[i].file;
     assert(!file->being_compacted);
     inputs[0].files.push_back(file);
@@ -868,7 +868,7 @@ Compaction* UniversalCompactionBuilder::PickCompactionWithPolicy() {
     // Erase [a, b)
     auto b_mut = sorted_run_status.erase(a, b);
     b_mut->merging = true;
-    b_mut->size = size;
+    b_mut->count = size;
     merging_info = std::make_optional(b_mut);
   } else {
     sorted_run_status.erase(a, sorted_run_status.end());

@@ -12,11 +12,12 @@ class UniversalCompactionPolicy {
  public:
   struct SortedRunInfo {
     bool merging;
-    // uint64_t num_bytes;
-    uint64_t size;
+    // The count of merged flushed SSTables
+    uint64_t count;
   };
   virtual ~UniversalCompactionPolicy() {}
 
+  // REQUIRES: DB mutex held
   // Returns [a, b]: status[a] to status[b] should be compacted into one
   // sorted run.
   // It should be guaranteed that non of sorted runs in [0, b] is merging.

@@ -1708,7 +1708,7 @@ void ColumnFamilyData::print_sorted_run_status() const {
     if (it->merging) {
       s += "merging ";
     }
-    s += std::to_string(it->size);
+    s += std::to_string(it->count);
     s += ',';
   }
   printf("%f %s\n",
