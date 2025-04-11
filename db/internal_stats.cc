@@ -1002,7 +1002,7 @@ bool InternalStats::HandleNumMergingMainLevelSortedRuns(uint64_t* value,
       *value += 1;
     }
   }
-  if (version->GetMutableCFOptions().compaction_options_universal.policy) {
+  if (version->GetMutableCFOptions().compaction_policy_by_count) {
     assert(storage_info->num_levels() >= 2 && storage_info->num_levels() <= 3);
     if (storage_info->num_levels() == 3) {
       if (storage_info->NumLevelFiles(1) > 0) {

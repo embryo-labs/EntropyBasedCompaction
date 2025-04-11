@@ -82,29 +82,27 @@ class CompactionFilter;
 // A Compaction encapsulates metadata about a compaction.
 class Compaction {
  public:
-  Compaction(VersionStorageInfo* input_version,
-             const ImmutableOptions& immutable_options,
-             const MutableCFOptions& mutable_cf_options,
-             const MutableDBOptions& mutable_db_options,
-             std::vector<CompactionInputFiles> inputs, int output_level,
-             uint64_t target_file_size, uint64_t max_compaction_bytes,
-             uint32_t output_path_id, CompressionType compression,
-             CompressionOptions compression_opts,
-             Temperature output_temperature, uint32_t max_subcompactions,
-             std::vector<FileMetaData*> grandparents,
-             std::optional<SequenceNumber> earliest_snapshot,
-             const SnapshotChecker* snapshot_checker,
-             bool manual_compaction = false, const std::string& trim_ts = "",
-             double score = -1, bool deletion_compaction = false,
-             bool l0_files_might_overlap = true,
-             CompactionReason compaction_reason = CompactionReason::kUnknown,
-             BlobGarbageCollectionPolicy blob_garbage_collection_policy =
-                 BlobGarbageCollectionPolicy::kUseDefault,
-             double blob_garbage_collection_age_cutoff = -1,
-             std::optional<
-                 std::list<UniversalCompactionPolicy::SortedRunInfo>::iterator>
-                 merging_info = std::nullopt,
-             Env::IOPriority io_priority = Env::IOPriority::IO_LOW);
+  Compaction(
+      VersionStorageInfo* input_version,
+      const ImmutableOptions& immutable_options,
+      const MutableCFOptions& mutable_cf_options,
+      const MutableDBOptions& mutable_db_options,
+      std::vector<CompactionInputFiles> inputs, int output_level,
+      uint64_t target_file_size, uint64_t max_compaction_bytes,
+      uint32_t output_path_id, CompressionType compression,
+      CompressionOptions compression_opts, Temperature output_temperature,
+      uint32_t max_subcompactions, std::vector<FileMetaData*> grandparents,
+      std::optional<SequenceNumber> earliest_snapshot,
+      const SnapshotChecker* snapshot_checker, bool manual_compaction = false,
+      const std::string& trim_ts = "", double score = -1,
+      bool deletion_compaction = false, bool l0_files_might_overlap = true,
+      CompactionReason compaction_reason = CompactionReason::kUnknown,
+      BlobGarbageCollectionPolicy blob_garbage_collection_policy =
+          BlobGarbageCollectionPolicy::kUseDefault,
+      double blob_garbage_collection_age_cutoff = -1,
+      std::optional<std::list<CompactionPolicyByCount::SortedRunInfo>::iterator>
+          merging_info = std::nullopt,
+      Env::IOPriority io_priority = Env::IOPriority::IO_LOW);
 
   // The type of the penultimate level output range
   enum class PenultimateOutputRangeType : int {
@@ -419,7 +417,7 @@ class Compaction {
     return blob_garbage_collection_age_cutoff_;
   }
 
-  std::optional<std::list<UniversalCompactionPolicy::SortedRunInfo>::iterator>
+  std::optional<std::list<CompactionPolicyByCount::SortedRunInfo>::iterator>
   merging_info() const {
     return merging_info_;
   }
@@ -617,7 +615,7 @@ class Compaction {
   // Blob garbage collection age cutoff.
   double blob_garbage_collection_age_cutoff_;
 
-  std::optional<std::list<UniversalCompactionPolicy::SortedRunInfo>::iterator>
+  std::optional<std::list<CompactionPolicyByCount::SortedRunInfo>::iterator>
       merging_info_;
 
   Env::IOPriority io_priority_;

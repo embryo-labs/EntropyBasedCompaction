@@ -73,8 +73,8 @@ const char* GetCompactionReasonString(CompactionReason compaction_reason) {
       return "UniversalSizeRatio";
     case CompactionReason::kUniversalSortedRunNum:
       return "UniversalSortedRunNum";
-    case CompactionReason::kUniversalPolicy:
-      return "UniversalCustom";
+    case CompactionReason::kPolicyByCount:
+      return "PolicyByCount";
     case CompactionReason::kUniversalIncrementalLastLevelCompaction:
       return "UniversalIncrementalLastLevelCompaction";
     case CompactionReason::kFIFOMaxSize:

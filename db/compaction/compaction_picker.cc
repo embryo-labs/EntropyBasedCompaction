@@ -1257,4 +1257,109 @@ bool CompactionPicker::GetOverlappingL0Files(
   return true;
 }
 
+Compaction* CompactionPicker::PickIncrementalLastLevelCompaction(
+    ColumnFamilyData* cfd, const std::string& cf_name,
+    const MutableCFOptions& mutable_cf_options,
+    const MutableDBOptions& mutable_db_options, VersionStorageInfo* vstorage) {
+  // Pick a compactions with total size just over
+  // options.max_compaction_size / 2
+  const ImmutableOptions* ioptions = cfd->ioptions();
+  const InternalKeyComparator* icmp = &ioptions->internal_comparator;
+
+  assert(vstorage->num_levels() == 3);
+  int second_last_level = 1;
+  int output_level = 2;
+
+  const std::vector<FileMetaData*>& files =
+      vstorage->LevelFiles(second_last_level);
+  if (files.empty()) {
+    return nullptr;
+  }
+  const std::vector<FileMetaData*>& bottom_files =
+      vstorage->LevelFiles(output_level);
+
+  size_t bottom_start_idx = 0;
+  uint64_t bottom_size = 0;
+  while (bottom_start_idx < bottom_files.size() &&
+         icmp->Compare(bottom_files[bottom_start_idx]->largest,
+                       files[0]->smallest) < 0) {
+    ++bottom_start_idx;
+  }
+  size_t picked_last_idx = 0;                // included
+  size_t bottom_end_idx = bottom_start_idx;  // not included
+  uint64_t total_size = 0;
+  // Use half target compaction bytes as anchor to stop growing second most
+  // level files, and reserve growing space for more overlapping bottom level,
+  // clean cut, files from other levels, etc.
+  uint64_t comp_thres_size = mutable_cf_options.max_compaction_bytes / 2;
+  for (;;) {
+    total_size += files[0]->fd.file_size;
+    while (bottom_end_idx < bottom_files.size() &&
+           icmp->Compare(bottom_files[bottom_end_idx]->smallest,
+                         files[picked_last_idx]->largest) <= 0) {
+      total_size += bottom_files[bottom_end_idx]->fd.file_size;
+      ++bottom_end_idx;
+    }
+    if (total_size > comp_thres_size) {
+      break;
+    }
+    if (picked_last_idx == files.size() - 1) {
+      break;
+    }
+    ++picked_last_idx;
+  }
+
+  CompactionInputFiles second_last_level_inputs;
+  second_last_level_inputs.level = second_last_level;
+  for (size_t i = 0; i <= picked_last_idx; i++) {
+    if (files[i]->being_compacted) {
+      return nullptr;
+    }
+    second_last_level_inputs.files.push_back(files[i]);
+  }
+  assert(!second_last_level_inputs.empty());
+  if (!ExpandInputsToCleanCut(cf_name, vstorage, &second_last_level_inputs,
+                              /*next_smallest=*/nullptr)) {
+    return nullptr;
+  }
+
+  CompactionInputFiles bottom_level_inputs;
+  bottom_level_inputs.level = output_level;
+  // We might be able to avoid this binary search if we save and expand
+  // from bottom_start_idx and bottom_end_idx, but for now, we use
+  // SetupOtherInputs() for simplicity.
+  int parent_index = -1;  // Create and use bottom_start_idx?
+  if (!SetupOtherInputs(cf_name, mutable_cf_options, vstorage,
+                        &second_last_level_inputs, &bottom_level_inputs,
+                        &parent_index,
+                        /*base_index=*/-1)) {
+    return nullptr;
+  }
+
+  std::vector<CompactionInputFiles> inputs;
+  inputs.push_back(std::move(second_last_level_inputs));
+  inputs.push_back(std::move(bottom_level_inputs));
+
+  // TODO support multi paths?
+  uint32_t path_id = 0;
+  return new Compaction(
+      vstorage, *ioptions, mutable_cf_options, mutable_db_options,
+      std::move(inputs), output_level,
+      MaxFileSizeForLevel(mutable_cf_options, output_level,
+                          kCompactionStyleUniversal),
+      std::numeric_limits<uint64_t>::max(), path_id,
+      GetCompressionType(vstorage, mutable_cf_options, output_level, 1,
+                         true /* enable_compression */),
+      GetCompressionOptions(mutable_cf_options, vstorage, output_level,
+                            true /* enable_compression */),
+      mutable_cf_options.default_write_temperature,
+      /* max_subcompactions */ 0, /* grandparents */ {},
+      /* earliest_snapshot */ std::nullopt,
+      /* snapshot_checker */ nullptr,
+      /* is manual */ false,
+      /* trim_ts */ "", 2333, false /* deletion_compaction */,
+      /* l0_files_might_overlap */ true,
+      CompactionReason::kUniversalIncrementalLastLevelCompaction);
+}
+
 }  // namespace ROCKSDB_NAMESPACE

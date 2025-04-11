@@ -240,6 +240,11 @@ class CompactionPicker {
       std::unordered_set<uint64_t>* input_files,
       const ColumnFamilyMetaData& cf_meta, const int output_level) const;
 
+  Compaction* PickIncrementalLastLevelCompaction(
+      ColumnFamilyData* cfd, const std::string& cf_name,
+      const MutableCFOptions& mutable_cf_options,
+      const MutableDBOptions& mutable_db_options, VersionStorageInfo* vstorage);
+
   // Keeps track of all compactions that are running on Level0.
   // Protected by DB mutex
   std::set<Compaction*> level0_compactions_in_progress_;

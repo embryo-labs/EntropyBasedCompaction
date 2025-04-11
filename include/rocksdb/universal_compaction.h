@@ -7,11 +7,9 @@
 
 #include <climits>
 #include <cstdint>
-#include <memory>
 #include <vector>
 
 #include "rocksdb/rocksdb_namespace.h"
-#include "rocksdb/universal_compaction_policy.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -26,8 +24,6 @@ enum CompactionStopStyle {
 
 class CompactionOptionsUniversal {
  public:
-  std::shared_ptr<UniversalCompactionPolicy> policy;
-
   // Percentage flexibility while comparing file size. If the candidate file(s)
   // size is 1% smaller than the next file's size, then include next file into
   // this candidate set. // Default: 1

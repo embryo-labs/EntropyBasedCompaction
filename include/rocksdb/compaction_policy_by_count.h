@@ -8,14 +8,14 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-class UniversalCompactionPolicy {
+class CompactionPolicyByCount {
  public:
   struct SortedRunInfo {
     bool merging;
     // The count of merged flushed SSTables
     uint64_t count;
   };
-  virtual ~UniversalCompactionPolicy() {}
+  virtual ~CompactionPolicyByCount() {}
 
   // REQUIRES: DB mutex held
   // Returns [a, b]: status[a] to status[b] should be compacted into one

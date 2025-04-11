@@ -17,8 +17,8 @@ bool CompactionPolicySteady::IsPreMergeStatus(
 }
 
 std::optional<std::pair<
-    std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator,
-    std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator>>
+    std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator,
+    std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator>>
 CompactionPolicySteady::PickCompaction(const std::list<SortedRunInfo> &status) {
   auto a = status.begin();
   size_t num_top_level_sorted_runs = 0;
@@ -38,8 +38,8 @@ CompactionPolicySteady::PickCompaction(const std::list<SortedRunInfo> &status) {
         --a;
       }
       return std::make_optional<std::pair<
-          std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator,
-          std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator>>(
+          std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator,
+          std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator>>(
           a, b);
     }
   }
@@ -100,9 +100,8 @@ CompactionPolicySteady::PickCompaction(const std::list<SortedRunInfo> &status) {
     assert(b == status.end());
   }
   return std::make_optional<std::pair<
-      std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator,
-      std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator>>(a,
-                                                                            b);
+      std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator,
+      std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator>>(a, b);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

@@ -3435,17 +3435,16 @@ void VersionStorageInfo::ComputeCompactionScore(
   // if it is larger than 1.0.
   const double kScoreScale = 10.0;
   int max_output_level = MaxOutputLevel(immutable_options.allow_ingest_behind);
-  UniversalCompactionPolicy* custom_compaction_policy =
-      mutable_cf_options.compaction_options_universal.policy.get();
-  if (custom_compaction_policy) {
+  CompactionPolicyByCount* policy_by_count =
+      mutable_cf_options.compaction_policy_by_count.get();
+  if (policy_by_count) {
     assert(compaction_level_.size() == compaction_score_.size());
     assert(compaction_level_.size() == (size_t)num_levels());
     for (size_t i = 0; i < (size_t)num_levels(); ++i) {
       compaction_level_[i] = i;
       compaction_score_[i] = 0;
     }
-    if (custom_compaction_policy->PickCompaction(cfd->sorted_run_status())
-            .has_value()) {
+    if (policy_by_count->PickCompaction(cfd->sorted_run_status()).has_value()) {
       compaction_score_[0] += 2;
     }
     if (num_levels() == 3) {
@@ -4092,7 +4091,8 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
     const ImmutableOptions& ioptions, const MutableCFOptions& options) {
   if (compaction_style_ == kCompactionStyleNone ||
       compaction_style_ == kCompactionStyleFIFO ||
-      compaction_style_ == kCompactionStyleUniversal) {
+      compaction_style_ == kCompactionStyleUniversal ||
+      compaction_style_ == kCompactionStyleByCount) {
     // don't need this
     return;
   }

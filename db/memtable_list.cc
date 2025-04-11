@@ -622,7 +622,7 @@ Status MemTableList::TryInstallMemtableFlushResults(
         // in LogAndApply
         for (size_t i = 0; i < num_mem_to_flush; ++i) {
           cfd->sorted_run_status().push_front(
-              UniversalCompactionPolicy::SortedRunInfo{false, 1});
+              CompactionPolicyByCount::SortedRunInfo{false, 1});
         }
         // this can release and reacquire the mutex.
         s = vset->LogAndApply(

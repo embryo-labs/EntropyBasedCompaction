@@ -7,8 +7,8 @@
 namespace ROCKSDB_NAMESPACE {
 
 std::optional<std::pair<
-    std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator,
-    std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator>>
+    std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator,
+    std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator>>
 CompactionPolicyLazyLeveling::PickCompaction(
     const std::list<SortedRunInfo> &status) {
   auto a = status.begin();
@@ -44,9 +44,8 @@ CompactionPolicyLazyLeveling::PickCompaction(
     --b;
   }
   return std::make_optional<std::pair<
-      std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator,
-      std::list<UniversalCompactionPolicy::SortedRunInfo>::const_iterator>>(a,
-                                                                            b);
+      std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator,
+      std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator>>(a, b);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

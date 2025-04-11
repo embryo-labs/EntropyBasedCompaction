@@ -2,11 +2,11 @@
 
 #include <vector>
 
-#include "rocksdb/universal_compaction_policy.h"
+#include "rocksdb/compaction_policy_by_count.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-class CompactionPolicyLazyLeveling : public UniversalCompactionPolicy {
+class CompactionPolicyLazyLeveling : public CompactionPolicyByCount {
  public:
   CompactionPolicyLazyLeveling(std::vector<size_t> &&num_sorted_runs)
       : num_sorted_runs_(std::move(num_sorted_runs)) {}

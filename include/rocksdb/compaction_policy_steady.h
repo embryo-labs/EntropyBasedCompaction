@@ -4,11 +4,11 @@
 #include <unordered_map>
 #include <vector>
 
-#include "rocksdb/universal_compaction_policy.h"
+#include "rocksdb/compaction_policy_by_count.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-class CompactionPolicySteady : public UniversalCompactionPolicy {
+class CompactionPolicySteady : public CompactionPolicyByCount {
  public:
   struct Step {
     size_t total;

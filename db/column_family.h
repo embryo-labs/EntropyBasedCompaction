@@ -578,11 +578,11 @@ class ColumnFamilyData {
     return (mem_->IsEmpty() ? 0 : 1) + imm_.NumNotFlushed();
   }
 
-  const std::list<UniversalCompactionPolicy::SortedRunInfo>& sorted_run_status()
+  const std::list<CompactionPolicyByCount::SortedRunInfo>& sorted_run_status()
       const {
     return sorted_run_status_;
   }
-  std::list<UniversalCompactionPolicy::SortedRunInfo>& sorted_run_status() {
+  std::list<CompactionPolicyByCount::SortedRunInfo>& sorted_run_status() {
     return sorted_run_status_;
   }
   void print_sorted_run_status() const;
@@ -698,7 +698,7 @@ class ColumnFamilyData {
 
   std::atomic<uint64_t> next_epoch_number_;
 
-  std::list<UniversalCompactionPolicy::SortedRunInfo> sorted_run_status_;
+  std::list<CompactionPolicyByCount::SortedRunInfo> sorted_run_status_;
 };
 
 // ColumnFamilySet has interesting thread-safety requirements
