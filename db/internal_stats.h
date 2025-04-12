@@ -914,6 +914,8 @@ class InternalStats {
   bool HandleBlobCacheUsage(uint64_t* value, DBImpl* db, Version* version);
   bool HandleBlobCachePinnedUsage(uint64_t* value, DBImpl* db,
                                   Version* version);
+  bool HandleNumMergingSortedRuns(uint64_t* value, DBImpl* db,
+                                  Version* version);
   bool HandleNumTopLevelSortedRuns(uint64_t* value, DBImpl* db,
                                    Version* version);
   bool HandleNumMergingMainLevelSortedRuns(uint64_t* value, DBImpl* db,

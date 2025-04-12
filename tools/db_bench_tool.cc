@@ -2161,7 +2161,8 @@ class ReporterAgent {
   std::string Header() const {
     Options options = db_->GetOptions();
     std::ostringstream header;
-    header << "secs_elapsed,interval_qps,num-main-level-sorted-runs,"
+    header << "secs_elapsed,interval_qps,num-sorted-runs,"
+           << DB::Properties::kNumTopLevelSortedRuns << ','
            << DB::Properties::kNumMergingMainLevelSortedRuns;
     if (options.rate_limiter.get()) {
       header << ",IO_LOW,IO_FLATTEN,IO_MAIN_LEVEL,IO_HIGH,IO_USER";
@@ -2192,31 +2193,33 @@ class ReporterAgent {
           (clock->NowMicros() - time_started + kMicrosInSecond / 2) /
           kMicrosInSecond;
 
+      std::ostringstream report;
+      report << secs_elapsed << ',' << (total_ops_done_snapshot - last_report_);
+      last_report_ = total_ops_done_snapshot;
+
+      uint64_t num_l0_files;
+      std::string tmp;
+      if (db_->GetProperty(DB::Properties::kNumFilesAtLevelPrefix + "0",
+                           &tmp)) {
+        num_l0_files = std::atoi(tmp.c_str());
+      } else {
+        num_l0_files = 0;
+      }
+      size_t num_levels = db_->NumberLevels();
+      assert(num_levels > 0);
+      report << ',' << num_l0_files + num_levels - 1;
+
       uint64_t num_top_level_sorted_runs;
       bool good = db_->GetIntProperty(DB::Properties::kNumTopLevelSortedRuns,
                                       &num_top_level_sorted_runs);
       assert(good);
-
-      uint64_t num_main_level_sorted_runs;
-      std::string tmp;
-      if (db_->GetProperty(DB::Properties::kNumFilesAtLevelPrefix + "0",
-                           &tmp)) {
-        size_t num_levels = db_->NumberLevels();
-        assert(num_levels > 0);
-        num_main_level_sorted_runs =
-            std::atoi(tmp.c_str()) - num_top_level_sorted_runs + num_levels - 1;
-      } else {
-        num_main_level_sorted_runs = 0;
-      }
+      report << ',' << num_top_level_sorted_runs;
 
       uint64_t num_merging_main_level_sorted_runs;
-      db_->GetIntProperty(DB::Properties::kNumMergingMainLevelSortedRuns,
-                          &num_merging_main_level_sorted_runs);
-
-      std::ostringstream report;
-      report << secs_elapsed << ',' << (total_ops_done_snapshot - last_report_)
-             << ',' << num_main_level_sorted_runs << ','
-             << num_merging_main_level_sorted_runs;
+      good = db_->GetIntProperty(DB::Properties::kNumMergingMainLevelSortedRuns,
+                                 &num_merging_main_level_sorted_runs);
+      assert(good);
+      report << ',' << num_merging_main_level_sorted_runs;
 
       if (rate_limiter) {
         uint64_t bytes_through[Env::IO_TOTAL];
@@ -2246,7 +2249,6 @@ class ReporterAgent {
                 s.ToString().c_str());
         break;
       }
-      last_report_ = total_ops_done_snapshot;
 
       for (size_t i = 0; i < kOperationTypeEnumMax; ++i) {
         OperationType op = static_cast<OperationType>(i);

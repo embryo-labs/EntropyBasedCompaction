@@ -994,7 +994,7 @@ bool InternalStats::HandleNumMergingMainLevelSortedRuns(uint64_t* value,
     return true;
   }
   uint64_t main_level_size_threshold =
-      version->GetMutableCFOptions().write_buffer_size * 1.1;
+      version->GetMutableCFOptions().main_level_size_threshold;
   const auto& l0_files = storage_info->LevelFiles(0);
   for (const auto& file : l0_files) {
     if (file->being_compacted &&
@@ -1002,12 +1002,9 @@ bool InternalStats::HandleNumMergingMainLevelSortedRuns(uint64_t* value,
       *value += 1;
     }
   }
-  if (version->GetMutableCFOptions().compaction_policy.has_value()) {
-    assert(storage_info->num_levels() >= 2 && storage_info->num_levels() <= 3);
-    if (storage_info->num_levels() == 3) {
-      if (storage_info->NumLevelFiles(1) > 0) {
-        *value += 1;
-      }
+  for (int level = 1; level < storage_info->num_levels() - 1; ++level) {
+    if (storage_info->NumLevelFiles(level) > 0) {
+      *value += 1;
     }
   }
   return true;
