@@ -19,7 +19,7 @@ Compaction* CompactionPickerByCount::PickMainLevelCompaction(
     const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
     LogBuffer* log_buffer) {
   CompactionPolicyByCount* policy =
-      mutable_cf_options.compaction_policy_by_count.get();
+      std::get<0>(mutable_cf_options.compaction_policy.value()).get();
   assert(policy != nullptr);
   auto& sorted_run_status = cfd->sorted_run_status();
   cfd->print_sorted_run_status();

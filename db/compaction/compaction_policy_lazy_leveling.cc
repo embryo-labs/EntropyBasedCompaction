@@ -2,50 +2,56 @@
 
 #include <cassert>
 #include <cinttypes>
+#include <cmath>
 #include <cstdio>
 
 namespace ROCKSDB_NAMESPACE {
 
-std::optional<std::pair<
-    std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator,
-    std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator>>
+inline uint64_t CompactionPolicyLazyLeveling::size_threshold(
+    uint64_t target_size, size_t level) {
+  assert(num_sorted_runs_.size() != 0);
+  if (level == num_sorted_runs_.size() - 1) {
+    return std::numeric_limits<uint64_t>::max();
+  } else {
+    return target_size * std::sqrt(num_sorted_runs_[level]);
+  }
+}
+
+std::optional<std::pair<size_t, size_t>>
 CompactionPolicyLazyLeveling::PickCompaction(
-    const std::list<SortedRunInfo> &status) {
-  auto a = status.begin();
+    size_t write_buffer_size, const std::vector<SortedRunInfo>& status) {
+  size_t a = 0, b = 0;
   size_t level = 0;
-  size_t count = 1;
-  auto b = status.begin();
-  // num = b - a;
-  size_t num = 0;
-  while (b != status.end()) {
-    if (b->merging) break;
-    if (b->count != count) {
-      if (num >= num_sorted_runs_[level]) break;
+  size_t target_size = write_buffer_size;
+  size_t threshold = size_threshold(target_size, level);
+  while (b != status.size()) {
+    if (status[b].merging) break;
+    if (status[b].size > threshold) {
+      if (b - a >= num_sorted_runs_[level]) break;
       a = b;
-      num = 0;
       do {
         assert(level < num_sorted_runs_.size());
-        count *= num_sorted_runs_[level];
+        target_size *= num_sorted_runs_[level];
         ++level;
-      } while (count < b->count);
-      assert(count == b->count);
+        threshold = size_threshold(target_size, level);
+      } while (status[b].size > threshold);
     }
     ++b;
-    ++num;
   }
-  if (num < num_sorted_runs_[level]) return std::nullopt;
-  while (num > num_sorted_runs_[level]) {
+  if (b - a < num_sorted_runs_[level]) return std::nullopt;
+  while (b - a > num_sorted_runs_[level]) {
     ++a;
-    --num;
   }
   if (level == num_sorted_runs_.size() - 1) {
-    assert(b == status.end());
+    if (b < status.size()) {
+      // The last flatten job is still in progress
+      assert(status[b].merging);
+      return std::nullopt;
+    }
   } else {
     --b;
   }
-  return std::make_optional<std::pair<
-      std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator,
-      std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator>>(a, b);
+  return std::make_pair(a, b);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

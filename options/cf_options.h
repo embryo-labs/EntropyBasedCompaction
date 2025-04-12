@@ -6,11 +6,13 @@
 #pragma once
 
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "db/dbformat.h"
 #include "options/db_options.h"
 #include "rocksdb/compaction_policy_by_count.h"
+#include "rocksdb/compaction_policy_by_size.h"
 #include "rocksdb/options.h"
 #include "util/compression.h"
 
@@ -139,7 +141,7 @@ struct MutableCFOptions {
             options.max_bytes_for_level_multiplier_additional),
         compaction_options_fifo(options.compaction_options_fifo),
         compaction_options_universal(options.compaction_options_universal),
-        compaction_policy_by_count(options.compaction_policy_by_count),
+        compaction_policy(options.compaction_policy),
         preclude_last_level_data_seconds(
             options.preclude_last_level_data_seconds),
         preserve_internal_time_seconds(options.preserve_internal_time_seconds),
@@ -305,7 +307,9 @@ struct MutableCFOptions {
   std::vector<int> max_bytes_for_level_multiplier_additional;
   CompactionOptionsFIFO compaction_options_fifo;
   CompactionOptionsUniversal compaction_options_universal;
-  std::shared_ptr<CompactionPolicyByCount> compaction_policy_by_count;
+  std::optional<std::variant<std::shared_ptr<CompactionPolicyByCount>,
+                             std::shared_ptr<CompactionPolicyBySize>>>
+      compaction_policy;
   uint64_t preclude_last_level_data_seconds;
   uint64_t preserve_internal_time_seconds;
 

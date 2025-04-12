@@ -3435,16 +3435,38 @@ void VersionStorageInfo::ComputeCompactionScore(
   // if it is larger than 1.0.
   const double kScoreScale = 10.0;
   int max_output_level = MaxOutputLevel(immutable_options.allow_ingest_behind);
-  CompactionPolicyByCount* policy_by_count =
-      mutable_cf_options.compaction_policy_by_count.get();
-  if (policy_by_count) {
+  if (mutable_cf_options.compaction_policy.has_value()) {
+    auto& policy_variant = mutable_cf_options.compaction_policy.value();
     assert(compaction_level_.size() == compaction_score_.size());
     assert(compaction_level_.size() == (size_t)num_levels());
     for (size_t i = 0; i < (size_t)num_levels(); ++i) {
       compaction_level_[i] = i;
       compaction_score_[i] = 0;
     }
-    if (policy_by_count->PickCompaction(cfd->sorted_run_status()).has_value()) {
+    bool compaction_needed;
+    switch (policy_variant.index()) {
+      case 0: {
+        CompactionPolicyByCount* policy = std::get<0>(policy_variant).get();
+        compaction_needed =
+            policy->PickCompaction(cfd->sorted_run_status()).has_value();
+        break;
+      }
+      case 1: {
+        const auto& l0_files = LevelFiles(0);
+        std::vector<CompactionPolicyBySize::SortedRunInfo> status;
+        for (const auto* file : l0_files) {
+          status.emplace_back(file->being_compacted, file->fd.file_size);
+        }
+        CompactionPolicyBySize* policy = std::get<1>(policy_variant).get();
+        compaction_needed =
+            policy->PickCompaction(mutable_cf_options.write_buffer_size, status)
+                .has_value();
+        break;
+      }
+      default:
+        assert(false);
+    }
+    if (compaction_needed) {
       compaction_score_[0] += 2;
     }
     if (num_levels() == 3) {
@@ -4092,7 +4114,8 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
   if (compaction_style_ == kCompactionStyleNone ||
       compaction_style_ == kCompactionStyleFIFO ||
       compaction_style_ == kCompactionStyleUniversal ||
-      compaction_style_ == kCompactionStyleByCount) {
+      compaction_style_ == kCompactionStyleByCount ||
+      compaction_style_ == kCompactionStyleBySize) {
     // don't need this
     return;
   }

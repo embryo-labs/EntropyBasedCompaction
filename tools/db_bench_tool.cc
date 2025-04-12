@@ -4866,39 +4866,37 @@ class Benchmark {
     options.compaction_options_universal.stop_style =
         static_cast<CompactionStopStyle>(FLAGS_universal_stop_style);
     if (FLAGS_compaction_style_e == CompactionStyle::kCompactionStyleByCount) {
-      if (FLAGS_compaction_policy == "lazy-leveling") {
-        std::vector<std::string> num_sorted_runs_str =
-            ROCKSDB_NAMESPACE::StringSplit(FLAGS_lazy_leveling_num_sorted_runs,
-                                           ',');
-        std::vector<size_t> num_sorted_runs;
-        for (const std::string& item : num_sorted_runs_str) {
-          num_sorted_runs.push_back(std::stoi(item));
+      assert(FLAGS_compaction_policy == "steady");
+      assert(!FLAGS_steady_policy_file.empty());
+      auto policy_json =
+          nlohmann::json::parse(std::ifstream(FLAGS_steady_policy_file));
+      size_t policy_s = policy_json["s"];
+      size_t R = policy_json["R"];
+      std::unordered_map<size_t, std::vector<CompactionPolicySteady::Step>>
+          rounds;
+      for (auto round : policy_json["rounds"]) {
+        size_t n = round["n"];
+        std::vector<CompactionPolicySteady::Step> steps;
+        for (auto step : round["steps"]) {
+          steps.emplace_back(step["total"], step["compact"]);
         }
-        options.compaction_policy_by_count =
-            std::make_shared<CompactionPolicyLazyLeveling>(
-                std::move(num_sorted_runs));
-      } else if (FLAGS_compaction_policy == "steady") {
-        assert(!FLAGS_steady_policy_file.empty());
-        auto policy_json =
-            nlohmann::json::parse(std::ifstream(FLAGS_steady_policy_file));
-        size_t policy_s = policy_json["s"];
-        size_t R = policy_json["R"];
-        std::unordered_map<size_t, std::vector<CompactionPolicySteady::Step>>
-            rounds;
-        for (auto round : policy_json["rounds"]) {
-          size_t n = round["n"];
-          std::vector<CompactionPolicySteady::Step> steps;
-          for (auto step : round["steps"]) {
-            steps.emplace_back(step["total"], step["compact"]);
-          }
-          rounds.emplace(n, std::move(steps));
-        }
-        options.compaction_policy_by_count =
-            std::make_shared<CompactionPolicySteady>(policy_s, R,
-                                                     std::move(rounds));
-      } else {
-        assert(false);
+        rounds.emplace(n, std::move(steps));
       }
+      options.compaction_policy = std::make_shared<CompactionPolicySteady>(
+          policy_s, R, std::move(rounds));
+    } else if (FLAGS_compaction_style_e ==
+               CompactionStyle::kCompactionStyleBySize) {
+      assert(FLAGS_compaction_policy == "lazy-leveling");
+      std::vector<std::string> num_sorted_runs_str =
+          ROCKSDB_NAMESPACE::StringSplit(FLAGS_lazy_leveling_num_sorted_runs,
+                                         ',');
+      std::vector<size_t> num_sorted_runs;
+      for (const std::string& item : num_sorted_runs_str) {
+        num_sorted_runs.push_back(std::stoi(item));
+      }
+      options.compaction_policy =
+          std::make_shared<CompactionPolicyLazyLeveling>(
+              std::move(num_sorted_runs));
     } else {
       assert(FLAGS_compaction_policy == "");
     }

@@ -351,8 +351,10 @@ std::map<CompactionStyle, std::string>
         {kCompactionStyleLevel, "kCompactionStyleLevel"},
         {kCompactionStyleUniversal, "kCompactionStyleUniversal"},
         {kCompactionStyleFIFO, "kCompactionStyleFIFO"},
+        {kCompactionStyleNone, "kCompactionStyleNone"},
         {kCompactionStyleByCount, "kCompactionStyleByCount"},
-        {kCompactionStyleNone, "kCompactionStyleNone"}};
+        {kCompactionStyleBySize, "kCompactionStyleBySize"},
+};
 
 std::map<CompactionPri, std::string> OptionsHelper::compaction_pri_to_string = {
     {kByCompensatedSize, "kByCompensatedSize"},
@@ -823,8 +825,10 @@ std::unordered_map<std::string, CompactionStyle>
         {"kCompactionStyleLevel", kCompactionStyleLevel},
         {"kCompactionStyleUniversal", kCompactionStyleUniversal},
         {"kCompactionStyleFIFO", kCompactionStyleFIFO},
+        {"kCompactionStyleNone", kCompactionStyleNone},
         {"kCompactionStyleByCount", kCompactionStyleByCount},
-        {"kCompactionStyleNone", kCompactionStyleNone}};
+        {"kCompactionStyleBySize", kCompactionStyleBySize},
+};
 
 std::unordered_map<std::string, CompactionPri>
     OptionsHelper::compaction_pri_string_map = {

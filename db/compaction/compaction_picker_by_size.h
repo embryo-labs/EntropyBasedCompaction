@@ -1,0 +1,34 @@
+#pragma once
+
+#include "db/compaction/compaction_picker.h"
+
+namespace ROCKSDB_NAMESPACE {
+
+class CompactionPickerBySize : public CompactionPicker {
+ public:
+  CompactionPickerBySize(const ImmutableOptions& ioptions,
+                         const InternalKeyComparator* icmp)
+      : CompactionPicker(ioptions, icmp) {}
+
+  bool NeedsCompaction(const ColumnFamilyData* cfd,
+                       const VersionStorageInfo* vstorage) const override;
+
+  Compaction* PickCompaction(
+      ColumnFamilyData* cfd, const std::string& cf_name,
+      const MutableCFOptions& mutable_cf_options,
+      const MutableDBOptions& mutable_db_options,
+      const std::vector<SequenceNumber>& existing_snapshots,
+      const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
+      LogBuffer* log_buffer) override;
+
+ private:
+  Compaction* PickMainLevelCompaction(
+      ColumnFamilyData* cfd, const std::string& cf_name,
+      const MutableCFOptions& mutable_cf_options,
+      const MutableDBOptions& mutable_db_options,
+      const std::vector<SequenceNumber>& existing_snapshots,
+      const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
+      LogBuffer* log_buffer);
+};
+
+}  // namespace ROCKSDB_NAMESPACE
