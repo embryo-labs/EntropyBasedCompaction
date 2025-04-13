@@ -26,8 +26,9 @@ Compaction* CompactionPickerBySize::PickMainLevelCompaction(
   for (const auto* file : l0_files) {
     status.emplace_back(file->being_compacted, file->fd.file_size);
   }
-  auto ret =
-      policy->PickCompaction(mutable_cf_options.write_buffer_size, status);
+  auto ret = policy->PickCompaction(
+      mutable_cf_options.write_buffer_size, status,
+      vstorage->NumLevelBytes(vstorage->num_non_empty_levels() - 1));
   if (!ret.has_value()) return nullptr;
   auto [a, b] = ret.value();
   std::vector<CompactionInputFiles> inputs(1);

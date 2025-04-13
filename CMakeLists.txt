@@ -677,6 +677,7 @@ set(SOURCES
         db/compaction/compaction.cc
         db/compaction/compaction_iterator.cc
         db/compaction/compaction_picker.cc
+        db/compaction/compaction_policy_dynamic_tiering.cc
         db/compaction/compaction_policy_lazy_leveling.cc
         db/compaction/compaction_policy_steady.cc
         db/compaction/compaction_job.cc

@@ -49,6 +49,7 @@
 #include "port/port.h"
 #include "port/stack_trace.h"
 #include "rocksdb/cache.h"
+#include "rocksdb/compaction_policy_dynamic_tiering.h"
 #include "rocksdb/compaction_policy_lazy_leveling.h"
 #include "rocksdb/compaction_policy_steady.h"
 #include "rocksdb/convenience.h"
@@ -536,7 +537,7 @@ DEFINE_int32(compaction_pri,
              (int32_t)ROCKSDB_NAMESPACE::Options().compaction_pri,
              "priority of files to compaction: by size or by data age");
 
-DEFINE_string(compaction_policy, "", "lazy-leveling/steady");
+DEFINE_string(compaction_policy, "", "steady/lazy-leveling/dynamic-tiering");
 
 DEFINE_string(steady_policy_file, "", "");
 
@@ -569,6 +570,7 @@ DEFINE_bool(universal_incremental, false,
             "Enable incremental compactions in universal compaction.");
 
 DEFINE_string(lazy_leveling_num_sorted_runs, "5,3,3,3", "");
+DEFINE_double(C, 3, "");
 
 DEFINE_uint64(main_level_size_threshold, 0, "");
 
@@ -4888,17 +4890,23 @@ class Benchmark {
           policy_s, R, std::move(rounds));
     } else if (FLAGS_compaction_style_e ==
                CompactionStyle::kCompactionStyleBySize) {
-      assert(FLAGS_compaction_policy == "lazy-leveling");
-      std::vector<std::string> num_sorted_runs_str =
-          ROCKSDB_NAMESPACE::StringSplit(FLAGS_lazy_leveling_num_sorted_runs,
-                                         ',');
-      std::vector<size_t> num_sorted_runs;
-      for (const std::string& item : num_sorted_runs_str) {
-        num_sorted_runs.push_back(std::stoi(item));
+      if (FLAGS_compaction_policy == "lazy-leveling") {
+        std::vector<std::string> num_sorted_runs_str =
+            ROCKSDB_NAMESPACE::StringSplit(FLAGS_lazy_leveling_num_sorted_runs,
+                                           ',');
+        std::vector<size_t> num_sorted_runs;
+        for (const std::string& item : num_sorted_runs_str) {
+          num_sorted_runs.push_back(std::stoi(item));
+        }
+        options.compaction_policy =
+            std::make_shared<CompactionPolicyLazyLeveling>(
+                std::move(num_sorted_runs));
+      } else if (FLAGS_compaction_policy == "dynamic-tiering") {
+        options.compaction_policy =
+            std::make_shared<CompactionPolicyDynamicTiering>(FLAGS_C);
+      } else {
+        assert(false);
       }
-      options.compaction_policy =
-          std::make_shared<CompactionPolicyLazyLeveling>(
-              std::move(num_sorted_runs));
     } else {
       assert(FLAGS_compaction_policy == "");
     }

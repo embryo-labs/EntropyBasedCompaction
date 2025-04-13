@@ -19,7 +19,8 @@ inline uint64_t CompactionPolicyLazyLeveling::size_threshold(
 
 std::optional<std::pair<size_t, size_t>>
 CompactionPolicyLazyLeveling::PickCompaction(
-    size_t write_buffer_size, const std::vector<SortedRunInfo>& status) {
+    size_t write_buffer_size, const std::vector<SortedRunInfo>& status,
+    uint64_t last_level_size) {
   size_t a = 0, b = 0;
   size_t level = 0;
   size_t target_size = write_buffer_size;

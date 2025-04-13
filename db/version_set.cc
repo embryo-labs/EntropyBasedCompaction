@@ -3457,9 +3457,15 @@ void VersionStorageInfo::ComputeCompactionScore(
         for (const auto* file : l0_files) {
           status.emplace_back(file->being_compacted, file->fd.file_size);
         }
+        if (num_non_empty_levels_ == 0) {
+          compaction_needed = false;
+          break;
+        }
         CompactionPolicyBySize* policy = std::get<1>(policy_variant).get();
         compaction_needed =
-            policy->PickCompaction(mutable_cf_options.write_buffer_size, status)
+            policy
+                ->PickCompaction(mutable_cf_options.write_buffer_size, status,
+                                 NumLevelBytes(num_non_empty_levels_ - 1))
                 .has_value();
         break;
       }

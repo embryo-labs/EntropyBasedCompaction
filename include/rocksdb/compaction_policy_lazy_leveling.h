@@ -10,8 +10,8 @@ class CompactionPolicyLazyLeveling : public CompactionPolicyBySize {
       : num_sorted_runs_(std::move(num_sorted_runs)) {}
 
   std::optional<std::pair<size_t, size_t>> PickCompaction(
-      size_t write_buffer_size,
-      const std::vector<SortedRunInfo>& status) override;
+      size_t write_buffer_size, const std::vector<SortedRunInfo>& status,
+      uint64_t last_level_size) override;
 
  private:
   inline uint64_t size_threshold(uint64_t target_size, size_t level);

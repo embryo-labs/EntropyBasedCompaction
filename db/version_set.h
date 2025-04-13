@@ -198,6 +198,7 @@ class VersionStorageInfo {
   // Updates internal structures that keep track of compaction scores
   // We use compaction scores to figure out which compaction to do next
   // REQUIRES: db_mutex held!!
+  // REQUIRES: UpdateNumNonEmptyLevels has been called
   // TODO find a better way to pass compaction_options_fifo.
   void ComputeCompactionScore(const ColumnFamilyData* cfd,
                               const ImmutableOptions& immutable_options,
