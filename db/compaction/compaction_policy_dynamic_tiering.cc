@@ -84,8 +84,12 @@ CompactionPolicyDynamicTiering::PickCompaction(
   size_t distance = 1;
   while (category > 0) {
     if (category_info[category].num_non_merging > 0) {
-      distance = std::max(distance,
-                          ceil_log2(category_info[category].num_non_merging));
+      distance = std::max(
+          distance,
+          // No need to cap to category_info.size() - 1 if we allow multiple
+          // sorted runs in the buffer level
+          std::min(category_info.size() - 1,
+                   ceil_log2(category_info[category].num_non_merging)));
     }
     category -= 1;
     target_distance[category] = distance;
