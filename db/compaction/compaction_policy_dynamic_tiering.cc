@@ -71,10 +71,10 @@ CompactionPolicyDynamicTiering::PickCompaction(
     }
     sorted_run_index += 1;
   }
-  printf("(num, num_non_merging) in each category: ");
+  printf("(num_non_merging, num_merging) in each category: ");
   for (size_t i = 0; i < category_info.size(); ++i) {
-    printf("(%zu,%zu) ", category_info[i].num,
-           category_info[i].num_non_merging);
+    printf("(%zu,%zu) ", category_info[i].num_non_merging,
+           category_info[i].num - category_info[i].num_non_merging);
   }
   putchar('\n');
 
