@@ -150,6 +150,7 @@ CompactionPolicyDynamicTiering::PickCompaction(
       continue;
     }
     if (first_sorted_run == category_info[start].first &&
+        (last_sorted_run - first_sorted_run + 1) < (1 << (target - start)) &&
         abs_ratio(current_size + (write_buffer_size << start), target_size) <
             abs_ratio(current_size, target_size)) {
       // If another sorted run can make the size of the output file closer to
