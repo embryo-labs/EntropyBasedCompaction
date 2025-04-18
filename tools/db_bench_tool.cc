@@ -5837,8 +5837,11 @@ class Benchmark {
             continue;
           }
         }
-        writes_ /=
-            static_cast<int64_t>(open_options_.max_bytes_for_level_multiplier);
+        assert(sorted_runs[0].size() <= num_levels - 1);
+        writes_ /= static_cast<int64_t>(
+            open_options_.max_bytes_for_level_multiplier *
+            open_options_.max_bytes_for_level_multiplier_additional
+                [num_levels - 1 - sorted_runs[0].size()]);
       }
       for (size_t i = 0; i < num_db; i++) {
         if (sorted_runs[i].size() < num_levels - 1) {
