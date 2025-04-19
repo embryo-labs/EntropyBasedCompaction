@@ -5628,7 +5628,11 @@ class Benchmark {
             s = blobdb->Put(write_options_, key, val);
           }
         } else if (FLAGS_num_column_families <= 1) {
-          batch.Put(key, val);
+          if (open_options_.merge_operator) {
+            batch.Merge(key, val);
+          } else {
+            batch.Put(key, val);
+          }
         } else {
           // We use same rand_num as seed for key and column family so that we
           // can deterministically find the cfh corresponding to a particular
