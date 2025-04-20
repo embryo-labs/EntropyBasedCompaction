@@ -1332,6 +1332,7 @@ class DB {
 
     static const std::string kNumTopLevelSortedRuns;
     static const std::string kNumMergingMainLevelSortedRuns;
+    static const std::string kBufferLevelSize;
   };
 
   // DB implementations export properties about their state via this method.

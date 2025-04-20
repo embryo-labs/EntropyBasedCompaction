@@ -439,6 +439,8 @@ const std::string DB::Properties::kNumTopLevelSortedRuns =
     rocksdb_prefix + "num-top-level-sorted-runs";
 const std::string DB::Properties::kNumMergingMainLevelSortedRuns =
     rocksdb_prefix + "num-merging-main-level-sorted-runs";
+const std::string DB::Properties::kBufferLevelSize =
+    rocksdb_prefix + "buffer-level-size";
 
 const std::string InternalStats::kPeriodicCFStats =
     DB::Properties::kCFStats + ".periodic";
@@ -634,6 +636,9 @@ const UnorderedMap<std::string, DBPropertyInfo>
         {DB::Properties::kNumMergingMainLevelSortedRuns,
          {true, nullptr, &InternalStats::HandleNumMergingMainLevelSortedRuns,
           nullptr, nullptr}},
+        {DB::Properties::kBufferLevelSize,
+         {true, nullptr, &InternalStats::HandleBufferLevelSize, nullptr,
+          nullptr}},
 };
 
 InternalStats::InternalStats(int num_levels, SystemClock* clock,
@@ -1007,6 +1012,18 @@ bool InternalStats::HandleNumMergingMainLevelSortedRuns(uint64_t* value,
       *value += 1;
     }
   }
+  return true;
+}
+
+bool InternalStats::HandleBufferLevelSize(uint64_t* value, DBImpl* /*db*/,
+                                          Version* version) {
+  VersionStorageInfo* storage_info = version->storage_info();
+  if (storage_info->num_non_empty_levels() < 3) {
+    *value = 0;
+    return true;
+  }
+  *value =
+      storage_info->NumLevelBytes(storage_info->num_non_empty_levels() - 2);
   return true;
 }
 

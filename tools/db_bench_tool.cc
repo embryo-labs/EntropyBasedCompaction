@@ -2165,7 +2165,8 @@ class ReporterAgent {
     std::ostringstream header;
     header << "secs_elapsed,interval_qps,num-sorted-runs,"
            << DB::Properties::kNumTopLevelSortedRuns << ','
-           << DB::Properties::kNumMergingMainLevelSortedRuns;
+           << DB::Properties::kNumMergingMainLevelSortedRuns << ','
+           << DB::Properties::kBufferLevelSize;
     if (options.rate_limiter.get()) {
       header << ",IO_LOW,IO_FLATTEN,IO_MAIN_LEVEL,IO_HIGH,IO_USER";
     }
@@ -2222,6 +2223,12 @@ class ReporterAgent {
                                  &num_merging_main_level_sorted_runs);
       assert(good);
       report << ',' << num_merging_main_level_sorted_runs;
+
+      uint64_t buffer_level_size;
+      good = db_->GetIntProperty(DB::Properties::kBufferLevelSize,
+                                 &buffer_level_size);
+      assert(good);
+      report << ',' << buffer_level_size;
 
       if (rate_limiter) {
         uint64_t bytes_through[Env::IO_TOTAL];
