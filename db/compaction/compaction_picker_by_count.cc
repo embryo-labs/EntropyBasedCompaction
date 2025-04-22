@@ -90,8 +90,9 @@ Compaction* CompactionPickerByCount::PickMainLevelCompaction(
       false /* deletion_compaction */,
       /* l0_files_might_overlap */ true, CompactionReason::kPolicyByCount,
       BlobGarbageCollectionPolicy::kUseDefault, -1, merging_info,
-      output_level == 1 ? Env::IOPriority::IO_FLATTEN
-                        : Env::IOPriority::IO_MAIN_LEVEL);
+      static_cast<Env::IOPriority>(output_level == 1
+                                       ? Env::IOPriority::IO_LOW + 1
+                                       : Env::IOPriority::IO_LOW + 2));
 }
 
 Compaction* CompactionPickerByCount::PickCompaction(

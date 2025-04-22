@@ -28,7 +28,9 @@ inline uint64_t CompactionPolicyDynamicTiering::size_threshold(
   return (size << category) * sqrt2;
 }
 
-std::optional<std::pair<size_t, size_t>>
+// Compaction from class i to class i+1 has a priority of
+// IO_LOW + num_classes - i
+std::optional<std::tuple<size_t, size_t, Env::IOPriority>>
 CompactionPolicyDynamicTiering::PickCompaction(
     size_t write_buffer_size, const std::vector<SortedRunInfo>& sorted_runs,
     uint64_t last_level_size) {
@@ -161,7 +163,11 @@ CompactionPolicyDynamicTiering::PickCompaction(
       last_sorted_run += 1;
       assert((size_t)last_sorted_run == sorted_runs.size());
     }
-    return std::make_pair(first_sorted_run, last_sorted_run);
+    auto io_priority = static_cast<Env::IOPriority>(
+        Env::IO_LOW + category_info.size() - start);
+    assert(io_priority > Env::IO_LOW);
+    assert(io_priority < Env::IO_MID);
+    return std::make_tuple(first_sorted_run, last_sorted_run, io_priority);
   }
   return std::nullopt;
 }

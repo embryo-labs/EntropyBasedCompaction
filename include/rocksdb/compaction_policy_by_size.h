@@ -4,6 +4,7 @@
 #include <optional>
 #include <vector>
 
+#include "rocksdb/env.h"
 #include "rocksdb/rocksdb_namespace.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -23,9 +24,10 @@ class CompactionPolicyBySize {
   // sorted run.
   // It should be guaranteed that non of sorted runs in [0, b] is merging.
   // If b == status.size(), it means merging status[a] to status[b-1] to L1
-  virtual std::optional<std::pair<size_t, size_t>> PickCompaction(
-      size_t write_buffer_size, const std::vector<SortedRunInfo> &status,
-      uint64_t last_level_size) = 0;
+  virtual std::optional<std::tuple<size_t, size_t, Env::IOPriority>>
+  PickCompaction(size_t write_buffer_size,
+                 const std::vector<SortedRunInfo> &status,
+                 uint64_t last_level_size) = 0;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

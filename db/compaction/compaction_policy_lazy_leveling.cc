@@ -17,7 +17,7 @@ inline uint64_t CompactionPolicyLazyLeveling::size_threshold(
   }
 }
 
-std::optional<std::pair<size_t, size_t>>
+std::optional<std::tuple<size_t, size_t, Env::IOPriority>>
 CompactionPolicyLazyLeveling::PickCompaction(
     size_t write_buffer_size, const std::vector<SortedRunInfo>& status,
     uint64_t last_level_size) {
@@ -52,7 +52,10 @@ CompactionPolicyLazyLeveling::PickCompaction(
   } else {
     --b;
   }
-  return std::make_pair(a, b);
+  auto io_priority = static_cast<Env::IOPriority>(
+      Env::IO_LOW + num_sorted_runs_.size() - level);
+  assert(io_priority < Env::IO_MID);
+  return std::make_tuple(a, b, io_priority);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

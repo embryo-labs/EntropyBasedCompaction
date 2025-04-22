@@ -2240,9 +2240,13 @@ class ReporterAgent {
         }
         assert(bytes_through[Env::IO_MID] == 0);
 
+        uint64_t io_main_level = 0;
+        for (int pri = Env::IO_LOW + 2; pri < Env::IO_MID; ++pri) {
+          io_main_level += bytes_through[pri];
+        }
+
         report << ',' << bytes_through[Env::IO_LOW] << ','
-               << bytes_through[Env::IO_FLATTEN] << ','
-               << bytes_through[Env::IO_MAIN_LEVEL] << ','
+               << bytes_through[Env::IO_LOW + 1] << ',' << io_main_level << ','
                << bytes_through[Env::IO_HIGH] << ','
                << bytes_through[Env::IO_USER];
       }

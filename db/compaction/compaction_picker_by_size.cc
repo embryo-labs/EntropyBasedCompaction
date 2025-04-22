@@ -30,7 +30,7 @@ Compaction* CompactionPickerBySize::PickMainLevelCompaction(
       mutable_cf_options.write_buffer_size, status,
       vstorage->NumLevelBytes(vstorage->num_non_empty_levels() - 1));
   if (!ret.has_value()) return nullptr;
-  auto [a, b] = ret.value();
+  auto [a, b, io_priority] = ret.value();
   std::vector<CompactionInputFiles> inputs(1);
   int output_level;
   if (b == status.size()) {
@@ -69,9 +69,7 @@ Compaction* CompactionPickerBySize::PickMainLevelCompaction(
       /* is manual */ false, /* trim_ts */ "", /*score*/ 2333,
       false /* deletion_compaction */,
       /* l0_files_might_overlap */ true, CompactionReason::kPolicyByCount,
-      BlobGarbageCollectionPolicy::kUseDefault, -1, std::nullopt,
-      output_level == 1 ? Env::IOPriority::IO_FLATTEN
-                        : Env::IOPriority::IO_MAIN_LEVEL);
+      BlobGarbageCollectionPolicy::kUseDefault, -1, std::nullopt, io_priority);
 }
 
 Compaction* CompactionPickerBySize::PickCompaction(
