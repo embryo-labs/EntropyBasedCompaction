@@ -35,7 +35,7 @@ CompactionPolicyDynamicTiering::PickCompaction(
   if (sorted_runs.empty()) {
     return std::nullopt;
   }
-  uint64_t buffer_level_max_sorted_run = last_level_size / C_;
+  uint64_t buffer_level_sorted_run_size = last_level_size / C_;
 
   struct CategoryInfo {
     // May actually belong to the next category if this category is empty
@@ -60,7 +60,7 @@ CompactionPolicyDynamicTiering::PickCompaction(
     }
     ++category;
     category_size_upper_bound = (write_buffer_size << category) * sqrt2;
-    if (category_size_upper_bound * 2 > buffer_level_max_sorted_run) {
+    if (category_size_upper_bound > buffer_level_sorted_run_size) {
       break;
     }
   }
@@ -117,8 +117,8 @@ CompactionPolicyDynamicTiering::PickCompaction(
     uint64_t upper_bound_size;
     if (target >= category_info.size()) {
       target = category_info.size();
-      target_size = buffer_level_max_sorted_run;
-      upper_bound_size = buffer_level_max_sorted_run;
+      target_size = buffer_level_sorted_run_size;
+      upper_bound_size = buffer_level_sorted_run_size;
     } else {
       target_size = write_buffer_size << target;
       upper_bound_size = target_size * sqrt2;
