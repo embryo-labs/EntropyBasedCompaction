@@ -13,10 +13,7 @@ class CompactionPolicyDynamicTiering : public CompactionPolicyBySize {
       uint64_t last_level_size) override;
 
  private:
-  inline uint64_t size_threshold(uint64_t target_size, size_t level);
-
   const double C_;
-  std::vector<size_t> num_sorted_runs_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE
