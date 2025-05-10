@@ -49,6 +49,7 @@
 #include "port/port.h"
 #include "port/stack_trace.h"
 #include "rocksdb/cache.h"
+#include "rocksdb/compaction_policy_dynamic_size_ratio.h"
 #include "rocksdb/compaction_policy_dynamic_tiering.h"
 #include "rocksdb/compaction_policy_lazy_leveling.h"
 #include "rocksdb/compaction_policy_steady.h"
@@ -4912,6 +4913,9 @@ class Benchmark {
         options.compaction_policy =
             std::make_shared<CompactionPolicyLazyLeveling>(
                 std::move(num_sorted_runs));
+      } else if (FLAGS_compaction_policy == "dynamic-size-ratio") {
+        options.compaction_policy =
+            std::make_shared<CompactionPolicyDynamicSizeRatio>(FLAGS_C);
       } else if (FLAGS_compaction_policy == "dynamic-tiering") {
         options.compaction_policy =
             std::make_shared<CompactionPolicyDynamicTiering>(FLAGS_C);
