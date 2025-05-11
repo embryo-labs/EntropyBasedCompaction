@@ -26,12 +26,13 @@ CompactionPolicyDynamicSizeRatio::PickCompaction(
   uint64_t buffer_level_sorted_run_size = last_level_size / C_;
 
   struct CategoryInfo {
+    uint64_t size;
     // May actually belong to the next category if this category is empty
     int first;
     size_t num_non_merging;
     size_t num_merging;
-    CategoryInfo(int _first)
-        : first(_first), num_non_merging(0), num_merging(0) {}
+    CategoryInfo(uint64_t _size, int _first)
+        : size(_size), first(_first), num_non_merging(0), num_merging(0) {}
   };
   for (;;) {
     std::vector<CategoryInfo> category_info;
@@ -39,7 +40,7 @@ CompactionPolicyDynamicSizeRatio::PickCompaction(
     uint64_t category_size = write_buffer_size;
     int sorted_run_index = 0;
     for (;;) {
-      category_info.emplace_back(sorted_run_index);
+      category_info.emplace_back(category_size, sorted_run_index);
       while ((size_t)sorted_run_index != sorted_runs.size() &&
              sorted_runs[sorted_run_index].size < category_size * sqrt_T_) {
         if (sorted_runs[sorted_run_index].merging) {
@@ -70,22 +71,35 @@ CompactionPolicyDynamicSizeRatio::PickCompaction(
     }
     putchar('\n');
 
-    assert(!category_info.empty());
-    category_size = write_buffer_size;
-    enum class Decision {
-      IncrSizeRatio,
-      DoNothing,
-      DecrSizeRatio,
-    };
-    Decision decision = Decision::DecrSizeRatio;
-    for (size_t start = 0; start < category_info.size(); start += 1) {
-      if (category_info[start].num_merging > 0) {
-        if (category_info[start].num_non_merging >= T_) {
-          decision = Decision::IncrSizeRatio;
-        } else {
-          decision = Decision::DoNothing;
+    size_t start;
+    for (start = 0; start < category_info.size(); start += 1) {
+      if (start < category_info.size() - 1) {
+        if (category_info[start].num_non_merging > T_) {
+          break;
         }
-        break;
+      } else {
+        if (category_info[start].num_non_merging * category_info[start].size /
+                sqrt_T_ >
+            buffer_level_sorted_run_size) {
+          break;
+        }
+      }
+    }
+    bool congested = false;
+    if (start < category_info.size()) {
+      congested = true;
+      if (category_info.size() > 1) {
+        T_ += 1;
+        sqrt_T_ = sqrt(T_);
+        printf("Increase T to %zu\n", T_);
+        continue;
+      }
+    }
+
+    assert(!category_info.empty());
+    for (start = 0; start < category_info.size(); start += 1) {
+      if (category_info[start].num_merging > 0) {
+        return std::nullopt;
       }
       if (category_info[start].num_non_merging == 0) {
         continue;
@@ -97,13 +111,10 @@ CompactionPolicyDynamicSizeRatio::PickCompaction(
       }
 
       uint64_t target_size;
-      uint64_t upper_bound_size;
       if (start + 1 == category_info.size()) {
         target_size = buffer_level_sorted_run_size;
-        upper_bound_size = buffer_level_sorted_run_size;
       } else {
-        target_size = category_size * T_;
-        upper_bound_size = target_size * sqrt_T_;
+        target_size = category_info[start].size * T_;
       }
       int last_sorted_run =
           category_info[start].first + category_info[start].num_non_merging - 1;
@@ -117,9 +128,6 @@ CompactionPolicyDynamicSizeRatio::PickCompaction(
           break;
         }
         uint64_t size = sorted_runs[sorted_run_index].size;
-        if (current_size + size >= upper_bound_size) {
-          break;
-        }
         if (current_size != 0 && abs_ratio(current_size + size, target_size) >=
                                      abs_ratio(current_size, target_size)) {
           break;
@@ -127,11 +135,12 @@ CompactionPolicyDynamicSizeRatio::PickCompaction(
         current_size += size;
       }
       first_sorted_run = sorted_run_index + 1;
-      if (current_size < category_size * sqrt_T_) {
+      if (current_size < category_info[start].size * sqrt_T_) {
         continue;
       }
-      if ((last_sorted_run - first_sorted_run + 1) < (int)T_ &&
-          abs_ratio(current_size + (write_buffer_size << start), target_size) <
+      if (first_sorted_run == category_info[start].first &&
+          (last_sorted_run - first_sorted_run + 1) < (int)T_ &&
+          abs_ratio(current_size + category_info[start].size, target_size) <
               abs_ratio(current_size, target_size)) {
         // If another sorted run can make the size of the output file closer to
         // target size, we wait.
@@ -147,20 +156,13 @@ CompactionPolicyDynamicSizeRatio::PickCompaction(
       assert(io_priority < Env::IO_MID);
       return std::make_tuple(first_sorted_run, last_sorted_run, io_priority);
     }
-    switch (decision) {
-      case Decision::IncrSizeRatio:
-        T_ += 1;
-        break;
-      case Decision::DoNothing:
-        return std::nullopt;
-      case Decision::DecrSizeRatio:
-        if (T_ == 2) {
-          return std::nullopt;
-        }
-        T_ -= 1;
-        break;
+    assert(start == category_info.size());
+    if (!congested && T_ > 2) {
+      T_ -= 1;
+      sqrt_T_ = sqrt(T_);
+      printf("Decrease T to %zu\n", T_);
     }
-    sqrt_T_ = sqrt(T_);
+    return std::nullopt;
   }
 }
 
