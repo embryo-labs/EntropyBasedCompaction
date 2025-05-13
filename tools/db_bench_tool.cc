@@ -135,6 +135,7 @@ DEFINE_string(
     "waitforcompaction,"
     "multireadrandom,"
     "mixgraph,"
+    "customperiodic,"
     "readseq,"
     "readtorowcache,"
     "readtocache,"
@@ -1541,6 +1542,9 @@ DEFINE_double(sine_c, 0, "C in f(x) = A sin(bx + c) + d");
 
 DEFINE_double(sine_d, 1, "D in f(x) = A sin(bx + c) + d");
 
+DEFINE_string(writes_per_second_file, "", "");
+DEFINE_uint64(writes_per_second_period_secs, 0, "");
+
 DEFINE_bool(rate_limit_bg_reads, false,
             "Use options.rate_limiter on compaction reads");
 
@@ -2164,9 +2168,15 @@ class ReporterAgent {
   std::string Header() const {
     Options options = db_->GetOptions();
     std::ostringstream header;
-    header << "secs_elapsed,interval_qps,num-sorted-runs,"
-           << DB::Properties::kNumTopLevelSortedRuns << ','
-           << DB::Properties::kNumMergingMainLevelSortedRuns << ','
+    header << "secs_elapsed,interval_qps";
+    if (dbstats) {
+      for (Tickers ticker : tickers_to_report_) {
+        assert(ticker == TickersNameMap[ticker].first);
+        header << ',' << TickersNameMap[ticker].second;
+      }
+    }
+    header << ",num-sorted-runs," << DB::Properties::kNumTopLevelSortedRuns
+           << ',' << DB::Properties::kNumMergingMainLevelSortedRuns << ','
            << DB::Properties::kBufferLevelSize;
     if (options.rate_limiter.get()) {
       header << ",IO_LOW,IO_FLATTEN,IO_MAIN_LEVEL,IO_HIGH,IO_USER";
@@ -2200,6 +2210,15 @@ class ReporterAgent {
       std::ostringstream report;
       report << secs_elapsed << ',' << (total_ops_done_snapshot - last_report_);
       last_report_ = total_ops_done_snapshot;
+
+      if (dbstats) {
+        for (Tickers ticker : tickers_to_report_) {
+          uint64_t cur = dbstats->getTickerCount(ticker);
+          uint64_t& last = last_ticker_[ticker];
+          report << ',' << std::to_string(cur - last);
+          last = cur;
+        }
+      }
 
       uint64_t num_l0_files;
       std::string tmp;
@@ -2312,6 +2331,11 @@ class ReporterAgent {
   std::atomic<int64_t> total_ops_done_;
   int64_t last_report_;
   const uint64_t report_interval_secs_;
+
+  const std::vector<Tickers> tickers_to_report_{
+      WAIT_FOR_LAST_LEVEL_COMPACTION,
+  };
+  std::unordered_map<Tickers, uint64_t> last_ticker_;
 
   struct AtomicCountTime {
     std::atomic<uint64_t> count;
@@ -3792,6 +3816,8 @@ class Benchmark {
         method = &Benchmark::ApproximateMemtableStats;
       } else if (name == "mixgraph") {
         method = &Benchmark::MixGraph;
+      } else if (name == "customperiodic") {
+        method = &Benchmark::CustomPeriodic;
       } else if (name == "readmissing") {
         ++key_size_;
         method = &Benchmark::ReadRandom;
@@ -7024,6 +7050,74 @@ class Benchmark {
 
     thread->stats.AddBytes(bytes);
     thread->stats.AddMessage(msg);
+  }
+
+  void CustomPeriodic(ThreadState* thread) {
+    int64_t puts = 0;
+    RandomGenerator gen;
+
+    std::unique_ptr<const char[]> key_guard;
+    Slice key = AllocateKey(&key_guard);
+
+    std::ifstream writes_per_second_file(FLAGS_writes_per_second_file);
+    std::vector<double> writes_per_second;
+    for (;;) {
+      double x;
+      writes_per_second_file >> x;
+      if (!writes_per_second_file) {
+        break;
+      }
+      writes_per_second.push_back(x);
+    }
+    assert(writes_per_second.size() > 0);
+
+    thread->shared->write_rate_limiter.reset(
+        NewGenericRateLimiter(writes_per_second[0]));
+    size_t cur = 0;
+    auto each_us = FLAGS_writes_per_second_period_secs * 1000000 /
+                   writes_per_second.size();
+    auto cur_begin_us = FLAGS_env->NowMicros();
+    auto last_recalc_us = cur_begin_us;
+    constexpr uint64_t recalc_interval_us = 1000000;
+
+    Duration duration(FLAGS_duration, std::numeric_limits<int64_t>::max());
+    while (!duration.Done(1)) {
+      DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
+      auto key_rand = GetRandomKey(&thread->rand) % FLAGS_num;
+      GenerateKeyFromInt(key_rand, FLAGS_num, &key);
+
+      Status s = db_with_cfh->db->Put(
+          write_options_, key,
+          gen.Generate(static_cast<unsigned int>(FLAGS_value_size)));
+      if (!s.ok()) {
+        fprintf(stderr, "put error: %s\n", s.ToString().c_str());
+        ErrorExit();
+      }
+      puts += 1;
+      if (puts % 100 == 0) {
+        thread->shared->write_rate_limiter->Request(100, Env::IO_HIGH,
+                                                    nullptr /*stats*/);
+      }
+      thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kWrite);
+
+      uint64_t now = FLAGS_env->NowMicros();
+      if (now - last_recalc_us >= recalc_interval_us) {
+        last_recalc_us = now;
+        auto delta = now - cur_begin_us;
+        auto next = (cur + 1) % writes_per_second.size();
+        while (delta >= each_us) {
+          cur = next;
+          next = (cur + 1) % writes_per_second.size();
+          cur_begin_us += each_us;
+          delta = now - cur_begin_us;
+        }
+        auto new_limit =
+            (double)delta / each_us *
+                (writes_per_second[next] - writes_per_second[cur]) +
+            writes_per_second[cur];
+        thread->shared->write_rate_limiter->SetBytesPerSecond(new_limit);
+      }
+    }
   }
 
   void IteratorCreation(ThreadState* thread) {

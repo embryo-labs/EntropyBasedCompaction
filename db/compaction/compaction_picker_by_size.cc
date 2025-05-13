@@ -39,6 +39,8 @@ Compaction* CompactionPickerBySize::PickMainLevelCompaction(
     assert(vstorage->num_levels() >= 2);
     if (vstorage->NumLevelFiles(1) > 0) {
       // The last global compaction is not finished yet.
+      RecordTick(cfd->ioptions()->stats,
+                 Tickers::WAIT_FOR_LAST_LEVEL_COMPACTION);
       return nullptr;
     }
   } else {
@@ -68,7 +70,7 @@ Compaction* CompactionPickerBySize::PickMainLevelCompaction(
       /* snapshot_checker */ nullptr,
       /* is manual */ false, /* trim_ts */ "", /*score*/ 2333,
       false /* deletion_compaction */,
-      /* l0_files_might_overlap */ true, CompactionReason::kPolicyByCount,
+      /* l0_files_might_overlap */ true, CompactionReason::kPolicyBySize,
       BlobGarbageCollectionPolicy::kUseDefault, -1, std::nullopt, io_priority);
 }
 
