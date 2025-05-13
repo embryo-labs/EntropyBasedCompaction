@@ -2181,6 +2181,15 @@ class ReporterAgent {
     if (options.rate_limiter.get()) {
       header << ",IO_LOW,IO_FLATTEN,IO_MAIN_LEVEL,IO_HIGH,IO_USER";
     }
+    if (options.compaction_policy.has_value()) {
+      if (options.compaction_policy.value().index() == 1) {
+        std::shared_ptr<CompactionPolicyBySize> policy =
+            std::get<1>(options.compaction_policy.value());
+        if (strcmp(policy->name(), "DynamicSizeRatio") == 0) {
+          header << ",size-ratio";
+        }
+      }
+    }
     return header.str();
   }
   void SleepAndReport() {
@@ -2269,6 +2278,18 @@ class ReporterAgent {
                << bytes_through[Env::IO_LOW + 1] << ',' << io_main_level << ','
                << bytes_through[Env::IO_HIGH] << ','
                << bytes_through[Env::IO_USER];
+
+        if (options.compaction_policy.has_value()) {
+          if (options.compaction_policy.value().index() == 1) {
+            std::shared_ptr<CompactionPolicyBySize> policy =
+                std::get<1>(options.compaction_policy.value());
+            if (strcmp(policy->name(), "DynamicSizeRatio") == 0) {
+              CompactionPolicyDynamicSizeRatio* p =
+                  static_cast<CompactionPolicyDynamicSizeRatio*>(policy.get());
+              report << ',' << p->size_ratio();
+            }
+          }
+        }
       }
       report << '\n';
 

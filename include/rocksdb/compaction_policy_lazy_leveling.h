@@ -9,6 +9,8 @@ class CompactionPolicyLazyLeveling : public CompactionPolicyBySize {
   CompactionPolicyLazyLeveling(std::vector<size_t>&& num_sorted_runs)
       : num_sorted_runs_(std::move(num_sorted_runs)) {}
 
+  const char* name() override { return "LazyLeveling"; }
+
   std::optional<std::tuple<size_t, size_t, Env::IOPriority>> PickCompaction(
       size_t write_buffer_size, const std::vector<SortedRunInfo>& status,
       uint64_t last_level_size) override;

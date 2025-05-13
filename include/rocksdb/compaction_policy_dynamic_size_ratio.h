@@ -8,6 +8,9 @@ class CompactionPolicyDynamicSizeRatio : public CompactionPolicyBySize {
  public:
   CompactionPolicyDynamicSizeRatio(double C);
 
+  const char* name() override { return "DynamicSizeRatio"; }
+  size_t size_ratio() const { return T_; }
+
   std::optional<std::tuple<size_t, size_t, Env::IOPriority>> PickCompaction(
       size_t write_buffer_size, const std::vector<SortedRunInfo>& status,
       uint64_t last_level_size) override;

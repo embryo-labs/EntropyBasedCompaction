@@ -19,6 +19,8 @@ class CompactionPolicyBySize {
   };
   virtual ~CompactionPolicyBySize() {}
 
+  virtual const char *name() = 0;
+
   // REQUIRES: DB mutex held
   // Returns [a, b]: status[a] to status[b] should be compacted into one
   // sorted run.

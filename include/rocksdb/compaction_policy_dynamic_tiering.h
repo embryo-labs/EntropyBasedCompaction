@@ -8,6 +8,8 @@ class CompactionPolicyDynamicTiering : public CompactionPolicyBySize {
  public:
   CompactionPolicyDynamicTiering(double C) : C_(C) {}
 
+  const char* name() override { return "DynamicTiering"; }
+
   std::optional<std::tuple<size_t, size_t, Env::IOPriority>> PickCompaction(
       size_t write_buffer_size, const std::vector<SortedRunInfo>& status,
       uint64_t last_level_size) override;
