@@ -2216,6 +2216,8 @@ class ReporterAgent {
           (clock->NowMicros() - time_started + kMicrosInSecond / 2) /
           kMicrosInSecond;
 
+      printf("secs elapsed: %lu\n", secs_elapsed);
+
       std::ostringstream report;
       report << secs_elapsed << ',' << (total_ops_done_snapshot - last_report_);
       last_report_ = total_ops_done_snapshot;
