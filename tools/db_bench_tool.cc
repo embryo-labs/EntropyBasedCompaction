@@ -1542,8 +1542,9 @@ DEFINE_double(sine_c, 0, "C in f(x) = A sin(bx + c) + d");
 
 DEFINE_double(sine_d, 1, "D in f(x) = A sin(bx + c) + d");
 
+DEFINE_uint64(period_secs, 0, "");
 DEFINE_string(writes_per_second_file, "", "");
-DEFINE_uint64(writes_per_second_period_secs, 0, "");
+DEFINE_string(reads_per_second_file, "", "");
 
 DEFINE_bool(rate_limit_bg_reads, false,
             "Use options.rate_limiter on compaction reads");
@@ -7076,32 +7077,70 @@ class Benchmark {
   }
 
   void CustomPeriodic(ThreadState* thread) {
-    int64_t puts = 0;
+    if (thread->tid == 0) {
+      CustomPeriodicWrite(thread);
+    } else {
+      CustomPeriodicRead(thread);
+    }
+  }
+  class OpPerSec {
+   public:
+    OpPerSec(const std::string& path)
+        : cur_(0),
+          cur_begin_us_(FLAGS_env->NowMicros()),
+          last_recalc_us_(cur_begin_us_) {
+      std::ifstream file(path);
+      for (;;) {
+        double x;
+        file >> x;
+        if (!file) {
+          break;
+        }
+        op_per_sec_.push_back(x);
+      }
+      assert(op_per_sec_.size() > 0);
+      each_us_ = FLAGS_period_secs * 1000000 / op_per_sec_.size();
+    }
+
+    double init() { return op_per_sec_[0]; }
+    std::optional<double> new_limit() {
+      auto now_micros = FLAGS_env->NowMicros();
+      if (now_micros - last_recalc_us_ < recalc_interval_us) {
+        return std::nullopt;
+      }
+      last_recalc_us_ = now_micros;
+      auto delta = now_micros - cur_begin_us_;
+      auto next = (cur_ + 1) % op_per_sec_.size();
+      while (delta >= each_us_) {
+        cur_ = next;
+        next = (cur_ + 1) % op_per_sec_.size();
+        cur_begin_us_ += each_us_;
+        delta = now_micros - cur_begin_us_;
+      }
+      return (double)delta / each_us_ *
+                 (op_per_sec_[next] - op_per_sec_[cur_]) +
+             op_per_sec_[cur_];
+    }
+
+   private:
+    constexpr static uint64_t recalc_interval_us = 1000000;
+
+    std::vector<double> op_per_sec_;
+
+    size_t cur_;
+    uint64_t each_us_;
+    uint64_t cur_begin_us_;
+    uint64_t last_recalc_us_;
+  };
+  void CustomPeriodicWrite(ThreadState* thread) {
     RandomGenerator gen;
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
 
-    std::ifstream writes_per_second_file(FLAGS_writes_per_second_file);
-    std::vector<double> writes_per_second;
-    for (;;) {
-      double x;
-      writes_per_second_file >> x;
-      if (!writes_per_second_file) {
-        break;
-      }
-      writes_per_second.push_back(x);
-    }
-    assert(writes_per_second.size() > 0);
-
+    OpPerSec writes_per_second(FLAGS_writes_per_second_file);
     thread->shared->write_rate_limiter.reset(
-        NewGenericRateLimiter(writes_per_second[0]));
-    size_t cur = 0;
-    auto each_us = FLAGS_writes_per_second_period_secs * 1000000 /
-                   writes_per_second.size();
-    auto cur_begin_us = FLAGS_env->NowMicros();
-    auto last_recalc_us = cur_begin_us;
-    constexpr uint64_t recalc_interval_us = 1000000;
+        NewGenericRateLimiter(writes_per_second.init()));
 
     Duration duration(FLAGS_duration, std::numeric_limits<int64_t>::max());
     while (!duration.Done(1)) {
@@ -7109,6 +7148,7 @@ class Benchmark {
       auto key_rand = GetRandomKey(&thread->rand) % FLAGS_num;
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
 
+      thread->stats.ResetLastOpTime();
       Status s = db_with_cfh->db->Put(
           write_options_, key,
           gen.Generate(static_cast<unsigned int>(FLAGS_value_size)));
@@ -7116,29 +7156,54 @@ class Benchmark {
         fprintf(stderr, "put error: %s\n", s.ToString().c_str());
         ErrorExit();
       }
-      puts += 1;
-      if (puts % 100 == 0) {
-        thread->shared->write_rate_limiter->Request(100, Env::IO_HIGH,
-                                                    nullptr /*stats*/);
-      }
       thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kWrite);
+      thread->shared->write_rate_limiter->Request(1, Env::IO_HIGH,
+                                                  nullptr /*stats*/);
 
-      uint64_t now = FLAGS_env->NowMicros();
-      if (now - last_recalc_us >= recalc_interval_us) {
-        last_recalc_us = now;
-        auto delta = now - cur_begin_us;
-        auto next = (cur + 1) % writes_per_second.size();
-        while (delta >= each_us) {
-          cur = next;
-          next = (cur + 1) % writes_per_second.size();
-          cur_begin_us += each_us;
-          delta = now - cur_begin_us;
-        }
-        auto new_limit =
-            (double)delta / each_us *
-                (writes_per_second[next] - writes_per_second[cur]) +
-            writes_per_second[cur];
-        thread->shared->write_rate_limiter->SetBytesPerSecond(new_limit);
+      auto new_limit_write = writes_per_second.new_limit();
+      if (new_limit_write.has_value()) {
+        thread->shared->write_rate_limiter->SetBytesPerSecond(
+            new_limit_write.value());
+      }
+    }
+  }
+  void CustomPeriodicRead(ThreadState* thread) {
+    int64_t get_found = 0;
+    RandomGenerator gen;
+    PinnableSlice pinnable_val;
+
+    std::unique_ptr<const char[]> key_guard;
+    Slice key = AllocateKey(&key_guard);
+
+    OpPerSec reads_per_second(FLAGS_reads_per_second_file);
+    thread->shared->read_rate_limiter.reset(
+        NewGenericRateLimiter(reads_per_second.init()));
+
+    Duration duration(FLAGS_duration, std::numeric_limits<int64_t>::max());
+    while (!duration.Done(1)) {
+      DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
+      auto key_rand = GetRandomKey(&thread->rand) % FLAGS_num;
+      GenerateKeyFromInt(key_rand, FLAGS_num, &key);
+
+      pinnable_val.Reset();
+      thread->stats.ResetLastOpTime();
+      Status s = db_with_cfh->db->Get(read_options_,
+                                      db_with_cfh->db->DefaultColumnFamily(),
+                                      key, &pinnable_val);
+      if (s.ok()) {
+        get_found++;
+      } else if (!s.IsNotFound()) {
+        fprintf(stderr, "Get returned an error: %s\n", s.ToString().c_str());
+        abort();
+      }
+      thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kRead);
+      thread->shared->read_rate_limiter->Request(1, Env::IO_HIGH,
+                                                 nullptr /*stats*/);
+
+      auto new_limit_read = reads_per_second.new_limit();
+      if (new_limit_read.has_value()) {
+        thread->shared->read_rate_limiter->SetBytesPerSecond(
+            new_limit_read.value());
       }
     }
   }
