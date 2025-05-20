@@ -1542,6 +1542,7 @@ DEFINE_double(sine_d, 1, "D in f(x) = A sin(bx + c) + d");
 DEFINE_uint64(period_secs, 0, "");
 DEFINE_string(writes_per_second_file, "", "");
 DEFINE_string(reads_per_second_file, "", "");
+DEFINE_string(compaction_limit_file, "", "");
 
 DEFINE_bool(rate_limit_bg_reads, false,
             "Use options.rate_limiter on compaction reads");
@@ -5095,6 +5096,13 @@ class Benchmark {
                                       : RateLimiter::Mode::kWritesOnly,
             FLAGS_rate_limiter_auto_tuned,
             FLAGS_rate_limiter_single_burst_bytes));
+      } else if (!FLAGS_compaction_limit_file.empty()) {
+        int64_t initial_limit;
+        std::ifstream(FLAGS_compaction_limit_file) >> initial_limit;
+        options.rate_limiter.reset(NewGenericRateLimiter(
+            initial_limit, FLAGS_rate_limiter_refill_period_us, 10,
+            RateLimiter::Mode::kWritesOnly, false,
+            FLAGS_rate_limiter_single_burst_bytes));
       }
     }
 
@@ -7075,9 +7083,9 @@ class Benchmark {
       CustomPeriodicRead(thread);
     }
   }
-  class OpPerSec {
+  class PerSec {
    public:
-    OpPerSec(const std::string& path)
+    PerSec(const std::string& path)
         : cur_(0),
           cur_begin_us_(FLAGS_env->NowMicros()),
           last_recalc_us_(cur_begin_us_) {
@@ -7130,9 +7138,11 @@ class Benchmark {
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
 
-    OpPerSec writes_per_second(FLAGS_writes_per_second_file);
+    PerSec writes_per_second(FLAGS_writes_per_second_file);
     thread->shared->write_rate_limiter.reset(
         NewGenericRateLimiter(writes_per_second.init()));
+
+    PerSec compaction_limit(FLAGS_compaction_limit_file);
 
     Duration duration(FLAGS_duration, std::numeric_limits<int64_t>::max());
     while (!duration.Done(1)) {
@@ -7157,6 +7167,12 @@ class Benchmark {
         thread->shared->write_rate_limiter->SetBytesPerSecond(
             new_limit_write.value());
       }
+
+      auto new_limit_compaction = compaction_limit.new_limit();
+      if (new_limit_compaction.has_value()) {
+        open_options_.rate_limiter->SetBytesPerSecond(
+            new_limit_compaction.value());
+      }
     }
   }
   void CustomPeriodicRead(ThreadState* thread) {
@@ -7167,7 +7183,7 @@ class Benchmark {
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
 
-    OpPerSec reads_per_second(FLAGS_reads_per_second_file);
+    PerSec reads_per_second(FLAGS_reads_per_second_file);
     thread->shared->read_rate_limiter.reset(
         NewGenericRateLimiter(reads_per_second.init()));
 
