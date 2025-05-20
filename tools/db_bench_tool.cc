@@ -4216,6 +4216,10 @@ class Benchmark {
       shared.read_rate_limiter.reset(NewGenericRateLimiter(
           FLAGS_benchmark_read_rate_limit, 100000 /* refill_period_us */,
           10 /* fairness */, RateLimiter::Mode::kReadsOnly));
+    } else if (!FLAGS_reads_per_second_file.empty()) {
+      PerSec reads_per_second(FLAGS_reads_per_second_file);
+      shared.read_rate_limiter.reset(
+          NewGenericRateLimiter(reads_per_second.init()));
     }
 
     std::unique_ptr<ReporterAgent> reporter_agent;
@@ -7143,6 +7147,7 @@ class Benchmark {
         NewGenericRateLimiter(writes_per_second.init()));
 
     PerSec compaction_limit(FLAGS_compaction_limit_file);
+    PerSec reads_per_second(FLAGS_reads_per_second_file);
 
     Duration duration(FLAGS_duration, std::numeric_limits<int64_t>::max());
     while (!duration.Done(1)) {
@@ -7173,6 +7178,14 @@ class Benchmark {
         open_options_.rate_limiter->SetBytesPerSecond(
             new_limit_compaction.value());
       }
+
+      // There may be multiple readers, but only one writer. So we update read
+      // rate limiter in the writer to avoid redundant updates.
+      auto new_limit_read = reads_per_second.new_limit();
+      if (new_limit_read.has_value()) {
+        thread->shared->read_rate_limiter->SetBytesPerSecond(
+            new_limit_read.value());
+      }
     }
   }
   void CustomPeriodicRead(ThreadState* thread) {
@@ -7182,10 +7195,6 @@ class Benchmark {
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
-
-    PerSec reads_per_second(FLAGS_reads_per_second_file);
-    thread->shared->read_rate_limiter.reset(
-        NewGenericRateLimiter(reads_per_second.init()));
 
     Duration duration(FLAGS_duration, std::numeric_limits<int64_t>::max());
     while (!duration.Done(1)) {
@@ -7207,12 +7216,6 @@ class Benchmark {
       thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kRead);
       thread->shared->read_rate_limiter->Request(1, Env::IO_HIGH,
                                                  nullptr /*stats*/);
-
-      auto new_limit_read = reads_per_second.new_limit();
-      if (new_limit_read.has_value()) {
-        thread->shared->read_rate_limiter->SetBytesPerSecond(
-            new_limit_read.value());
-      }
     }
   }
 
