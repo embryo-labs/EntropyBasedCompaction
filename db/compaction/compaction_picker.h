@@ -51,6 +51,12 @@ class CompactionPicker {
                    const InternalKeyComparator* icmp);
   virtual ~CompactionPicker();
 
+  virtual bool CalcNeedsCompaction(const ColumnFamilyData* cfd,
+                                   const MutableCFOptions& mutable_cf_options,
+                                   const VersionStorageInfo* vstorage) const {
+    assert(false);
+  }
+
   // Pick level and inputs for a new compaction.
   //
   // Returns nullptr if there is no compaction to be done.
@@ -89,6 +95,9 @@ class CompactionPicker {
 
   virtual bool NeedsCompaction(const ColumnFamilyData* cfd,
                                const VersionStorageInfo* vstorage) const = 0;
+
+  virtual void CompactionFinished(void*){};
+  virtual void Flushed(ReadOnlyMemTable* memtable){};
 
   // Sanitize the input set of compaction input files and convert it to
   // `std::vector<CompactionInputFiles>` in the output parameter

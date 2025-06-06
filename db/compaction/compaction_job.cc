@@ -1817,11 +1817,9 @@ Status CompactionJob::InstallCompactionResults(
       /*new_descriptor_log=*/false,
       /*column_family_options=*/nullptr, manifest_wcb);
   if (ret.ok()) {
-    if (compaction->merging_info().has_value()) {
-      auto merging_info = compaction->merging_info().value();
-      assert(merging_info->merging);
-      merging_info->merging = false;
-      compaction->column_family_data()->print_sorted_run_status();
+    if (compaction->merging_info()) {
+      compaction->column_family_data()->compaction_picker()->CompactionFinished(
+          compaction->merging_info());
     }
   }
   return ret;

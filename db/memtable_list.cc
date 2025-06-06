@@ -618,11 +618,8 @@ Status MemTableList::TryInstallMemtableFlushResults(
                                       to_delete, mu);
       };
       if (write_edits) {
-        // Ideally we should place sorted_run_status in vstorage and modify it
-        // in LogAndApply
-        for (size_t i = 0; i < num_mem_to_flush; ++i) {
-          cfd->sorted_run_status().push_front(
-              CompactionPolicyByCount::SortedRunInfo{false, 1});
+        for (auto memtable : memtables_to_flush) {
+          cfd->compaction_picker()->Flushed(memtable);
         }
         // this can release and reacquire the mutex.
         s = vset->LogAndApply(

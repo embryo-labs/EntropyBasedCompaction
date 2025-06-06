@@ -39,6 +39,7 @@ enum CompactionStyle : char {
   // Trigger compactions based on the count of merged flushed SSTables
   kCompactionStyleByCount = 0x4,
   kCompactionStyleBySize = 0x5,
+  kCompactionStyleBenefitCost = 0x6,
 };
 
 // In Level-based compaction, it Determines which file from a level to be
@@ -618,6 +619,8 @@ struct AdvancedColumnFamilyOptions {
   std::optional<std::variant<std::shared_ptr<CompactionPolicyByCount>,
                              std::shared_ptr<CompactionPolicyBySize>>>
       compaction_policy;
+
+  double benefit_cost_threshold = 0;
 
   // An iteration->Next() sequentially skips over keys with the same
   // user-key unless this option is set. This number specifies the number

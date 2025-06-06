@@ -3435,50 +3435,21 @@ void VersionStorageInfo::ComputeCompactionScore(
   // if it is larger than 1.0.
   const double kScoreScale = 10.0;
   int max_output_level = MaxOutputLevel(immutable_options.allow_ingest_behind);
-  if (mutable_cf_options.compaction_policy.has_value()) {
-    auto& policy_variant = mutable_cf_options.compaction_policy.value();
+  if (compaction_style_ == kCompactionStyleByCount ||
+      compaction_style_ == kCompactionStyleBySize ||
+      compaction_style_ == kCompactionStyleBenefitCost) {
     assert(compaction_level_.size() == compaction_score_.size());
     assert(compaction_level_.size() == (size_t)num_levels());
-    for (size_t i = 0; i < (size_t)num_levels(); ++i) {
+    compaction_level_[0] = 0;
+    if (cfd->compaction_picker()->CalcNeedsCompaction(cfd, mutable_cf_options,
+                                                      this)) {
+      compaction_score_[0] = 2;
+    } else {
+      compaction_score_[0] = 0;
+    }
+    for (size_t i = 1; i < (size_t)num_levels(); ++i) {
       compaction_level_[i] = i;
       compaction_score_[i] = 0;
-    }
-    bool compaction_needed;
-    switch (policy_variant.index()) {
-      case 0: {
-        CompactionPolicyByCount* policy = std::get<0>(policy_variant).get();
-        compaction_needed =
-            policy->PickCompaction(cfd->sorted_run_status()).has_value();
-        break;
-      }
-      case 1: {
-        const auto& l0_files = LevelFiles(0);
-        std::vector<CompactionPolicyBySize::SortedRunInfo> status;
-        for (const auto* file : l0_files) {
-          status.emplace_back(file->being_compacted, file->fd.file_size);
-        }
-        if (num_non_empty_levels_ == 0) {
-          compaction_needed = false;
-          break;
-        }
-        CompactionPolicyBySize* policy = std::get<1>(policy_variant).get();
-        compaction_needed =
-            policy
-                ->PickCompaction(mutable_cf_options.write_buffer_size, status,
-                                 NumLevelBytes(num_non_empty_levels_ - 1))
-                .has_value();
-        break;
-      }
-      default:
-        assert(false);
-    }
-    if (compaction_needed) {
-      compaction_score_[0] += 2;
-    }
-    if (num_levels() == 3) {
-      if (files_[1].size() > 0) {
-        compaction_score_[0] += 2;
-      }
     }
   } else {
     for (int level = 0; level <= MaxInputLevel(); level++) {
@@ -4121,7 +4092,8 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
       compaction_style_ == kCompactionStyleFIFO ||
       compaction_style_ == kCompactionStyleUniversal ||
       compaction_style_ == kCompactionStyleByCount ||
-      compaction_style_ == kCompactionStyleBySize) {
+      compaction_style_ == kCompactionStyleBySize ||
+      compaction_style_ == kCompactionStyleBenefitCost) {
     // don't need this
     return;
   }

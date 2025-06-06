@@ -10,6 +10,9 @@ class CompactionPickerBySize : public CompactionPicker {
                          const InternalKeyComparator* icmp)
       : CompactionPicker(ioptions, icmp) {}
 
+  bool CalcNeedsCompaction(const ColumnFamilyData* cfd,
+                           const MutableCFOptions& mutable_cf_options,
+                           const VersionStorageInfo* vstorage) const override;
   bool NeedsCompaction(const ColumnFamilyData* cfd,
                        const VersionStorageInfo* vstorage) const override;
 

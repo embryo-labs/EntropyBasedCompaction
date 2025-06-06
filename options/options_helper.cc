@@ -354,6 +354,7 @@ std::map<CompactionStyle, std::string>
         {kCompactionStyleNone, "kCompactionStyleNone"},
         {kCompactionStyleByCount, "kCompactionStyleByCount"},
         {kCompactionStyleBySize, "kCompactionStyleBySize"},
+        {kCompactionStyleBenefitCost, "kCompactionStyleBenefitCost"},
 };
 
 std::map<CompactionPri, std::string> OptionsHelper::compaction_pri_to_string = {
@@ -828,6 +829,7 @@ std::unordered_map<std::string, CompactionStyle>
         {"kCompactionStyleNone", kCompactionStyleNone},
         {"kCompactionStyleByCount", kCompactionStyleByCount},
         {"kCompactionStyleBySize", kCompactionStyleBySize},
+        {"kCompactionStyleBenefitCost", kCompactionStyleBenefitCost},
 };
 
 std::unordered_map<std::string, CompactionPri>

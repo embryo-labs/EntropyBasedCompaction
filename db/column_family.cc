@@ -19,6 +19,7 @@
 #include "db/blob/blob_file_cache.h"
 #include "db/blob/blob_source.h"
 #include "db/compaction/compaction_picker.h"
+#include "db/compaction/compaction_picker_benefit_cost.h"
 #include "db/compaction/compaction_picker_by_count.h"
 #include "db/compaction/compaction_picker_by_size.h"
 #include "db/compaction/compaction_picker_fifo.h"
@@ -622,6 +623,9 @@ ColumnFamilyData::ColumnFamilyData(
     } else if (ioptions_.compaction_style == kCompactionStyleBySize) {
       compaction_picker_.reset(
           new CompactionPickerBySize(ioptions_, &internal_comparator_));
+    } else if (ioptions_.compaction_style == kCompactionStyleBenefitCost) {
+      compaction_picker_.reset(new CompactionPickerBenefitCost(
+          ioptions_, &internal_comparator_, cf_options.benefit_cost_threshold));
     } else {
       ROCKS_LOG_ERROR(ioptions_.logger,
                       "Unable to recognize the specified compaction style %d. "
@@ -1707,25 +1711,6 @@ void ColumnFamilyData::RecoverEpochNumbers() {
   auto* vstorage = current_->storage_info();
   assert(vstorage);
   vstorage->RecoverEpochNumbers(this);
-}
-
-void ColumnFamilyData::print_sorted_run_status() const {
-  std::string s;
-  for (auto it = sorted_run_status_.begin(); it != sorted_run_status_.end();
-       ++it) {
-    if (it->merging) {
-      s += "merging ";
-    }
-    s += std::to_string(it->count);
-    s += ',';
-  }
-  printf("%f %s\n",
-         std::chrono::duration_cast<std::chrono::nanoseconds>(
-             std::chrono::system_clock::now().time_since_epoch())
-                 .count() /
-             1e9,
-         s.c_str());
-  fflush(stdout);
 }
 
 ColumnFamilySet::ColumnFamilySet(const std::string& dbname,

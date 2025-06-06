@@ -447,7 +447,7 @@ class ColumnFamilyData {
                            uint64_t max_file_num_to_ignore,
                            const std::string& trim_ts);
 
-  CompactionPicker* compaction_picker() { return compaction_picker_.get(); }
+  CompactionPicker* compaction_picker() const { return compaction_picker_.get(); }
   // thread-safe
   const Comparator* user_comparator() const {
     return internal_comparator_.user_comparator();
@@ -578,15 +578,6 @@ class ColumnFamilyData {
     return (mem_->IsEmpty() ? 0 : 1) + imm_.NumNotFlushed();
   }
 
-  const std::list<CompactionPolicyByCount::SortedRunInfo>& sorted_run_status()
-      const {
-    return sorted_run_status_;
-  }
-  std::list<CompactionPolicyByCount::SortedRunInfo>& sorted_run_status() {
-    return sorted_run_status_;
-  }
-  void print_sorted_run_status() const;
-
  private:
   friend class ColumnFamilySet;
   ColumnFamilyData(uint32_t id, const std::string& name,
@@ -697,8 +688,6 @@ class ColumnFamilyData {
   bool mempurge_used_;
 
   std::atomic<uint64_t> next_epoch_number_;
-
-  std::list<CompactionPolicyByCount::SortedRunInfo> sorted_run_status_;
 };
 
 // ColumnFamilySet has interesting thread-safety requirements

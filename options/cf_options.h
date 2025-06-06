@@ -142,6 +142,7 @@ struct MutableCFOptions {
         compaction_options_fifo(options.compaction_options_fifo),
         compaction_options_universal(options.compaction_options_universal),
         compaction_policy(options.compaction_policy),
+        benefit_cost_threshold(options.benefit_cost_threshold),
         preclude_last_level_data_seconds(
             options.preclude_last_level_data_seconds),
         preserve_internal_time_seconds(options.preserve_internal_time_seconds),
@@ -310,6 +311,7 @@ struct MutableCFOptions {
   std::optional<std::variant<std::shared_ptr<CompactionPolicyByCount>,
                              std::shared_ptr<CompactionPolicyBySize>>>
       compaction_policy;
+  double benefit_cost_threshold;
   uint64_t preclude_last_level_data_seconds;
   uint64_t preserve_internal_time_seconds;
 

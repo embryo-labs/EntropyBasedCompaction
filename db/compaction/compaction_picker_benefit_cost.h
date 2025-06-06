@@ -1,0 +1,58 @@
+#pragma once
+
+#include "db/compaction/compaction_picker.h"
+
+namespace ROCKSDB_NAMESPACE {
+
+class CompactionPickerBenefitCost : public CompactionPicker {
+ public:
+  CompactionPickerBenefitCost(const ImmutableOptions& ioptions,
+                              const InternalKeyComparator* icmp,
+                              double threshold)
+      : CompactionPicker(ioptions, icmp), threshold_(threshold) {}
+
+  bool CalcNeedsCompaction(const ColumnFamilyData* cfd,
+                           const MutableCFOptions& mutable_cf_options,
+                           const VersionStorageInfo* vstorage) const override;
+
+  bool NeedsCompaction(const ColumnFamilyData* cfd,
+                       const VersionStorageInfo* vstorage) const override;
+
+  Compaction* PickCompaction(
+      ColumnFamilyData* cfd, const std::string& cf_name,
+      const MutableCFOptions& mutable_cf_options,
+      const MutableDBOptions& mutable_db_options,
+      const std::vector<SequenceNumber>& existing_snapshots,
+      const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
+      LogBuffer* log_buffer) override;
+
+  void CompactionFinished(void* info) override;
+  void Flushed(ReadOnlyMemTable* memtable) override;
+
+ private:
+  struct SortedRunInfo {
+    // > 1 means merging
+    size_t num_sorted_runs;
+    uint64_t size;
+    double benefit_cost_ratio;
+
+    SortedRunInfo(uint64_t _size, size_t _num_sorted_runs,
+                  double _benefit_cost_ratio)
+        : num_sorted_runs(_num_sorted_runs),
+          size(_size),
+          benefit_cost_ratio(_benefit_cost_ratio) {}
+
+    bool is_merging() const { return num_sorted_runs > 1; }
+  };
+
+  std::optional<std::pair<
+      std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator,
+      std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
+  PickCompaction() const;
+
+  double threshold_;
+  // Ideally this should be vstorage
+  std::list<SortedRunInfo> sorted_runs_;
+};
+
+}  // namespace ROCKSDB_NAMESPACE

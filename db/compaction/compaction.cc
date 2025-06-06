@@ -288,10 +288,7 @@ Compaction::Compaction(
     const std::string& _trim_ts, double _score, bool _deletion_compaction,
     bool l0_files_might_overlap, CompactionReason _compaction_reason,
     BlobGarbageCollectionPolicy _blob_garbage_collection_policy,
-    double _blob_garbage_collection_age_cutoff,
-    std::optional<
-        std::list<CompactionPolicyByCount::SortedRunInfo>::iterator>
-        merging_info,
+    double _blob_garbage_collection_age_cutoff, void* merging_info,
     Env::IOPriority io_priority)
     : input_vstorage_(vstorage),
       start_level_(_inputs[0].level),

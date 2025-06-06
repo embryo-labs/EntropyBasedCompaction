@@ -2,13 +2,29 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-bool CompactionPickerBySize::NeedsCompaction(
-    const ColumnFamilyData* cfd, const VersionStorageInfo* vstorage) const {
-  if (vstorage->CompactionScore(0) >= 1) {
+bool CompactionPickerBySize::CalcNeedsCompaction(
+    const ColumnFamilyData* cfd, const MutableCFOptions& mutable_cf_options,
+    const VersionStorageInfo* vstorage) const {
+  assert(vstorage->num_levels() == 3);
+  if (!vstorage->LevelFiles(1).empty()) {
     return true;
   }
-  assert(vstorage->num_levels() == 3);
-  return !vstorage->LevelFiles(1).empty();
+  const auto& l0_files = vstorage->LevelFiles(0);
+  std::vector<CompactionPolicyBySize::SortedRunInfo> status;
+  for (const auto* file : l0_files) {
+    status.emplace_back(file->being_compacted, file->fd.file_size);
+  }
+  CompactionPolicyBySize* policy =
+      std::get<1>(mutable_cf_options.compaction_policy.value()).get();
+  return policy
+      ->PickCompaction(mutable_cf_options.write_buffer_size, status,
+                       vstorage->NumLevelBytes(vstorage->num_levels() - 1))
+      .has_value();
+}
+
+bool CompactionPickerBySize::NeedsCompaction(
+    const ColumnFamilyData* cfd, const VersionStorageInfo* vstorage) const {
+  return vstorage->CompactionScore(0) >= 1;
 }
 
 Compaction* CompactionPickerBySize::PickMainLevelCompaction(
@@ -71,7 +87,7 @@ Compaction* CompactionPickerBySize::PickMainLevelCompaction(
       /* is manual */ false, /* trim_ts */ "", /*score*/ 2333,
       false /* deletion_compaction */,
       /* l0_files_might_overlap */ true, CompactionReason::kPolicyBySize,
-      BlobGarbageCollectionPolicy::kUseDefault, -1, std::nullopt, io_priority);
+      BlobGarbageCollectionPolicy::kUseDefault, -1, nullptr, io_priority);
 }
 
 Compaction* CompactionPickerBySize::PickCompaction(

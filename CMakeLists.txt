@@ -682,6 +682,7 @@ set(SOURCES
         db/compaction/compaction_policy_lazy_leveling.cc
         db/compaction/compaction_policy_steady.cc
         db/compaction/compaction_job.cc
+        db/compaction/compaction_picker_benefit_cost.cc
         db/compaction/compaction_picker_by_count.cc
         db/compaction/compaction_picker_by_size.cc
         db/compaction/compaction_picker_fifo.cc

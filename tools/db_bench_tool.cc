@@ -540,6 +540,7 @@ DEFINE_int32(compaction_pri,
              "priority of files to compaction: by size or by data age");
 
 DEFINE_string(compaction_policy, "", "steady/lazy-leveling/dynamic-tiering");
+DEFINE_double(benefit_cost_threshold, 0, "");
 
 DEFINE_string(steady_policy_file, "", "");
 
@@ -4972,6 +4973,7 @@ class Benchmark {
     } else {
       assert(FLAGS_compaction_policy == "");
     }
+    options.benefit_cost_threshold = FLAGS_benefit_cost_threshold;
     if (FLAGS_thread_status_per_interval > 0) {
       options.enable_thread_tracking = true;
     }
