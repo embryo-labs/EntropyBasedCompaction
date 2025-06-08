@@ -70,7 +70,8 @@ CompactionPickerBenefitCost::PickCompaction() const {
     size += j->size;
     num += 1;
     sum_nlog2n += j->size * log2(j->size);
-    while (num > 2 && i->size < (double)(size - i->size) / (num - 1) / k_c) {
+    while (i->size < j->size && num > 2 &&
+           i->size < (double)(size - i->size) / (num - 1) / k_c) {
       size -= i->size;
       num -= 1;
       sum_nlog2n -= i->size * log2(i->size);
