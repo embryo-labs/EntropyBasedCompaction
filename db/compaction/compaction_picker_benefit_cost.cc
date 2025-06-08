@@ -39,33 +39,22 @@ std::optional<std::pair<
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
 CompactionPickerBenefitCost::PickCompaction() const {
   constexpr double k_c = 1.5;
+  struct BestInfo {
+    double ratio_benefit;
+    double ratio_num;
+    std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator first;
+    std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator last;
+  };
+  std::optional<BestInfo> best;
   auto i = sorted_runs_.begin();
   if (i == sorted_runs_.end() || i->is_merging()) {
     return std::nullopt;
   }
-  ++i;
-  auto j = i;
-  while (i != sorted_runs_.end() && !i->is_merging()) {
-    ++i;
-  }
-  double best_ratio_benefit;
-  double existing_ratio_num;
-  if (i != sorted_runs_.end()) {
-    assert(i->is_merging());
-    best_ratio_benefit = i->benefit_cost_ratio;
-    existing_ratio_num = (double)i->num_sorted_runs / i->size;
-  } else {
-    best_ratio_benefit = threshold_;
-    existing_ratio_num = 0;
-  }
-  std::optional<std::pair<
-      std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator,
-      std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
-      best_range;
-  i = sorted_runs_.begin();
   uint64_t size = i->size;
   size_t num = 1;
   double sum_nlog2n = i->size * log2(i->size);
+  auto j = i;
+  ++j;
   for (; j != sorted_runs_.end() && !j->is_merging(); ++j) {
     size += j->size;
     num += 1;
@@ -78,14 +67,26 @@ CompactionPickerBenefitCost::PickCompaction() const {
       ++i;
     }
     double ratio_benefit = log2(size) - sum_nlog2n / size;
-    double ratio_num = (double)num / size;
-    if (ratio_benefit > best_ratio_benefit &&
-        ratio_num >= existing_ratio_num * k_c) {
-      best_ratio_benefit = ratio_benefit;
-      best_range = std::make_pair(i, j);
+    if (!best.has_value() || best->ratio_benefit < ratio_benefit) {
+      best = BestInfo{
+          .ratio_benefit = ratio_benefit,
+          .ratio_num = (double)num / size,
+          .first = i,
+          .last = j,
+      };
     }
   }
-  return best_range;
+  if (!best.has_value()) {
+    return std::nullopt;
+  }
+  if (j != sorted_runs_.end()) {
+    assert(j->is_merging());
+    if (best->ratio_benefit < j->benefit_cost_ratio ||
+        best->ratio_num < (double)j->num_sorted_runs / j->size * k_c) {
+      return std::nullopt;
+    }
+  }
+  return std::make_pair(best->first, best->last);
 }
 
 bool CompactionPickerBenefitCost::CalcNeedsCompaction(
