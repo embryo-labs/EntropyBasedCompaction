@@ -45,6 +45,8 @@ class CompactionPickerBenefitCost : public CompactionPicker {
     bool is_merging() const { return num_sorted_runs > 1; }
   };
 
+  void print_status() const;
+
   std::optional<std::pair<
       std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator,
       std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>

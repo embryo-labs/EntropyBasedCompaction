@@ -7,44 +7,53 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+void CompactionPickerBenefitCost::print_status() const {
+  {
+    printf("[");
+    auto it = sorted_runs_.begin();
+    if (it == sorted_runs_.end()) {
+      printf("]\n");
+      fflush(stdout);
+      return;
+    }
+    for (;;) {
+      if (it->is_merging()) {
+        printf("merging %zu ", it->num_sorted_runs);
+      }
+      printf("%" PRIu64, it->size);
+      ++it;
+      if (it == sorted_runs_.end()) {
+        printf("]\n");
+        fflush(stdout);
+        break;
+      }
+      printf(", ");
+    }
+  }
+}
+
 // Compaction from class i to class i+1 has a priority of
 // IO_LOW + num_classes - i
 std::optional<std::pair<
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator,
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
 CompactionPickerBenefitCost::PickCompaction() const {
-  printf("[");
-  auto it = sorted_runs_.begin();
-  if (it == sorted_runs_.end()) {
-    return std::nullopt;
-  }
-  for (;;) {
-    if (it->is_merging()) {
-      printf("merging %zu ", it->num_sorted_runs);
-    }
-    printf("%" PRIu64, it->size);
-    ++it;
-    if (it == sorted_runs_.end()) {
-      printf("]\n");
-      fflush(stdout);
-      break;
-    }
-    printf(", ");
-  }
+  constexpr double k_c = 1.5;
   auto k = sorted_runs_.begin();
   while (k != sorted_runs_.end() && !k->is_merging()) {
     ++k;
   }
-  double best_ratio_benefit;
-  double best_ratio_num;
+  double existing_ratio_benefit;
+  double existing_ratio_num;
   if (k != sorted_runs_.end()) {
     assert(k->is_merging());
-    best_ratio_benefit = k->benefit_cost_ratio;
-    best_ratio_num = (double)k->num_sorted_runs / k->size;
+    existing_ratio_benefit = k->benefit_cost_ratio;
+    existing_ratio_num = (double)k->num_sorted_runs / k->size;
   } else {
-    best_ratio_benefit = threshold_;
-    best_ratio_num = 0;
+    existing_ratio_benefit = threshold_;
+    existing_ratio_num = 0;
   }
+  double best_ratio_benefit = existing_ratio_benefit;
   std::optional<std::pair<
       std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator,
       std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
@@ -81,22 +90,17 @@ CompactionPickerBenefitCost::PickCompaction() const {
       }
       double ratio_benefit = log2(size) - sum_nlog2n / size;
       double ratio_num = (double)num / size;
-      if (ratio_benefit >= best_ratio_benefit) {
-        if (ratio_benefit >= best_ratio_benefit + 1 ||
-            ratio_num >= best_ratio_num * 2) {
-          best_ratio_benefit = ratio_benefit;
-          best_ratio_num = ratio_num;
-          best_range = std::make_pair(i, j);
-        }
+      if (ratio_benefit > best_ratio_benefit &&
+          ratio_num >= existing_ratio_num * k_c) {
+        best_ratio_benefit = ratio_benefit;
+        best_range = std::make_pair(i, j);
       }
       if (i == sorted_runs_.begin()) {
         break;
       }
       auto prev = i;
       --prev;
-      if ((std::pow(2, std::max(best_ratio_benefit, ratio_benefit)) + 1) *
-              prev->size <=
-          size * 0.5) {
+      if (prev->size < (double)size / num / k_c) {
         break;
       }
       --i;
@@ -123,6 +127,7 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
     const std::vector<SequenceNumber>& existing_snapshots,
     const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
     LogBuffer* log_buffer) {
+  print_status();
   auto ret = PickCompaction();
   if (!ret.has_value()) {
     return nullptr;
@@ -168,6 +173,7 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
   it->num_sorted_runs = num;
   it->size = size;
   it->benefit_cost_ratio = log2(size) - sum_nlog2n / size;
+  print_status();
   return new Compaction(
       vstorage, ioptions_, mutable_cf_options, mutable_db_options,
       std::move(inputs), 0,
