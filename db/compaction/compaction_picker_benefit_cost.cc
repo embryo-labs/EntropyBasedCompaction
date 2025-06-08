@@ -39,71 +39,49 @@ std::optional<std::pair<
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
 CompactionPickerBenefitCost::PickCompaction() const {
   constexpr double k_c = 1.5;
-  auto k = sorted_runs_.begin();
-  while (k != sorted_runs_.end() && !k->is_merging()) {
-    ++k;
+  auto i = sorted_runs_.begin();
+  if (i == sorted_runs_.end() || i->is_merging()) {
+    return std::nullopt;
   }
-  double existing_ratio_benefit;
+  ++i;
+  auto j = i;
+  while (i != sorted_runs_.end() && !i->is_merging()) {
+    ++i;
+  }
+  double best_ratio_benefit;
   double existing_ratio_num;
-  if (k != sorted_runs_.end()) {
-    assert(k->is_merging());
-    existing_ratio_benefit = k->benefit_cost_ratio;
-    existing_ratio_num = (double)k->num_sorted_runs / k->size;
+  if (i != sorted_runs_.end()) {
+    assert(i->is_merging());
+    best_ratio_benefit = i->benefit_cost_ratio;
+    existing_ratio_num = (double)i->num_sorted_runs / i->size;
   } else {
-    existing_ratio_benefit = threshold_;
+    best_ratio_benefit = threshold_;
     existing_ratio_num = 0;
   }
-  double best_ratio_benefit = existing_ratio_benefit;
   std::optional<std::pair<
       std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator,
       std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
       best_range;
-  for (;;) {
-    if (k == sorted_runs_.begin()) {
-      break;
+  i = sorted_runs_.begin();
+  uint64_t size = i->size;
+  size_t num = 1;
+  double sum_nlog2n = i->size * log2(i->size);
+  for (; j != sorted_runs_.end() && !j->is_merging(); ++j) {
+    size += j->size;
+    num += 1;
+    sum_nlog2n += j->size * log2(j->size);
+    while (num > 2 && i->size < (double)(size - i->size) / (num - 1) / k_c) {
+      size -= i->size;
+      num -= 1;
+      sum_nlog2n -= i->size * log2(i->size);
+      ++i;
     }
-    --k;
-    if (k == sorted_runs_.begin()) {
-      break;
-    }
-    auto i = k;
-    --i;
-    auto j = k;
-    double sum_nlog2n = k->size * log2(k->size);
-    uint64_t size = k->size;
-    size_t num = 1;
-    for (;;) {
-      sum_nlog2n += i->size * log2(i->size);
-      size += i->size;
-      num += 1;
-      for (;;) {
-        auto next = j;
-        ++next;
-        if (next == sorted_runs_.end() || next->is_merging() ||
-            next->size >= size) {
-          break;
-        }
-        j = next;
-        sum_nlog2n += j->size * log2(j->size);
-        size += j->size;
-        num += 1;
-      }
-      double ratio_benefit = log2(size) - sum_nlog2n / size;
-      double ratio_num = (double)num / size;
-      if (ratio_benefit > best_ratio_benefit &&
-          ratio_num >= existing_ratio_num * k_c) {
-        best_ratio_benefit = ratio_benefit;
-        best_range = std::make_pair(i, j);
-      }
-      if (i == sorted_runs_.begin()) {
-        break;
-      }
-      auto prev = i;
-      --prev;
-      if (prev->size < (double)size / num / k_c) {
-        break;
-      }
-      --i;
+    double ratio_benefit = log2(size) - sum_nlog2n / size;
+    double ratio_num = (double)num / size;
+    if (ratio_benefit > best_ratio_benefit &&
+        ratio_num >= existing_ratio_num * k_c) {
+      best_ratio_benefit = ratio_benefit;
+      best_range = std::make_pair(i, j);
     }
   }
   return best_range;
