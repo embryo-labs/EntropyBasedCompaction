@@ -31,8 +31,9 @@ class CompactionPolicySteady : public CompactionPolicyByCount {
         step_(0),
         pre_merge_status_(rounds_[n_][step_].total, s_),
         pre_merge_status_reached_(false) {}
-  std::optional<std::pair<std::list<SortedRunInfo>::const_iterator,
-                          std::list<SortedRunInfo>::const_iterator>>
+  std::optional<
+      std::tuple<std::list<SortedRunInfo>::const_iterator,
+                 std::list<SortedRunInfo>::const_iterator, Env::IOPriority>>
   PickCompaction(const std::list<SortedRunInfo>& status) override;
 
  private:

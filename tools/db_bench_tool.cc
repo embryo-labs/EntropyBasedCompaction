@@ -53,6 +53,7 @@
 #include "rocksdb/compaction_policy_dynamic_tiering.h"
 #include "rocksdb/compaction_policy_lazy_leveling.h"
 #include "rocksdb/compaction_policy_steady.h"
+#include "rocksdb/compaction_policy_tiering.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
@@ -4930,24 +4931,28 @@ class Benchmark {
     options.compaction_options_universal.stop_style =
         static_cast<CompactionStopStyle>(FLAGS_universal_stop_style);
     if (FLAGS_compaction_style_e == CompactionStyle::kCompactionStyleByCount) {
-      assert(FLAGS_compaction_policy == "steady");
-      assert(!FLAGS_steady_policy_file.empty());
-      auto policy_json =
-          nlohmann::json::parse(std::ifstream(FLAGS_steady_policy_file));
-      size_t policy_s = policy_json["s"];
-      size_t R = policy_json["R"];
-      std::unordered_map<size_t, std::vector<CompactionPolicySteady::Step>>
-          rounds;
-      for (auto round : policy_json["rounds"]) {
-        size_t n = round["n"];
-        std::vector<CompactionPolicySteady::Step> steps;
-        for (auto step : round["steps"]) {
-          steps.emplace_back(step["total"], step["compact"]);
+      if (FLAGS_compaction_policy == "steady") {
+        assert(!FLAGS_steady_policy_file.empty());
+        auto policy_json =
+            nlohmann::json::parse(std::ifstream(FLAGS_steady_policy_file));
+        size_t policy_s = policy_json["s"];
+        size_t R = policy_json["R"];
+        std::unordered_map<size_t, std::vector<CompactionPolicySteady::Step>>
+            rounds;
+        for (auto round : policy_json["rounds"]) {
+          size_t n = round["n"];
+          std::vector<CompactionPolicySteady::Step> steps;
+          for (auto step : round["steps"]) {
+            steps.emplace_back(step["total"], step["compact"]);
+          }
+          rounds.emplace(n, std::move(steps));
         }
-        rounds.emplace(n, std::move(steps));
+        options.compaction_policy = std::make_shared<CompactionPolicySteady>(
+            policy_s, R, std::move(rounds));
+      } else if (FLAGS_compaction_policy == "tiering") {
+        options.compaction_policy = std::make_shared<CompactionPolicyTiering>(
+            FLAGS_max_bytes_for_level_multiplier);
       }
-      options.compaction_policy = std::make_shared<CompactionPolicySteady>(
-          policy_s, R, std::move(rounds));
     } else if (FLAGS_compaction_style_e ==
                CompactionStyle::kCompactionStyleBySize) {
       if (FLAGS_compaction_policy == "lazy-leveling") {

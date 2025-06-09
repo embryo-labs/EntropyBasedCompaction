@@ -5,9 +5,11 @@ namespace ROCKSDB_NAMESPACE {
 bool CompactionPickerByCount::CalcNeedsCompaction(
     const ColumnFamilyData* cfd, const MutableCFOptions& mutable_cf_options,
     const VersionStorageInfo* vstorage) const {
-  assert(vstorage->num_levels() == 3);
-  if (!vstorage->LevelFiles(1).empty()) {
-    return true;
+  if (vstorage->num_levels() > 1) {
+    assert(vstorage->num_levels() == 3);
+    if (!vstorage->LevelFiles(1).empty()) {
+      return true;
+    }
   }
   CompactionPolicyByCount* policy =
       std::get<0>(mutable_cf_options.compaction_policy.value()).get();
@@ -28,9 +30,11 @@ Compaction* CompactionPickerByCount::PickMainLevelCompaction(
   CompactionPolicyByCount* policy =
       std::get<0>(mutable_cf_options.compaction_policy.value()).get();
   assert(policy != nullptr);
+  policy->print(sorted_run_status_);
+  fflush(stdout);
   auto ret = policy->PickCompaction(sorted_run_status_);
   if (!ret.has_value()) return nullptr;
-  auto [a, b] = ret.value();
+  auto [a, b, io_priority] = ret.value();
   std::vector<CompactionInputFiles> inputs(1);
   int output_level;
   if (b == sorted_run_status_.end()) {
@@ -76,6 +80,8 @@ Compaction* CompactionPickerByCount::PickMainLevelCompaction(
     sorted_run_status_.erase(a, sorted_run_status_.end());
     merging_info = nullptr;
   }
+  policy->print(sorted_run_status_);
+  fflush(stdout);
   return new Compaction(
       vstorage, ioptions_, mutable_cf_options, mutable_db_options,
       std::move(inputs), output_level,
@@ -94,10 +100,7 @@ Compaction* CompactionPickerByCount::PickMainLevelCompaction(
       /* is manual */ false, /* trim_ts */ "", /*score*/ 2333,
       false /* deletion_compaction */,
       /* l0_files_might_overlap */ true, CompactionReason::kPolicyByCount,
-      BlobGarbageCollectionPolicy::kUseDefault, -1, merging_info,
-      static_cast<Env::IOPriority>(output_level == 1
-                                       ? Env::IOPriority::IO_LOW + 1
-                                       : Env::IOPriority::IO_LOW + 2));
+      BlobGarbageCollectionPolicy::kUseDefault, -1, merging_info, io_priority);
 }
 
 Compaction* CompactionPickerByCount::PickCompaction(
@@ -113,8 +116,11 @@ Compaction* CompactionPickerByCount::PickCompaction(
   if (c) {
     return c;
   }
-  return PickIncrementalLastLevelCompaction(cfd, cf_name, mutable_cf_options,
-                                            mutable_db_options, vstorage);
+  if (vstorage->num_levels() > 1) {
+    return PickIncrementalLastLevelCompaction(cfd, cf_name, mutable_cf_options,
+                                              mutable_db_options, vstorage);
+  }
+  return nullptr;
 }
 
 void CompactionPickerByCount::CompactionFinished(void* merging_info) {

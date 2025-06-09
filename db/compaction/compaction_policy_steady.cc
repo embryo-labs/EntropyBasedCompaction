@@ -16,9 +16,10 @@ bool CompactionPolicySteady::IsPreMergeStatus(
   return true;
 }
 
-std::optional<std::pair<
+std::optional<std::tuple<
     std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator,
-    std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator>>
+    std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator,
+    Env::IOPriority>>
 CompactionPolicySteady::PickCompaction(const std::list<SortedRunInfo> &status) {
   auto a = status.begin();
   size_t num_top_level_sorted_runs = 0;
@@ -37,10 +38,8 @@ CompactionPolicySteady::PickCompaction(const std::list<SortedRunInfo> &status) {
       for (size_t i = 1; i < s_; ++i) {
         --a;
       }
-      return std::make_optional<std::pair<
-          std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator,
-          std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator>>(
-          a, b);
+      return std::make_tuple(
+          a, b, static_cast<Env::IOPriority>(Env::IOPriority::IO_LOW + 2));
     }
   }
 
@@ -93,15 +92,17 @@ CompactionPolicySteady::PickCompaction(const std::list<SortedRunInfo> &status) {
   for (size_t i = 1; i < step.compact; ++i) {
     ++b;
   }
+  Env::IOPriority io_priority;
   if (step_ == steps.size() - 1) {
     // Global compaction
     assert(step.compact == step.total);
     ++b;
     assert(b == status.end());
+    io_priority = static_cast<Env::IOPriority>(Env::IOPriority::IO_LOW + 1);
+  } else {
+    io_priority = static_cast<Env::IOPriority>(Env::IOPriority::IO_LOW + 2);
   }
-  return std::make_optional<std::pair<
-      std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator,
-      std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator>>(a, b);
+  return std::make_tuple(a, b, io_priority);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

@@ -4,6 +4,7 @@
 #include <list>
 #include <optional>
 
+#include "rocksdb/env.h"
 #include "rocksdb/rocksdb_namespace.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -22,9 +23,12 @@ class CompactionPolicyByCount {
   // sorted run.
   // It should be guaranteed that non of sorted runs in [0, b] is merging.
   // If b == status.size(), it means merging status[a] to status[b-1] to L1
-  virtual std::optional<std::pair<std::list<SortedRunInfo>::const_iterator,
-                                  std::list<SortedRunInfo>::const_iterator>>
+  virtual std::optional<
+      std::tuple<std::list<SortedRunInfo>::const_iterator,
+                 std::list<SortedRunInfo>::const_iterator, Env::IOPriority>>
   PickCompaction(const std::list<SortedRunInfo> &status) = 0;
+
+  void print(const std::list<SortedRunInfo> &status);
 };
 
 }  // namespace ROCKSDB_NAMESPACE
