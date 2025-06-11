@@ -1806,23 +1806,24 @@ Status CompactionJob::InstallCompactionResults(
     }
   }
 
-  auto manifest_wcb = [&compaction, &compaction_released](const Status& s) {
+  auto manifest_wcb = [&compaction, &compaction_released,
+                       edit](const Status& s) {
     compaction->ReleaseCompactionFiles(s);
     *compaction_released = true;
+
+    if (compaction->merging_info()) {
+      assert(edit->GetNewFiles().size() == 1);
+      const auto& file = edit->GetNewFiles()[0].second;
+      compaction->column_family_data()->compaction_picker()->CompactionFinished(
+          compaction->merging_info(), file.fd.file_size);
+    }
   };
 
-  Status ret = versions_->LogAndApply(
+  return versions_->LogAndApply(
       compaction->column_family_data(), mutable_cf_options, read_options,
       write_options, edit, db_mutex_, db_directory_,
       /*new_descriptor_log=*/false,
       /*column_family_options=*/nullptr, manifest_wcb);
-  if (ret.ok()) {
-    if (compaction->merging_info()) {
-      compaction->column_family_data()->compaction_picker()->CompactionFinished(
-          compaction->merging_info());
-    }
-  }
-  return ret;
 }
 
 void CompactionJob::RecordCompactionIOStats() {

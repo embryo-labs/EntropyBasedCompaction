@@ -612,15 +612,17 @@ Status MemTableList::TryInstallMemtableFlushResults(
           nullptr);
       edit_list.push_back(&edit);
 
-      const auto manifest_write_cb = [this, cfd, num_mem_to_flush, log_buffer,
-                                      to_delete, mu](const Status& status) {
-        RemoveMemTablesOrRestoreFlags(status, cfd, num_mem_to_flush, log_buffer,
-                                      to_delete, mu);
-      };
+      const auto manifest_write_cb =
+          [this, cfd, num_mem_to_flush, log_buffer, to_delete, mu,
+           &memtables_to_flush](const Status& status) {
+            RemoveMemTablesOrRestoreFlags(status, cfd, num_mem_to_flush,
+                                          log_buffer, to_delete, mu);
+
+            for (auto memtable : memtables_to_flush) {
+              cfd->compaction_picker()->Flushed(memtable);
+            }
+          };
       if (write_edits) {
-        for (auto memtable : memtables_to_flush) {
-          cfd->compaction_picker()->Flushed(memtable);
-        }
         // this can release and reacquire the mutex.
         s = vset->LogAndApply(
             cfd, mutable_cf_options, read_options, write_options, edit_list, mu,

@@ -26,7 +26,7 @@ class CompactionPickerBenefitCost : public CompactionPicker {
       const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
       LogBuffer* log_buffer) override;
 
-  void CompactionFinished(void* info) override;
+  void CompactionFinished(void* info, uint64_t size) override;
   void Flushed(ReadOnlyMemTable* memtable) override;
 
  private:
@@ -36,7 +36,7 @@ class CompactionPickerBenefitCost : public CompactionPicker {
     uint64_t size;
     double benefit_cost_ratio;
 
-    SortedRunInfo(uint64_t _size, size_t _num_sorted_runs,
+    SortedRunInfo(size_t _num_sorted_runs, uint64_t _size,
                   double _benefit_cost_ratio)
         : num_sorted_runs(_num_sorted_runs),
           size(_size),

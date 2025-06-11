@@ -96,7 +96,7 @@ class CompactionPicker {
   virtual bool NeedsCompaction(const ColumnFamilyData* cfd,
                                const VersionStorageInfo* vstorage) const = 0;
 
-  virtual void CompactionFinished(void*){};
+  virtual void CompactionFinished(void*, uint64_t size){};
   virtual void Flushed(ReadOnlyMemTable* memtable){};
 
   // Sanitize the input set of compaction input files and convert it to

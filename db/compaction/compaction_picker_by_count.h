@@ -24,7 +24,7 @@ class CompactionPickerByCount : public CompactionPicker {
       const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
       LogBuffer* log_buffer) override;
 
-  void CompactionFinished(void* merging_info) override;
+  void CompactionFinished(void* merging_info, uint64_t size) override;
   void Flushed(ReadOnlyMemTable* memtable) override;
 
  private:
@@ -36,7 +36,7 @@ class CompactionPickerByCount : public CompactionPicker {
       const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
       LogBuffer* log_buffer);
 
-  std::list<CompactionPolicyByCount::SortedRunInfo> sorted_run_status_;
+  std::list<CompactionPolicyByCount::SortedRunInfo> sorted_runs_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

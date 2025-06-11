@@ -174,9 +174,11 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
       BlobGarbageCollectionPolicy::kUseDefault, -1, &*it, io_priority);
 }
 
-void CompactionPickerBenefitCost::CompactionFinished(void* info) {
+void CompactionPickerBenefitCost::CompactionFinished(void* info,
+                                                     uint64_t size) {
   auto sr = static_cast<SortedRunInfo*>(info);
   sr->num_sorted_runs = 1;
+  sr->size = size;
   sr->benefit_cost_ratio = 0;
 }
 
@@ -185,7 +187,7 @@ void CompactionPickerBenefitCost::Flushed(ReadOnlyMemTable* memtable) {
   assert(new_files.size() == 1);
   auto& new_file = new_files[0].second;
   // raw_key_size and raw_value_size seem to be zero
-  sorted_runs_.emplace_front(new_file.fd.GetFileSize(), 1, 0);
+  sorted_runs_.emplace_front(1, new_file.fd.GetFileSize(), 0);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

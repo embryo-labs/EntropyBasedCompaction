@@ -13,7 +13,7 @@ bool CompactionPickerByCount::CalcNeedsCompaction(
   }
   CompactionPolicyByCount* policy =
       std::get<0>(mutable_cf_options.compaction_policy.value()).get();
-  return policy->PickCompaction(sorted_run_status_).has_value();
+  return policy->PickCompaction(sorted_runs_).has_value();
 }
 bool CompactionPickerByCount::NeedsCompaction(
     const ColumnFamilyData* cfd, const VersionStorageInfo* vstorage) const {
@@ -30,14 +30,14 @@ Compaction* CompactionPickerByCount::PickMainLevelCompaction(
   CompactionPolicyByCount* policy =
       std::get<0>(mutable_cf_options.compaction_policy.value()).get();
   assert(policy != nullptr);
-  policy->print(sorted_run_status_);
+  policy->print(sorted_runs_);
   fflush(stdout);
-  auto ret = policy->PickCompaction(sorted_run_status_);
+  auto ret = policy->PickCompaction(sorted_runs_);
   if (!ret.has_value()) return nullptr;
   auto [a, b, io_priority] = ret.value();
   std::vector<CompactionInputFiles> inputs(1);
   int output_level;
-  if (b == sorted_run_status_.end()) {
+  if (b == sorted_runs_.end()) {
     output_level = 1;
     --b;
     assert(vstorage->num_levels() >= 2);
@@ -50,7 +50,7 @@ Compaction* CompactionPickerByCount::PickMainLevelCompaction(
   }
   inputs[0].level = 0;
   size_t i = 0;
-  auto it = sorted_run_status_.begin();
+  auto it = sorted_runs_.begin();
   const auto& l0_files = vstorage->LevelFiles(0);
   while (it != a) {
     assert(!it->merging);
@@ -72,15 +72,15 @@ Compaction* CompactionPickerByCount::PickMainLevelCompaction(
   CompactionPolicyByCount::SortedRunInfo* merging_info;
   if (output_level == 0) {
     // Erase [a, b)
-    auto b_mut = sorted_run_status_.erase(a, b);
+    auto b_mut = sorted_runs_.erase(a, b);
     b_mut->merging = true;
     b_mut->count = size;
     merging_info = &*b_mut;
   } else {
-    sorted_run_status_.erase(a, sorted_run_status_.end());
+    sorted_runs_.erase(a, sorted_runs_.end());
     merging_info = nullptr;
   }
-  policy->print(sorted_run_status_);
+  policy->print(sorted_runs_);
   fflush(stdout);
   return new Compaction(
       vstorage, ioptions_, mutable_cf_options, mutable_db_options,
@@ -123,7 +123,8 @@ Compaction* CompactionPickerByCount::PickCompaction(
   return nullptr;
 }
 
-void CompactionPickerByCount::CompactionFinished(void* merging_info) {
+void CompactionPickerByCount::CompactionFinished(void* merging_info,
+                                                 uint64_t size) {
   auto info =
       static_cast<CompactionPolicyByCount::SortedRunInfo*>(merging_info);
   assert(info->merging);
@@ -131,8 +132,7 @@ void CompactionPickerByCount::CompactionFinished(void* merging_info) {
 }
 
 void CompactionPickerByCount::Flushed(ReadOnlyMemTable* memtable) {
-  sorted_run_status_.push_front(
-      CompactionPolicyByCount::SortedRunInfo{false, 1});
+  sorted_runs_.push_front(CompactionPolicyByCount::SortedRunInfo{false, 1});
 }
 
 }  // namespace ROCKSDB_NAMESPACE
