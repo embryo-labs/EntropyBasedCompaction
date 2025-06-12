@@ -619,7 +619,19 @@ Status MemTableList::TryInstallMemtableFlushResults(
                                           log_buffer, to_delete, mu);
 
             for (auto memtable : memtables_to_flush) {
-              cfd->compaction_picker()->Flushed(memtable);
+              const auto& new_files = memtable->edit_.GetNewFiles();
+              if (new_files.size() != 1) {
+                printf("Flushed new files: ");
+                for (const auto& new_file : new_files) {
+                  printf("%" PRIu64 ", ", new_file.second.fd.GetNumber());
+                }
+                putchar('\n');
+                fflush(stdout);
+              }
+              if (!new_files.empty()) {
+                assert(new_files.size() == 1);
+                cfd->compaction_picker()->Flushed(new_files[0].second);
+              }
             }
           };
       if (write_edits) {

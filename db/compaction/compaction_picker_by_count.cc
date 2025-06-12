@@ -131,7 +131,7 @@ void CompactionPickerByCount::CompactionFinished(void* merging_info,
   info->merging = false;
 }
 
-void CompactionPickerByCount::Flushed(ReadOnlyMemTable* memtable) {
+void CompactionPickerByCount::Flushed(const FileMetaData& file) {
   sorted_runs_.push_front(CompactionPolicyByCount::SortedRunInfo{false, 1});
 }
 

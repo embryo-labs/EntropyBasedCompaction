@@ -182,12 +182,9 @@ void CompactionPickerBenefitCost::CompactionFinished(void* info,
   sr->benefit_cost_ratio = 0;
 }
 
-void CompactionPickerBenefitCost::Flushed(ReadOnlyMemTable* memtable) {
-  auto& new_files = memtable->GetEdits()->GetNewFiles();
-  assert(new_files.size() == 1);
-  auto& new_file = new_files[0].second;
+void CompactionPickerBenefitCost::Flushed(const FileMetaData& file) {
   // raw_key_size and raw_value_size seem to be zero
-  sorted_runs_.emplace_front(1, new_file.fd.GetFileSize(), 0);
+  sorted_runs_.emplace_front(1, file.fd.GetFileSize(), 0);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

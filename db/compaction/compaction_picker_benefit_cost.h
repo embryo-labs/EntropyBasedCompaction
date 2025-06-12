@@ -27,7 +27,7 @@ class CompactionPickerBenefitCost : public CompactionPicker {
       LogBuffer* log_buffer) override;
 
   void CompactionFinished(void* info, uint64_t size) override;
-  void Flushed(ReadOnlyMemTable* memtable) override;
+  void Flushed(const FileMetaData& file) override;
 
  private:
   struct SortedRunInfo {

@@ -25,7 +25,7 @@ class CompactionPickerByCount : public CompactionPicker {
       LogBuffer* log_buffer) override;
 
   void CompactionFinished(void* merging_info, uint64_t size) override;
-  void Flushed(ReadOnlyMemTable* memtable) override;
+  void Flushed(const FileMetaData& file) override;
 
  private:
   Compaction* PickMainLevelCompaction(

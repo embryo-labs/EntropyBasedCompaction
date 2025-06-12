@@ -97,7 +97,7 @@ class CompactionPicker {
                                const VersionStorageInfo* vstorage) const = 0;
 
   virtual void CompactionFinished(void*, uint64_t size){};
-  virtual void Flushed(ReadOnlyMemTable* memtable){};
+  virtual void Flushed(const FileMetaData& file){};
 
   // Sanitize the input set of compaction input files and convert it to
   // `std::vector<CompactionInputFiles>` in the output parameter
