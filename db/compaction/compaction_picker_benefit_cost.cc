@@ -38,7 +38,7 @@ std::optional<std::pair<
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator,
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
 CompactionPickerBenefitCost::PickCompaction() const {
-  constexpr double k_c = 1.5;
+  constexpr double k_c = 1.7;
   struct BestInfo {
     double ratio_benefit;
     double ratio_num;
