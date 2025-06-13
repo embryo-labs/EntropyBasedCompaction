@@ -3559,9 +3559,6 @@ void VersionStorageInfo::ComputeCompactionScore(
                         static_cast<double>(std::max(
                             base_level_size, level_max_bytes_[base_level_])));
               }
-              if (score > 1.0) {
-                score *= kScoreScale;
-              }
             } else {
               score = std::max(score,
                                static_cast<double>(total_size) /
