@@ -2149,6 +2149,20 @@ class ReporterAgent {
       stop_cv_.notify_all();
     }
     reporting_thread_.join();
+
+    for (size_t i = 0; i < kOperationTypeEnumMax; ++i) {
+      OperationType op = static_cast<OperationType>(i);
+      const auto& hist = hist_[op];
+      if (!hist.Empty()) {
+        printf(
+            "%s\nAverage latency(us) %f\nTail latencies (us)\n50%% %f\n99%% "
+            "%f\n99.9%% "
+            "%f\n99.99%% %f\n",
+            OperationTypeString[op].c_str(), hist.Average(),
+            hist.Percentile(50), hist.Percentile(99), hist.Percentile(99.9),
+            hist.Percentile(99.99));
+      }
+    }
   }
 
   // thread safe
@@ -2158,6 +2172,9 @@ class ReporterAgent {
     auto& count_time = count_time_[op_type];
     count_time.count.fetch_add(num_ops, std::memory_order_relaxed);
     count_time.micros.fetch_add(micros, std::memory_order_relaxed);
+
+    assert(num_ops == 1);
+    hist_[op_type].Add(micros);
   }
 
  private:
@@ -2373,6 +2390,8 @@ class ReporterAgent {
     }
   };
   CountTime last_count_time_[kOperationTypeEnumMax];
+
+  HistogramImpl hist_[kOperationTypeEnumMax];
 
   uint64_t last_bytes_through_[Env::IO_TOTAL] = {0};
 
