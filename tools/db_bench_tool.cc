@@ -4220,8 +4220,10 @@ class Benchmark {
           10 /* fairness */, RateLimiter::Mode::kReadsOnly));
     } else if (!FLAGS_reads_per_second_file.empty()) {
       PerSec reads_per_second(FLAGS_reads_per_second_file);
-      shared.read_rate_limiter.reset(
-          NewGenericRateLimiter(reads_per_second.init()));
+      auto init = reads_per_second.init();
+      if (init >= 0) {
+        shared.read_rate_limiter.reset(NewGenericRateLimiter(init));
+      }
     }
 
     std::unique_ptr<ReporterAgent> reporter_agent;
@@ -7100,6 +7102,9 @@ class Benchmark {
         : cur_(0),
           cur_begin_us_(FLAGS_env->NowMicros()),
           last_recalc_us_(cur_begin_us_) {
+      if (path.empty()) {
+        return;
+      }
       std::ifstream file(path);
       for (;;) {
         double x;
@@ -7113,8 +7118,16 @@ class Benchmark {
       each_us_ = FLAGS_period_secs * 1000000 / op_per_sec_.size();
     }
 
-    double init() { return op_per_sec_[0]; }
+    double init() {
+      if (op_per_sec_.empty()) {
+        return -1;
+      }
+      return op_per_sec_[0];
+    }
     std::optional<double> new_limit() {
+      if (op_per_sec_.empty()) {
+        return std::nullopt;
+      }
       auto now_micros = FLAGS_env->NowMicros();
       if (now_micros - last_recalc_us_ < recalc_interval_us) {
         return std::nullopt;
@@ -7150,8 +7163,10 @@ class Benchmark {
     Slice key = AllocateKey(&key_guard);
 
     PerSec writes_per_second(FLAGS_writes_per_second_file);
-    thread->shared->write_rate_limiter.reset(
-        NewGenericRateLimiter(writes_per_second.init()));
+    auto init = writes_per_second.init();
+    if (init >= 0) {
+      thread->shared->write_rate_limiter.reset(NewGenericRateLimiter(init));
+    }
 
     PerSec compaction_limit(FLAGS_compaction_limit_file);
     PerSec reads_per_second(FLAGS_reads_per_second_file);
