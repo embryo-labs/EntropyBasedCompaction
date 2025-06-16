@@ -244,7 +244,7 @@ void GenericRateLimiter::RefillBytesAndGrantRequestsLocked() {
       refill_bytes_per_period_.load(std::memory_order_relaxed);
   auto remain = refill_bytes_per_period;
 
-  for (int i = Env::IO_TOTAL - 1; i >= 0; --i) {
+  for (int i = Env::IO_TOTAL - 1; i >= 0 && remain > 0; --i) {
     Env::IOPriority current_pri = static_cast<Env::IOPriority>(i);
     if (available_bytes_[current_pri] < refill_bytes_per_period) {
       auto refill = std::min(
