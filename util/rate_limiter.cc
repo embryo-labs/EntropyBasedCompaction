@@ -8,6 +8,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include <algorithm>
+#include <cinttypes>
 
 #include "monitoring/statistics_impl.h"
 #include "port/port.h"
@@ -46,11 +47,10 @@ struct GenericRateLimiter::Req {
 GenericRateLimiter::GenericRateLimiter(
     int64_t rate_bytes_per_sec, int64_t refill_period_us, int32_t fairness,
     RateLimiter::Mode mode, const std::shared_ptr<SystemClock>& clock,
-    bool auto_tuned, int64_t single_burst_bytes)
+    int64_t max_bytes_per_sec, int64_t single_burst_bytes)
     : RateLimiter(mode),
       refill_period_us_(refill_period_us),
-      rate_bytes_per_sec_(auto_tuned ? rate_bytes_per_sec / 2
-                                     : rate_bytes_per_sec),
+      rate_bytes_per_sec_(rate_bytes_per_sec),
       refill_bytes_per_period_(
           CalculateRefillBytesPerPeriodLocked(rate_bytes_per_sec_)),
       raw_single_burst_bytes_(single_burst_bytes),
@@ -62,9 +62,9 @@ GenericRateLimiter::GenericRateLimiter(
       fairness_(fairness > 100 ? 100 : fairness),
       rnd_((uint32_t)time(nullptr)),
       wait_until_refill_pending_(false),
-      auto_tuned_(auto_tuned),
+      auto_tuned_(max_bytes_per_sec > 0),
       num_drains_(0),
-      max_bytes_per_sec_(rate_bytes_per_sec),
+      max_bytes_per_sec_(max_bytes_per_sec),
       tuned_time_(NowMicrosMonotonicLocked()) {
   for (int i = Env::IO_LOW; i < Env::IO_TOTAL; ++i) {
     total_requests_[i] = 0;
@@ -344,13 +344,13 @@ RateLimiter* NewGenericRateLimiter(
     int64_t rate_bytes_per_sec, int64_t refill_period_us /* = 100 * 1000 */,
     int32_t fairness /* = 10 */,
     RateLimiter::Mode mode /* = RateLimiter::Mode::kWritesOnly */,
-    bool auto_tuned /* = false */, int64_t single_burst_bytes /* = 0 */) {
+    int64_t max_bytes_per_sec /* = 0 */, int64_t single_burst_bytes /* = 0 */) {
   assert(rate_bytes_per_sec > 0);
   assert(refill_period_us > 0);
   assert(fairness > 0);
   std::unique_ptr<RateLimiter> limiter(new GenericRateLimiter(
       rate_bytes_per_sec, refill_period_us, fairness, mode,
-      SystemClock::Default(), auto_tuned, single_burst_bytes));
+      SystemClock::Default(), max_bytes_per_sec, single_burst_bytes));
   return limiter.release();
 }
 

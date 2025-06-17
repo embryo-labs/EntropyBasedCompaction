@@ -1520,9 +1520,7 @@ DEFINE_uint64(rate_limiter_bytes_per_sec, 0, "Set options.rate_limiter value.");
 DEFINE_int64(rate_limiter_refill_period_us, 100 * 1000,
              "Set refill period on rate limiter.");
 
-DEFINE_bool(rate_limiter_auto_tuned, false,
-            "Enable dynamic adjustment of rate limit according to demand for "
-            "background I/O");
+DEFINE_int64(rate_limiter_max_bytes_per_sec, 0, "");
 
 DEFINE_int64(rate_limiter_single_burst_bytes, 0,
              "Set single burst bytes on background I/O rate limiter.");
@@ -5126,7 +5124,7 @@ class Benchmark {
             // Get()/MultiGet()
             FLAGS_rate_limit_bg_reads ? RateLimiter::Mode::kReadsOnly
                                       : RateLimiter::Mode::kWritesOnly,
-            FLAGS_rate_limiter_auto_tuned,
+            FLAGS_rate_limiter_max_bytes_per_sec,
             FLAGS_rate_limiter_single_burst_bytes));
       } else if (!FLAGS_compaction_limit_file.empty()) {
         int64_t initial_limit;

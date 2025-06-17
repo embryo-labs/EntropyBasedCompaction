@@ -28,8 +28,8 @@ class GenericRateLimiter : public RateLimiter {
  public:
   GenericRateLimiter(int64_t refill_bytes, int64_t refill_period_us,
                      int32_t fairness, RateLimiter::Mode mode,
-                     const std::shared_ptr<SystemClock>& clock, bool auto_tuned,
-                     int64_t single_burst_bytes);
+                     const std::shared_ptr<SystemClock>& clock,
+                     int64_t max_bytes_per_sec, int64_t single_burst_bytes);
 
   virtual ~GenericRateLimiter();
 
