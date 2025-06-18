@@ -29,7 +29,8 @@ class GenericRateLimiter : public RateLimiter {
   GenericRateLimiter(int64_t refill_bytes, int64_t refill_period_us,
                      int32_t fairness, RateLimiter::Mode mode,
                      const std::shared_ptr<SystemClock>& clock,
-                     int64_t max_bytes_per_sec, int64_t single_burst_bytes);
+                     int64_t max_bytes_per_sec, int64_t num_refills_per_tune,
+                     int64_t single_burst_bytes);
 
   virtual ~GenericRateLimiter();
 
@@ -147,9 +148,10 @@ class GenericRateLimiter : public RateLimiter {
   bool wait_until_refill_pending_;
 
   bool auto_tuned_;
-  int64_t num_drains_;
+  const uint64_t num_refills_per_tune_;
   const int64_t max_bytes_per_sec_;
-  std::chrono::microseconds tuned_time_;
+  int64_t num_drains_;
+  uint64_t num_refills_since_last_tune_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

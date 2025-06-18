@@ -1521,6 +1521,7 @@ DEFINE_int64(rate_limiter_refill_period_us, 100 * 1000,
              "Set refill period on rate limiter.");
 
 DEFINE_int64(rate_limiter_max_bytes_per_sec, 0, "");
+DEFINE_int64(rate_limiter_num_refills_per_tune, 100, "");
 
 DEFINE_int64(rate_limiter_single_burst_bytes, 0,
              "Set single burst bytes on background I/O rate limiter.");
@@ -5125,13 +5126,14 @@ class Benchmark {
             FLAGS_rate_limit_bg_reads ? RateLimiter::Mode::kReadsOnly
                                       : RateLimiter::Mode::kWritesOnly,
             FLAGS_rate_limiter_max_bytes_per_sec,
+            FLAGS_rate_limiter_num_refills_per_tune,
             FLAGS_rate_limiter_single_burst_bytes));
       } else if (!FLAGS_compaction_limit_file.empty()) {
         int64_t initial_limit;
         std::ifstream(FLAGS_compaction_limit_file) >> initial_limit;
         options.rate_limiter.reset(NewGenericRateLimiter(
             initial_limit, FLAGS_rate_limiter_refill_period_us, 10,
-            RateLimiter::Mode::kWritesOnly, false,
+            RateLimiter::Mode::kWritesOnly, 0,
             FLAGS_rate_limiter_single_burst_bytes));
       }
     }
