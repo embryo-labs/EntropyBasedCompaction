@@ -27,11 +27,11 @@ Compaction* CompactionPickerByCount::PickMainLevelCompaction(
     const std::vector<SequenceNumber>& existing_snapshots,
     const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
     LogBuffer* log_buffer) {
+  CompactionPolicyByCount::print(sorted_runs_);
+  fflush(stdout);
   CompactionPolicyByCount* policy =
       std::get<0>(mutable_cf_options.compaction_policy.value()).get();
   assert(policy != nullptr);
-  policy->print(sorted_runs_);
-  fflush(stdout);
   auto ret = policy->PickCompaction(sorted_runs_);
   if (!ret.has_value()) return nullptr;
   auto [a, b, io_priority] = ret.value();
@@ -129,6 +129,8 @@ void CompactionPickerByCount::CompactionFinished(void* merging_info,
       static_cast<CompactionPolicyByCount::SortedRunInfo*>(merging_info);
   assert(info->merging);
   info->merging = false;
+  CompactionPolicyByCount::print(sorted_runs_);
+  fflush(stdout);
 }
 
 void CompactionPickerByCount::Flushed(const FileMetaData& file) {

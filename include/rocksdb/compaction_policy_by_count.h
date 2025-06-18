@@ -28,7 +28,7 @@ class CompactionPolicyByCount {
                  std::list<SortedRunInfo>::const_iterator, Env::IOPriority>>
   PickCompaction(const std::list<SortedRunInfo> &status) = 0;
 
-  void print(const std::list<SortedRunInfo> &status);
+  static void print(const std::list<SortedRunInfo> &status);
 };
 
 }  // namespace ROCKSDB_NAMESPACE
