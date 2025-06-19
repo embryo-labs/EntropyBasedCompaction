@@ -633,6 +633,8 @@ Status MemTableList::TryInstallMemtableFlushResults(
                 cfd->compaction_picker()->Flushed(new_files[0].second);
               }
             }
+            cfd->current()->storage_info()->ComputeCompactionScore(
+                cfd, *cfd->ioptions(), *cfd->GetLatestMutableCFOptions());
           };
       if (write_edits) {
         // this can release and reacquire the mutex.

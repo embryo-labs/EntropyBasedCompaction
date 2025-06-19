@@ -1811,12 +1811,15 @@ Status CompactionJob::InstallCompactionResults(
     compaction->ReleaseCompactionFiles(s);
     *compaction_released = true;
 
+    auto cfd = compaction->column_family_data();
     if (compaction->merging_info()) {
       assert(edit->GetNewFiles().size() == 1);
       const auto& file = edit->GetNewFiles()[0].second;
-      compaction->column_family_data()->compaction_picker()->CompactionFinished(
-          compaction->merging_info(), file.fd.file_size);
+      cfd->compaction_picker()->CompactionFinished(compaction->merging_info(),
+                                                   file.fd.file_size);
     }
+    cfd->current()->storage_info()->ComputeCompactionScore(
+        cfd, *cfd->ioptions(), *cfd->GetLatestMutableCFOptions());
   };
 
   return versions_->LogAndApply(
