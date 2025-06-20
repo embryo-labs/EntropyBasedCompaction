@@ -107,7 +107,6 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
     const std::vector<SequenceNumber>& existing_snapshots,
     const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
     LogBuffer* log_buffer) {
-  print_status();
   auto ret = PickCompaction();
   if (!ret.has_value()) {
     return nullptr;
@@ -180,11 +179,13 @@ void CompactionPickerBenefitCost::CompactionFinished(void* info,
   sr->num_sorted_runs = 1;
   sr->size = size;
   sr->benefit_cost_ratio = 0;
+  print_status();
 }
 
 void CompactionPickerBenefitCost::Flushed(const FileMetaData& file) {
   // raw_key_size and raw_value_size seem to be zero
   sorted_runs_.emplace_front(1, file.fd.GetFileSize(), 0);
+  print_status();
 }
 
 }  // namespace ROCKSDB_NAMESPACE
