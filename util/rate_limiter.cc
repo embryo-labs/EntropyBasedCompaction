@@ -47,11 +47,11 @@ struct GenericRateLimiter::Req {
 GenericRateLimiter::GenericRateLimiter(
     int64_t rate_bytes_per_sec, int64_t refill_period_us, int32_t fairness,
     RateLimiter::Mode mode, const std::shared_ptr<SystemClock>& clock,
-    int64_t max_bytes_per_sec, int64_t num_refills_per_tune,
-    int64_t single_burst_bytes)
+    bool auto_tuned, int64_t single_burst_bytes)
     : RateLimiter(mode),
       refill_period_us_(refill_period_us),
-      rate_bytes_per_sec_(rate_bytes_per_sec),
+      rate_bytes_per_sec_(auto_tuned ? rate_bytes_per_sec / 2
+                                     : rate_bytes_per_sec),
       refill_bytes_per_period_(
           CalculateRefillBytesPerPeriodLocked(rate_bytes_per_sec_)),
       raw_single_burst_bytes_(single_burst_bytes),
@@ -63,11 +63,10 @@ GenericRateLimiter::GenericRateLimiter(
       fairness_(fairness > 100 ? 100 : fairness),
       rnd_((uint32_t)time(nullptr)),
       wait_until_refill_pending_(false),
-      auto_tuned_(max_bytes_per_sec > 0),
-      num_refills_per_tune_(num_refills_per_tune),
-      max_bytes_per_sec_(max_bytes_per_sec),
+      auto_tuned_(auto_tuned),
       num_drains_(0),
-      num_refills_since_last_tune_(0) {
+      max_bytes_per_sec_(rate_bytes_per_sec),
+      tuned_time_(NowMicrosMonotonicLocked()) {
   for (int i = Env::IO_LOW; i < Env::IO_TOTAL; ++i) {
     total_requests_[i] = 0;
     total_bytes_through_[i] = 0;
@@ -134,6 +133,16 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
                            &rate_bytes_per_sec_);
   MutexLock g(&request_mutex_);
 
+  if (auto_tuned_) {
+    static const int kRefillsPerTune = 100;
+    std::chrono::microseconds now(NowMicrosMonotonicLocked());
+    if (now - tuned_time_ >=
+        kRefillsPerTune * std::chrono::microseconds(refill_period_us_)) {
+      Status s = TuneLocked();
+      s.PermitUncheckedError();  //**TODO: What to do on error?
+    }
+  }
+
   if (stop_) {
     // It is now in the clean-up of ~GenericRateLimiter().
     // Therefore any new incoming request will exit from here
@@ -184,15 +193,6 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
         wait_until_refill_pending_ = false;
       }
     } else {
-      if (auto_tuned_) {
-        ++num_refills_since_last_tune_;
-        if (num_refills_since_last_tune_ >= num_refills_per_tune_) {
-          assert(num_refills_since_last_tune_ == num_refills_per_tune_);
-          Status s = TuneLocked();
-          s.PermitUncheckedError();  //**TODO: What to do on error?
-          num_refills_since_last_tune_ = 0;
-        }
-      }
       // Whichever thread reaches here first performs duty (2) as described
       // above.
       RefillBytesAndGrantRequestsLocked();
@@ -299,14 +299,24 @@ Status GenericRateLimiter::TuneLocked() {
   // `[max_bytes_per_sec_ / kAllowedRangeFactor, max_bytes_per_sec_]`.
   const int kAllowedRangeFactor = 20;
 
+  std::chrono::microseconds prev_tuned_time = tuned_time_;
+  tuned_time_ = std::chrono::microseconds(NowMicrosMonotonicLocked());
+
+  int64_t elapsed_intervals = (tuned_time_ - prev_tuned_time +
+                               std::chrono::microseconds(refill_period_us_) -
+                               std::chrono::microseconds(1)) /
+                              std::chrono::microseconds(refill_period_us_);
   // We tune every kRefillsPerTune intervals, so the overflow and division-by-
   // zero conditions should never happen.
   assert(num_drains_ <= std::numeric_limits<int64_t>::max() / 100);
-  int64_t drained_pct = num_drains_ * 100 / num_refills_per_tune_;
+  assert(elapsed_intervals > 0);
+  int64_t drained_pct = num_drains_ * 100 / elapsed_intervals;
 
   int64_t prev_bytes_per_sec = GetBytesPerSecond();
   int64_t new_bytes_per_sec;
-  if (drained_pct < kLowWatermarkPct) {
+  if (drained_pct == 0) {
+    new_bytes_per_sec = max_bytes_per_sec_ / kAllowedRangeFactor;
+  } else if (drained_pct < kLowWatermarkPct) {
     // sanitize to prevent overflow
     int64_t sanitized_prev_bytes_per_sec =
         std::min(prev_bytes_per_sec, std::numeric_limits<int64_t>::max() / 100);
@@ -324,6 +334,10 @@ Status GenericRateLimiter::TuneLocked() {
   } else {
     new_bytes_per_sec = prev_bytes_per_sec;
   }
+  printf("num_drains_: %" PRId64 ", drained_pct: %" PRId64
+         ", new_bytes_per_sec: %" PRId64 "\n",
+         num_drains_, drained_pct, new_bytes_per_sec);
+  fflush(stdout);
   if (new_bytes_per_sec != prev_bytes_per_sec) {
     SetBytesPerSecondLocked(new_bytes_per_sec);
   }
@@ -335,15 +349,13 @@ RateLimiter* NewGenericRateLimiter(
     int64_t rate_bytes_per_sec, int64_t refill_period_us /* = 100 * 1000 */,
     int32_t fairness /* = 10 */,
     RateLimiter::Mode mode /* = RateLimiter::Mode::kWritesOnly */,
-    int64_t max_bytes_per_sec /* = 0 */, int64_t num_refills_per_tune /* = 0 */,
-    int64_t single_burst_bytes /* = 0 */) {
+    bool auto_tuned /* = false */, int64_t single_burst_bytes /* = 0 */) {
   assert(rate_bytes_per_sec > 0);
   assert(refill_period_us > 0);
   assert(fairness > 0);
-  std::unique_ptr<RateLimiter> limiter(
-      new GenericRateLimiter(rate_bytes_per_sec, refill_period_us, fairness,
-                             mode, SystemClock::Default(), max_bytes_per_sec,
-                             num_refills_per_tune, single_burst_bytes));
+  std::unique_ptr<RateLimiter> limiter(new GenericRateLimiter(
+      rate_bytes_per_sec, refill_period_us, fairness, mode,
+      SystemClock::Default(), auto_tuned, single_burst_bytes));
   return limiter.release();
 }
 
