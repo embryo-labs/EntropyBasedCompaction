@@ -334,9 +334,9 @@ Status GenericRateLimiter::TuneLocked() {
   } else {
     new_bytes_per_sec = prev_bytes_per_sec;
   }
-  printf("num_drains_: %" PRId64 ", drained_pct: %" PRId64
-         ", new_bytes_per_sec: %" PRId64 "\n",
-         num_drains_, drained_pct, new_bytes_per_sec);
+  printf("elapsed_intervals: %" PRId64 ", num_drains_: %" PRId64
+         ", drained_pct: %" PRId64 ", new_bytes_per_sec: %" PRId64 "\n",
+         elapsed_intervals, num_drains_, drained_pct, new_bytes_per_sec);
   fflush(stdout);
   if (new_bytes_per_sec != prev_bytes_per_sec) {
     SetBytesPerSecondLocked(new_bytes_per_sec);
