@@ -134,6 +134,10 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
                            &rate_bytes_per_sec_);
   MutexLock g(&request_mutex_);
 
+  if ((uint64_t)next_refill_us_ <= NowMicrosMonotonicLocked()) {
+    RefillBytesAndGrantRequestsLocked();
+  }
+
   if (stop_) {
     // It is now in the clean-up of ~GenericRateLimiter().
     // Therefore any new incoming request will exit from here
@@ -184,15 +188,6 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
         wait_until_refill_pending_ = false;
       }
     } else {
-      if (auto_tuned_) {
-        ++num_refills_since_last_tune_;
-        if (num_refills_since_last_tune_ >= num_refills_per_tune_) {
-          assert(num_refills_since_last_tune_ == num_refills_per_tune_);
-          Status s = TuneLocked();
-          s.PermitUncheckedError();  //**TODO: What to do on error?
-          num_refills_since_last_tune_ = 0;
-        }
-      }
       // Whichever thread reaches here first performs duty (2) as described
       // above.
       RefillBytesAndGrantRequestsLocked();
@@ -239,6 +234,16 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
 void GenericRateLimiter::RefillBytesAndGrantRequestsLocked() {
   TEST_SYNC_POINT_CALLBACK(
       "GenericRateLimiter::RefillBytesAndGrantRequestsLocked", &request_mutex_);
+  if (auto_tuned_) {
+    ++num_refills_since_last_tune_;
+    if (num_refills_since_last_tune_ >= num_refills_per_tune_) {
+      assert(num_refills_since_last_tune_ == num_refills_per_tune_);
+      Status s = TuneLocked();
+      s.PermitUncheckedError();  //**TODO: What to do on error?
+      num_refills_since_last_tune_ = 0;
+    }
+  }
+
   next_refill_us_ = NowMicrosMonotonicLocked() + refill_period_us_;
   // Carry over the left over quota from the last period
   auto refill_bytes_per_period =
