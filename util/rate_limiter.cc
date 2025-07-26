@@ -134,10 +134,6 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
                            &rate_bytes_per_sec_);
   MutexLock g(&request_mutex_);
 
-  if ((uint64_t)next_refill_us_ <= NowMicrosMonotonicLocked()) {
-    RefillBytesAndGrantRequestsLocked();
-  }
-
   if (stop_) {
     // It is now in the clean-up of ~GenericRateLimiter().
     // Therefore any new incoming request will exit from here
@@ -152,6 +148,10 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
     total_bytes_through_[pri] += bytes_through;
     available_bytes_[pri] -= bytes_through;
     bytes -= bytes_through;
+  }
+
+  if ((uint64_t)next_refill_us_ <= NowMicrosMonotonicLocked()) {
+    RefillBytesAndGrantRequestsLocked(stats, available_bytes_[pri] == 0);
   }
 
   if (bytes == 0) {
@@ -179,8 +179,6 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
         // Whichever thread reaches here first performs duty (1) as described
         // above.
         int64_t wait_until = clock_->NowMicros() + time_until_refill_us;
-        RecordTick(stats, NUMBER_RATE_LIMITER_DRAINS);
-        ++num_drains_;
         wait_until_refill_pending_ = true;
         clock_->TimedWait(&r.cv, std::chrono::microseconds(wait_until));
         TEST_SYNC_POINT_CALLBACK("GenericRateLimiter::Request:PostTimedWait",
@@ -190,7 +188,7 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
     } else {
       // Whichever thread reaches here first performs duty (2) as described
       // above.
-      RefillBytesAndGrantRequestsLocked();
+      RefillBytesAndGrantRequestsLocked(stats, true);
     }
     if (r.request_bytes == 0) {
       // If there is any remaining requests, make sure there exists at least
@@ -231,10 +229,24 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
   }
 }
 
-void GenericRateLimiter::RefillBytesAndGrantRequestsLocked() {
+void GenericRateLimiter::RefillBytesAndGrantRequestsLocked(Statistics* stats,
+                                                           bool drained) {
   TEST_SYNC_POINT_CALLBACK(
       "GenericRateLimiter::RefillBytesAndGrantRequestsLocked", &request_mutex_);
   if (auto_tuned_) {
+    if (!drained) {
+      for (const auto& q : queue_) {
+        if (!q.empty()) {
+          drained = true;
+          break;
+        }
+      }
+    }
+    if (drained) {
+      RecordTick(stats, NUMBER_RATE_LIMITER_DRAINS);
+      ++num_drains_;
+    }
+
     ++num_refills_since_last_tune_;
     if (num_refills_since_last_tune_ >= num_refills_per_tune_) {
       assert(num_refills_since_last_tune_ == num_refills_per_tune_);

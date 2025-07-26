@@ -110,7 +110,7 @@ class GenericRateLimiter : public RateLimiter {
 
  private:
   static constexpr int kMicrosecondsPerSecond = 1000000;
-  void RefillBytesAndGrantRequestsLocked();
+  void RefillBytesAndGrantRequestsLocked(Statistics* stats, bool drained);
   int64_t CalculateRefillBytesPerPeriodLocked(int64_t rate_bytes_per_sec);
   Status TuneLocked();
   void SetBytesPerSecondLocked(int64_t bytes_per_second);
