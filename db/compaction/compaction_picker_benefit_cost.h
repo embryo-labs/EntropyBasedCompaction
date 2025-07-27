@@ -35,12 +35,14 @@ class CompactionPickerBenefitCost : public CompactionPicker {
     size_t num_sorted_runs;
     uint64_t size;
     double benefit_cost_ratio;
+    Compaction* c;
 
     SortedRunInfo(size_t _num_sorted_runs, uint64_t _size,
                   double _benefit_cost_ratio)
         : num_sorted_runs(_num_sorted_runs),
           size(_size),
-          benefit_cost_ratio(_benefit_cost_ratio) {}
+          benefit_cost_ratio(_benefit_cost_ratio),
+          c(nullptr) {}
 
     bool is_merging() const { return num_sorted_runs > 1; }
   };

@@ -1727,8 +1727,10 @@ Status CompactionJob::InstallCompactionResults(
   db_mutex_->AssertHeld();
 
   const ReadOptions read_options(Env::IOActivity::kCompaction);
-  const WriteOptions write_options(compact_->compaction->io_priority(),
-                                   Env::IOActivity::kCompaction);
+  const WriteOptions write_options(
+      static_cast<Env::IOPriority>(
+          compact_->compaction->io_priority().load(std::memory_order_relaxed)),
+      Env::IOActivity::kCompaction);
 
   auto* compaction = compact_->compaction;
   assert(compaction);
@@ -2206,7 +2208,8 @@ Env::IOPriority CompactionJob::GetRateLimiterPriority() {
     }
   }
 
-  return compact_->compaction->io_priority();
+  return static_cast<Env::IOPriority>(
+      compact_->compaction->io_priority().load(std::memory_order_relaxed));
 }
 
 }  // namespace ROCKSDB_NAMESPACE
