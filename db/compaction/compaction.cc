@@ -284,9 +284,11 @@ Compaction::Compaction(
     CompressionOptions _compression_opts, Temperature _output_temperature,
     uint32_t _max_subcompactions, std::vector<FileMetaData*> _grandparents,
     std::optional<SequenceNumber> _earliest_snapshot,
-    const SnapshotChecker* _snapshot_checker, bool _manual_compaction,
-    const std::string& _trim_ts, double _score, bool _deletion_compaction,
-    bool l0_files_might_overlap, CompactionReason _compaction_reason,
+    const SnapshotChecker* _snapshot_checker,
+    std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle,
+    bool _manual_compaction, const std::string& _trim_ts, double _score,
+    bool _deletion_compaction, bool l0_files_might_overlap,
+    CompactionReason _compaction_reason,
     BlobGarbageCollectionPolicy _blob_garbage_collection_policy,
     double _blob_garbage_collection_age_cutoff, void* merging_info,
     Env::IOPriority io_priority)
@@ -311,6 +313,7 @@ Compaction::Compaction(
       grandparents_(std::move(_grandparents)),
       earliest_snapshot_(_earliest_snapshot),
       snapshot_checker_(_snapshot_checker),
+      limiter_handle_(std::move(limiter_handle)),
       score_(_score),
       bottommost_level_(
           // For simplicity, we don't support the concept of "bottommost level"

@@ -439,6 +439,10 @@ static std::unordered_map<std::string, OptionTypeInfo>
          {offsetof(struct ImmutableDBOptions, rate_limiter),
           OptionType::kUnknown, OptionVerificationType::kDeprecated,
           OptionTypeFlags::kDontSerialize | OptionTypeFlags::kCompareNever}},
+        {"background_job_limiter",
+         {offsetof(struct ImmutableDBOptions, background_job_limiter),
+          OptionType::kUnknown, OptionVerificationType::kDeprecated,
+          OptionTypeFlags::kDontSerialize | OptionTypeFlags::kCompareNever}},
         // The following properties were handled as special cases in ParseOption
         // This means that the properties could be read from the options file
         // but never written to the file or compared to each other.
@@ -720,6 +724,7 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions& options)
           options.verify_sst_unique_id_in_manifest),
       env(options.env),
       rate_limiter(options.rate_limiter),
+      background_job_limiter(options.background_job_limiter),
       sst_file_manager(options.sst_file_manager),
       info_log(options.info_log),
       info_log_level(options.info_log_level),

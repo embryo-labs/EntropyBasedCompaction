@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "rocksdb/advanced_options.h"
+#include "rocksdb/background_job_limiter.h"
 #include "rocksdb/comparator.h"
 #include "rocksdb/compression_type.h"
 #include "rocksdb/customizable.h"
@@ -690,6 +691,8 @@ struct DBOptions {
   //
   // Default: nullptr
   std::shared_ptr<RateLimiter> rate_limiter = nullptr;
+
+  std::shared_ptr<BackgroundJobLimiter> background_job_limiter = nullptr;
 
   // Use to track SST files and control their file deletion rate.
   //

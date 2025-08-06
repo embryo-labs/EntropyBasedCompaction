@@ -115,6 +115,10 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
   if (!ret.has_value()) {
     return nullptr;
   }
+  auto limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+  if (!limiter_handle.has_value()) {
+    return nullptr;
+  }
   auto [i, j] = ret.value();
   int num_compactions = 0;
   for (const auto& sr : sorted_runs_) {
@@ -169,7 +173,7 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
       mutable_cf_options.default_write_temperature,
       /* max_subcompactions */ 0, /* grandparents not supported yet */ {},
       /* earliest_snapshot */ std::nullopt,
-      /* snapshot_checker */ nullptr,
+      /* snapshot_checker */ nullptr, std::move(limiter_handle.value()),
       /* is manual */ false, /* trim_ts */ "", /*score*/ 2333,
       false /* deletion_compaction */,
       /* l0_files_might_overlap */ true, CompactionReason::kPolicyByCount,

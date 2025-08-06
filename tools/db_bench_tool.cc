@@ -48,6 +48,7 @@
 #include "options/cf_options.h"
 #include "port/port.h"
 #include "port/stack_trace.h"
+#include "rocksdb/background_job_limiter.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/compaction_policy_dynamic_size_ratio.h"
 #include "rocksdb/compaction_policy_dynamic_tiering.h"
@@ -1529,6 +1530,8 @@ DEFINE_int64(rate_limiter_num_refills_per_tune, 10, "");
 DEFINE_int64(rate_limiter_single_burst_bytes, 0,
              "Set single burst bytes on background I/O rate limiter.");
 
+DEFINE_uint64(max_running_background_jobs, 0, "0: no limit");
+
 DEFINE_bool(sine_write_rate, false, "Use a sine wave write_rate_limit");
 
 DEFINE_uint64(
@@ -2193,6 +2196,9 @@ class ReporterAgent {
     header << ",num-sorted-runs," << DB::Properties::kNumTopLevelSortedRuns
            << ',' << DB::Properties::kNumMergingMainLevelSortedRuns << ','
            << DB::Properties::kBufferLevelSize;
+    if (options.background_job_limiter) {
+      header << ",num-running-flushes,num-running-compactions,num-compactions";
+    }
     if (options.rate_limiter.get()) {
       header << ",IO_LOW,IO_FLATTEN,IO_MAIN_LEVEL,IO_HIGH,IO_USER,rate-limit";
     }
@@ -2209,6 +2215,8 @@ class ReporterAgent {
   }
   void SleepAndReport() {
     Options options = db_->GetOptions();
+    BackgroundJobLimiter* background_job_limiter =
+        options.background_job_limiter.get();
     RateLimiter* rate_limiter = options.rate_limiter.get();
     std::unordered_map<OperationType, std::unique_ptr<WritableFile>>
         op_count_time;
@@ -2275,6 +2283,12 @@ class ReporterAgent {
                                  &buffer_level_size);
       assert(good);
       report << ',' << buffer_level_size;
+
+      if (background_job_limiter) {
+        report << ',' << background_job_limiter->num_running_flushes() << ','
+               << background_job_limiter->num_running_compactions() << ','
+               << background_job_limiter->num_compactions();
+      }
 
       if (rate_limiter) {
         uint64_t bytes_through[Env::IO_TOTAL];
@@ -5139,6 +5153,12 @@ class Benchmark {
             RateLimiter::Mode::kWritesOnly, false,
             FLAGS_rate_limiter_single_burst_bytes));
       }
+    }
+
+    if (options.background_job_limiter == nullptr &&
+        FLAGS_max_running_background_jobs != 0) {
+      options.background_job_limiter =
+          NewGenericBackgroundJobLimiter(FLAGS_max_running_background_jobs);
     }
 
     options.listeners.emplace_back(listener_);

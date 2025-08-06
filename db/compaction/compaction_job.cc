@@ -1343,6 +1343,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
       static_cast<void*>(const_cast<Compaction*>(sub_compact->compaction)));
   uint64_t last_cpu_micros = prev_cpu_micros;
   while (status.ok() && !cfd->IsDropped() && c_iter->Valid()) {
+    sub_compact->compaction->limiter_handle()->RequestToRun();
     // Invariant: c_iter.status() is guaranteed to be OK if c_iter->Valid()
     // returns true.
     assert(!end.has_value() ||

@@ -13,6 +13,7 @@
 #include "db/version_set.h"
 #include "memory/arena.h"
 #include "options/cf_options.h"
+#include "rocksdb/background_job_limiter.h"
 #include "rocksdb/sst_partitioner.h"
 #include "util/autovector.h"
 
@@ -82,27 +83,28 @@ class CompactionFilter;
 // A Compaction encapsulates metadata about a compaction.
 class Compaction {
  public:
-  Compaction(VersionStorageInfo* input_version,
-             const ImmutableOptions& immutable_options,
-             const MutableCFOptions& mutable_cf_options,
-             const MutableDBOptions& mutable_db_options,
-             std::vector<CompactionInputFiles> inputs, int output_level,
-             uint64_t target_file_size, uint64_t max_compaction_bytes,
-             uint32_t output_path_id, CompressionType compression,
-             CompressionOptions compression_opts,
-             Temperature output_temperature, uint32_t max_subcompactions,
-             std::vector<FileMetaData*> grandparents,
-             std::optional<SequenceNumber> earliest_snapshot,
-             const SnapshotChecker* snapshot_checker,
-             bool manual_compaction = false, const std::string& trim_ts = "",
-             double score = -1, bool deletion_compaction = false,
-             bool l0_files_might_overlap = true,
-             CompactionReason compaction_reason = CompactionReason::kUnknown,
-             BlobGarbageCollectionPolicy blob_garbage_collection_policy =
-                 BlobGarbageCollectionPolicy::kUseDefault,
-             double blob_garbage_collection_age_cutoff = -1,
-             void* merging_info = nullptr,
-             Env::IOPriority io_priority = Env::IOPriority::IO_LOW);
+  Compaction(
+      VersionStorageInfo* input_version,
+      const ImmutableOptions& immutable_options,
+      const MutableCFOptions& mutable_cf_options,
+      const MutableDBOptions& mutable_db_options,
+      std::vector<CompactionInputFiles> inputs, int output_level,
+      uint64_t target_file_size, uint64_t max_compaction_bytes,
+      uint32_t output_path_id, CompressionType compression,
+      CompressionOptions compression_opts, Temperature output_temperature,
+      uint32_t max_subcompactions, std::vector<FileMetaData*> grandparents,
+      std::optional<SequenceNumber> earliest_snapshot,
+      const SnapshotChecker* snapshot_checker,
+      std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle,
+      bool manual_compaction = false, const std::string& trim_ts = "",
+      double score = -1, bool deletion_compaction = false,
+      bool l0_files_might_overlap = true,
+      CompactionReason compaction_reason = CompactionReason::kUnknown,
+      BlobGarbageCollectionPolicy blob_garbage_collection_policy =
+          BlobGarbageCollectionPolicy::kUseDefault,
+      double blob_garbage_collection_age_cutoff = -1,
+      void* merging_info = nullptr,
+      Env::IOPriority io_priority = Env::IOPriority::IO_LOW);
 
   // The type of the penultimate level output range
   enum class PenultimateOutputRangeType : int {
@@ -469,6 +471,14 @@ class Compaction {
   // mark (or clear) all files that are being compacted
   void MarkFilesBeingCompacted(bool being_compacted) const;
 
+  const BackgroundJobLimiter::CompactionHandle* limiter_handle() const {
+    if (limiter_handle_.has_value()) {
+      return &limiter_handle_.value();
+    } else {
+      return nullptr;
+    }
+  }
+
  private:
 
   Status InitInputTableProperties();
@@ -562,6 +572,8 @@ class Compaction {
   // It will be used to possibly filter out some non start level input files.
   std::optional<SequenceNumber> earliest_snapshot_;
   const SnapshotChecker* snapshot_checker_;
+
+  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle_;
 
   // Markers for which non start level input files are filtered out if
   // applicable. Only applicable if earliest_snapshot_ is provided and input

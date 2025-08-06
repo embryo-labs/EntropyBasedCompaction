@@ -139,7 +139,9 @@ FlushJob::FlushJob(
       clock_(db_options_.clock),
       full_history_ts_low_(std::move(full_history_ts_low)),
       blob_callback_(blob_callback),
-      seqno_to_time_mapping_(std::move(seqno_to_time_mapping)) {
+      seqno_to_time_mapping_(std::move(seqno_to_time_mapping)),
+      limiter_handle_(
+          cfd->ioptions()->background_job_limiter->RegisterFlush()) {
   // Update the thread status to indicate flush.
   ReportStartedFlush();
   TEST_SYNC_POINT("FlushJob::FlushJob()");

@@ -34,6 +34,7 @@
 #include "monitoring/instrumented_mutex.h"
 #include "options/db_options.h"
 #include "port/port.h"
+#include "rocksdb/background_job_limiter.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
 #include "rocksdb/listener.h"
@@ -237,6 +238,8 @@ class FlushJob {
   // `earliest_snapshot_` will be output to the penultimate level had it gone
   // through a compaction to the last level.
   SequenceNumber preclude_last_level_min_seqno_ = kMaxSequenceNumber;
+
+  BackgroundJobLimiter::FlushHandle limiter_handle_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE
