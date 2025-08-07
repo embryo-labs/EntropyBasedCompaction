@@ -141,7 +141,10 @@ FlushJob::FlushJob(
       blob_callback_(blob_callback),
       seqno_to_time_mapping_(std::move(seqno_to_time_mapping)),
       limiter_handle_(
-          cfd->ioptions()->background_job_limiter->RegisterFlush()) {
+          cfd->ioptions()->background_job_limiter
+              ? std::optional<BackgroundJobLimiter::FlushHandle>(
+                    cfd->ioptions()->background_job_limiter->RegisterFlush())
+              : std::nullopt) {
   // Update the thread status to indicate flush.
   ReportStartedFlush();
   TEST_SYNC_POINT("FlushJob::FlushJob()");

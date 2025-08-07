@@ -46,10 +46,15 @@ Compaction* CompactionPickerBySize::PickMainLevelCompaction(
       mutable_cf_options.write_buffer_size, status,
       vstorage->NumLevelBytes(vstorage->num_non_empty_levels() - 1));
   if (!ret.has_value()) return nullptr;
-  auto limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-  if (!limiter_handle.has_value()) {
-    return nullptr;
+
+  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
+  if (ioptions_.background_job_limiter) {
+    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    if (!limiter_handle.has_value()) {
+      return nullptr;
+    }
   }
+
   auto [a, b, io_priority] = ret.value();
   std::vector<CompactionInputFiles> inputs(1);
   int output_level;
@@ -87,7 +92,7 @@ Compaction* CompactionPickerBySize::PickMainLevelCompaction(
       mutable_cf_options.default_write_temperature,
       /* max_subcompactions */ 0, /* grandparents not supported yet */ {},
       /* earliest_snapshot */ std::nullopt,
-      /* snapshot_checker */ nullptr, std::move(limiter_handle.value()),
+      /* snapshot_checker */ nullptr, std::move(limiter_handle),
       /* is manual */ false, /* trim_ts */ "", /*score*/ 2333,
       false /* deletion_compaction */,
       /* l0_files_might_overlap */ true, CompactionReason::kPolicyBySize,

@@ -1011,10 +1011,15 @@ Compaction* UniversalCompactionBuilder::PickCompactionToReduceSortedRuns(
   } else {
     compaction_reason = CompactionReason::kUniversalSortedRunNum;
   }
-  auto limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-  if (!limiter_handle.has_value()) {
-    return nullptr;
+
+  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
+  if (ioptions_.background_job_limiter) {
+    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    if (!limiter_handle.has_value()) {
+      return nullptr;
+    }
   }
+
   return new Compaction(vstorage_, ioptions_, mutable_cf_options_,
                         mutable_db_options_, std::move(inputs), output_level,
                         MaxFileSizeForLevel(mutable_cf_options_, output_level,
@@ -1028,7 +1033,7 @@ Compaction* UniversalCompactionBuilder::PickCompactionToReduceSortedRuns(
                         /* max_subcompactions */ 0, grandparents,
                         /* earliest_snapshot */ std::nullopt,
                         /* snapshot_checker */ nullptr,
-                        std::move(limiter_handle.value()),
+                        std::move(limiter_handle),
                         /* is manual */ false, /* trim_ts */ "", score_,
                         false /* deletion_compaction */,
                         /* l0_files_might_overlap */ true, compaction_reason);
@@ -1362,10 +1367,15 @@ Compaction* UniversalCompactionBuilder::PickIncrementalForReduceSizeAmp(
 
   // TODO support multi paths?
   uint32_t path_id = 0;
-  auto limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-  if (!limiter_handle.has_value()) {
-    return nullptr;
+
+  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
+  if (ioptions_.background_job_limiter) {
+    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    if (!limiter_handle.has_value()) {
+      return nullptr;
+    }
   }
+
   return new Compaction(
       vstorage_, ioptions_, mutable_cf_options_, mutable_db_options_,
       std::move(inputs), output_level,
@@ -1379,7 +1389,7 @@ Compaction* UniversalCompactionBuilder::PickIncrementalForReduceSizeAmp(
       mutable_cf_options_.default_write_temperature,
       /* max_subcompactions */ 0, /* grandparents */ {},
       /* earliest_snapshot */ std::nullopt,
-      /* snapshot_checker */ nullptr, std::move(limiter_handle.value()),
+      /* snapshot_checker */ nullptr, std::move(limiter_handle),
       /* is manual */ false,
       /* trim_ts */ "", score_, false /* deletion_compaction */,
       /* l0_files_might_overlap */ true,
@@ -1519,10 +1529,15 @@ Compaction* UniversalCompactionBuilder::PickDeleteTriggeredCompaction() {
   }
   uint32_t path_id =
       GetPathId(ioptions_, mutable_cf_options_, estimated_total_size);
-  auto limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-  if (!limiter_handle.has_value()) {
-    return nullptr;
+
+  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
+  if (ioptions_.background_job_limiter) {
+    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    if (!limiter_handle.has_value()) {
+      return nullptr;
+    }
   }
+
   return new Compaction(
       vstorage_, ioptions_, mutable_cf_options_, mutable_db_options_,
       std::move(inputs), output_level,
@@ -1533,7 +1548,7 @@ Compaction* UniversalCompactionBuilder::PickDeleteTriggeredCompaction() {
       GetCompressionOptions(mutable_cf_options_, vstorage_, output_level),
       mutable_cf_options_.default_write_temperature,
       /* max_subcompactions */ 0, grandparents, earliest_snapshot_,
-      snapshot_checker_, std::move(limiter_handle.value()),
+      snapshot_checker_, std::move(limiter_handle),
       /* is manual */ false,
       /* trim_ts */ "", score_, false /* deletion_compaction */,
       /* l0_files_might_overlap */ true,
@@ -1613,10 +1628,14 @@ Compaction* UniversalCompactionBuilder::PickCompactionWithSortedRunRange(
     return nullptr;
   }
 
-  auto limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-  if (!limiter_handle.has_value()) {
-    return nullptr;
+  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
+  if (ioptions_.background_job_limiter) {
+    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    if (!limiter_handle.has_value()) {
+      return nullptr;
+    }
   }
+
   // We never check size for
   // compaction_options_universal.compression_size_percent,
   // because we always compact all the files, so always compress.
@@ -1633,7 +1652,7 @@ Compaction* UniversalCompactionBuilder::PickCompactionWithSortedRunRange(
       mutable_cf_options_.default_write_temperature,
       /* max_subcompactions */ 0, /* grandparents */ {},
       /* earliest_snapshot */ std::nullopt,
-      /* snapshot_checker */ nullptr, std::move(limiter_handle.value()),
+      /* snapshot_checker */ nullptr, std::move(limiter_handle),
       /* is manual */ false,
       /* trim_ts */ "", score_, false /* deletion_compaction */,
       /* l0_files_might_overlap */ true, compaction_reason);

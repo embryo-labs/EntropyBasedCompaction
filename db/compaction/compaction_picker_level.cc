@@ -550,10 +550,15 @@ Compaction* LevelCompactionBuilder::GetCompaction() {
   bool l0_files_might_overlap =
       start_level_ == 0 && !is_l0_trivial_move_ &&
       (compaction_inputs_.size() > 1 || compaction_inputs_[0].size() > 1);
-  auto limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-  if (!limiter_handle.has_value()) {
-    return nullptr;
+
+  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
+  if (ioptions_.background_job_limiter) {
+    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    if (!limiter_handle.has_value()) {
+      return nullptr;
+    }
   }
+
   auto c = new Compaction(
       vstorage_, ioptions_, mutable_cf_options_, mutable_db_options_,
       std::move(compaction_inputs_), output_level_,
@@ -568,7 +573,7 @@ Compaction* LevelCompactionBuilder::GetCompaction() {
       mutable_cf_options_.default_write_temperature,
       /* max_subcompactions */ 0, std::move(grandparents_),
       /* earliest_snapshot */ std::nullopt, /* snapshot_checker */ nullptr,
-      std::move(limiter_handle.value()), is_manual_,
+      std::move(limiter_handle), is_manual_,
       /* trim_ts */ "", start_level_score_, false /* deletion_compaction */,
       l0_files_might_overlap, compaction_reason_);
 

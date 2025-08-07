@@ -1844,11 +1844,15 @@ Status DBImpl::ReFitLevel(ColumnFamilyData* cfd, int level, int target_level) {
                     "[%s] Before refitting:\n%s", cfd->GetName().c_str(),
                     cfd->current()->DebugString().data());
 
-    auto limiter_handle =
-        cfd->ioptions()->background_job_limiter->RegisterCompaction();
-    if (!limiter_handle.has_value()) {
-      return Status::Busy();
+    std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
+    if (immutable_db_options_.background_job_limiter) {
+      limiter_handle =
+          immutable_db_options_.background_job_limiter->RegisterCompaction();
+      if (!limiter_handle.has_value()) {
+        return Status::Aborted();
+      }
     }
+
     std::unique_ptr<Compaction> c(new Compaction(
         vstorage, *cfd->ioptions(), mutable_cf_options, mutable_db_options_,
         {input}, to_level,
@@ -1864,8 +1868,8 @@ Status DBImpl::ReFitLevel(ColumnFamilyData* cfd, int level, int target_level) {
         0 /* max_subcompactions, not applicable */,
         {} /* grandparents, not applicable */,
         std::nullopt /* earliest_snapshot */, nullptr /* snapshot_checker */,
-        std::move(limiter_handle.value()), false /* is manual */,
-        "" /* trim_ts */, -1 /* score, not applicable */,
+        std::move(limiter_handle), false /* is manual */, "" /* trim_ts */,
+        -1 /* score, not applicable */,
         false /* is deletion compaction, not applicable */,
         false /* l0_files_might_overlap, not applicable */,
         CompactionReason::kRefitLevel));

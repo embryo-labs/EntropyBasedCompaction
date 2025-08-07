@@ -239,7 +239,7 @@ class FlushJob {
   // through a compaction to the last level.
   SequenceNumber preclude_last_level_min_seqno_ = kMaxSequenceNumber;
 
-  BackgroundJobLimiter::FlushHandle limiter_handle_;
+  std::optional<BackgroundJobLimiter::FlushHandle> limiter_handle_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

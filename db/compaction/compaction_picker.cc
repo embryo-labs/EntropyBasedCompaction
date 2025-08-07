@@ -373,10 +373,15 @@ Compaction* CompactionPicker::CompactFiles(
     // without configurable `CompressionOptions`, which is inconsistent.
     compression_type = compact_options.compression;
   }
-  auto limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-  if (!limiter_handle.has_value()) {
-    return nullptr;
+
+  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
+  if (ioptions_.background_job_limiter) {
+    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    if (!limiter_handle.has_value()) {
+      return nullptr;
+    }
   }
+
   auto c = new Compaction(
       vstorage, ioptions_, mutable_cf_options, mutable_db_options, input_files,
       output_level, compact_options.output_file_size_limit,
@@ -385,7 +390,7 @@ Compaction* CompactionPicker::CompactFiles(
       mutable_cf_options.default_write_temperature,
       compact_options.max_subcompactions,
       /* grandparents */ {}, /* earliest_snapshot */ std::nullopt,
-      /* snapshot_checker */ nullptr, std::move(limiter_handle.value()), true);
+      /* snapshot_checker */ nullptr, std::move(limiter_handle), true);
   RegisterCompaction(c);
   return c;
 }
@@ -673,11 +678,14 @@ Compaction* CompactionPicker::CompactRange(
       return nullptr;
     }
 
-    auto limiter_handle =
-        ioptions_.background_job_limiter->RegisterCompaction();
-    if (!limiter_handle.has_value()) {
-      return nullptr;
+    std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
+    if (ioptions_.background_job_limiter) {
+      limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+      if (!limiter_handle.has_value()) {
+        return nullptr;
+      }
     }
+
     Compaction* c = new Compaction(
         vstorage, ioptions_, mutable_cf_options, mutable_db_options,
         std::move(inputs), output_level,
@@ -690,7 +698,7 @@ Compaction* CompactionPicker::CompactRange(
         mutable_cf_options.default_write_temperature,
         compact_range_options.max_subcompactions,
         /* grandparents */ {}, /* earliest_snapshot */ std::nullopt,
-        /* snapshot_checker */ nullptr, std::move(limiter_handle.value()),
+        /* snapshot_checker */ nullptr, std::move(limiter_handle),
         /* is manual */ true, trim_ts, /* score */ -1,
         /* deletion_compaction */ false, /* l0_files_might_overlap */ true,
         CompactionReason::kUnknown,
@@ -868,10 +876,15 @@ Compaction* CompactionPicker::CompactRange(
 
   std::vector<FileMetaData*> grandparents;
   GetGrandparents(vstorage, inputs, output_level_inputs, &grandparents);
-  auto limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-  if (!limiter_handle.has_value()) {
-    return nullptr;
+
+  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
+  if (ioptions_.background_job_limiter) {
+    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    if (!limiter_handle.has_value()) {
+      return nullptr;
+    }
   }
+
   Compaction* compaction = new Compaction(
       vstorage, ioptions_, mutable_cf_options, mutable_db_options,
       std::move(compaction_inputs), output_level,
@@ -886,7 +899,7 @@ Compaction* CompactionPicker::CompactRange(
       mutable_cf_options.default_write_temperature,
       compact_range_options.max_subcompactions, std::move(grandparents),
       /* earliest_snapshot */ std::nullopt, /* snapshot_checker */ nullptr,
-      std::move(limiter_handle.value()),
+      std::move(limiter_handle),
       /* is manual */ true, trim_ts, /* score */ -1,
       /* deletion_compaction */ false, /* l0_files_might_overlap */ true,
       CompactionReason::kUnknown,
@@ -1356,10 +1369,15 @@ Compaction* CompactionPicker::PickIncrementalLastLevelCompaction(
 
   // TODO support multi paths?
   uint32_t path_id = 0;
-  auto limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-  if (!limiter_handle.has_value()) {
-    return nullptr;
+
+  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
+  if (ioptions_.background_job_limiter) {
+    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    if (!limiter_handle.has_value()) {
+      return nullptr;
+    }
   }
+
   return new Compaction(
       vstorage, *ioptions, mutable_cf_options, mutable_db_options,
       std::move(inputs), output_level,
@@ -1373,7 +1391,7 @@ Compaction* CompactionPicker::PickIncrementalLastLevelCompaction(
       mutable_cf_options.default_write_temperature,
       /* max_subcompactions */ 0, /* grandparents */ {},
       /* earliest_snapshot */ std::nullopt,
-      /* snapshot_checker */ nullptr, std::move(limiter_handle.value()),
+      /* snapshot_checker */ nullptr, std::move(limiter_handle),
       /* is manual */ false,
       /* trim_ts */ "", 2333, false /* deletion_compaction */,
       /* l0_files_might_overlap */ true,
