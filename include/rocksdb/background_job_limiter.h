@@ -34,7 +34,22 @@ class BackgroundJobLimiter
  public:
   class FlushHandle {
    public:
-    ~FlushHandle() { limiter_->FlushFinishes(); }
+    FlushHandle(const FlushHandle&) = delete;
+    FlushHandle& operator=(const FlushHandle&) = delete;
+    FlushHandle(FlushHandle&& rhs) : limiter_(std::move(rhs.limiter_)) {}
+    FlushHandle& operator=(FlushHandle&& rhs) {
+      this->~FlushHandle();
+      limiter_ = std::move(rhs.limiter_);
+      rhs.limiter_ = nullptr;
+      return *this;
+    }
+
+    ~FlushHandle() {
+      if (limiter_ == nullptr) {
+        return;
+      }
+      limiter_->FlushFinishes();
+    }
 
    private:
     explicit FlushHandle(std::shared_ptr<BackgroundJobLimiter> limiter)
