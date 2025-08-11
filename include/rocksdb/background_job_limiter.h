@@ -128,6 +128,8 @@ class BackgroundJobLimiter
       return std::nullopt;
     }
     auto compaction_status = std::make_shared<CompactionStatus>();
+
+    std::unique_lock<std::mutex> lock(lock_);
     compactions_.emplace_back(compaction_status);
     num_running_compactions_.fetch_add(1, std::memory_order_relaxed);
     MaybeStopEarliestRunningCompactionsLocked();
@@ -150,6 +152,7 @@ class BackgroundJobLimiter
       : max_running_background_jobs_(max_running_background_jobs) {}
 
   void MaybeStopEarliestRunningCompactionsLocked() {
+    assert(lock_.try_lock() == false);
     auto num_running_flushes =
         num_running_flushes_.load(std::memory_order_relaxed);
     auto max_running_background_jobs =
@@ -174,6 +177,7 @@ class BackgroundJobLimiter
   }
 
   void MaybeResumeCompactionLocked(std::unique_lock<std::mutex> lock) {
+    assert(lock_.try_lock() == false);
     auto num_running_compactions =
         num_running_compactions_.load(std::memory_order_relaxed);
     auto num_running_flushes =
