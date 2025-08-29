@@ -602,6 +602,8 @@ struct AdvancedColumnFamilyOptions {
   // Default: kMinOverlappingRatio
   CompactionPri compaction_pri = kMinOverlappingRatio;
 
+  bool allow_intra_l0_compactions = true;
+
   // The options needed to support Universal Style compactions
   //
   // Dynamically changeable through SetOptions() API

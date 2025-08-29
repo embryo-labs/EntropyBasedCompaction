@@ -913,6 +913,9 @@ bool LevelCompactionBuilder::PickFileToCompact() {
 }
 
 bool LevelCompactionBuilder::PickIntraL0Compaction() {
+  if (!cfd_->ioptions()->allow_intra_l0_compactions) {
+    return false;
+  }
   start_level_inputs_.clear();
   const std::vector<FileMetaData*>& level_files =
       vstorage_->LevelFiles(0 /* level */);

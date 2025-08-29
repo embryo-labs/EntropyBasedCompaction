@@ -541,6 +541,9 @@ DEFINE_int32(compaction_pri,
              (int32_t)ROCKSDB_NAMESPACE::Options().compaction_pri,
              "priority of files to compaction: by size or by data age");
 
+DEFINE_bool(allow_intra_l0_compactions,
+            ROCKSDB_NAMESPACE::Options().allow_intra_l0_compactions, "");
+
 DEFINE_string(compaction_policy, "", "steady/lazy-leveling/dynamic-tiering");
 DEFINE_double(benefit_cost_threshold, 0, "");
 
@@ -4528,6 +4531,7 @@ class Benchmark {
     options.max_background_flushes = FLAGS_max_background_flushes;
     options.compaction_style = FLAGS_compaction_style_e;
     options.compaction_pri = FLAGS_compaction_pri_e;
+    options.allow_intra_l0_compactions = FLAGS_allow_intra_l0_compactions;
     options.allow_mmap_reads = FLAGS_mmap_read;
     options.allow_mmap_writes = FLAGS_mmap_write;
     options.use_direct_reads = FLAGS_use_direct_reads;

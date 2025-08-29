@@ -312,6 +312,7 @@ void UpdateColumnFamilyOptions(const ImmutableCFOptions& ioptions,
                                ColumnFamilyOptions* cf_opts) {
   cf_opts->compaction_style = ioptions.compaction_style;
   cf_opts->compaction_pri = ioptions.compaction_pri;
+  cf_opts->allow_intra_l0_compactions = ioptions.allow_intra_l0_compactions;
   cf_opts->comparator = ioptions.user_comparator;
   cf_opts->merge_operator = ioptions.merge_operator;
   cf_opts->compaction_filter = ioptions.compaction_filter;

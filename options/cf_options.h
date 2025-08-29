@@ -32,6 +32,8 @@ struct ImmutableCFOptions {
 
   CompactionPri compaction_pri;
 
+  bool allow_intra_l0_compactions;
+
   const Comparator* user_comparator;
   InternalKeyComparator internal_comparator;  // Only in Immutable
 

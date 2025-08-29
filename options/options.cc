@@ -77,6 +77,7 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
           options.hard_pending_compaction_bytes_limit),
       compaction_style(options.compaction_style),
       compaction_pri(options.compaction_pri),
+      allow_intra_l0_compactions(options.allow_intra_l0_compactions),
       compaction_options_universal(options.compaction_options_universal),
       compaction_options_fifo(options.compaction_options_fifo),
       compaction_policy(options.compaction_policy),

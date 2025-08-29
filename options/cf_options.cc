@@ -875,7 +875,10 @@ static std::unordered_map<std::string, OptionTypeInfo>
          {offsetof(struct ImmutableCFOptions, persist_user_defined_timestamps),
           OptionType::kBoolean, OptionVerificationType::kNormal,
           OptionTypeFlags::kCompareLoose}},
-};
+        {"allow_intra_l0_compactions",
+         {offsetof(struct ImmutableCFOptions, allow_intra_l0_compactions),
+          OptionType::kBoolean, OptionVerificationType::kNormal,
+          OptionTypeFlags::kNone}}};
 
 const std::string OptionsHelper::kCFOptionsName = "ColumnFamilyOptions";
 
@@ -985,6 +988,7 @@ ImmutableCFOptions::ImmutableCFOptions() : ImmutableCFOptions(Options()) {}
 ImmutableCFOptions::ImmutableCFOptions(const ColumnFamilyOptions& cf_options)
     : compaction_style(cf_options.compaction_style),
       compaction_pri(cf_options.compaction_pri),
+      allow_intra_l0_compactions(cf_options.allow_intra_l0_compactions),
       user_comparator(cf_options.comparator),
       internal_comparator(InternalKeyComparator(cf_options.comparator)),
       merge_operator(cf_options.merge_operator),
