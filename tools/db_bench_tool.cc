@@ -138,6 +138,7 @@ DEFINE_string(
     "multireadrandom,"
     "mixgraph,"
     "customperiodic,"
+    "customperiodicwrite,"
     "readseq,"
     "readtorowcache,"
     "readtocache,"
@@ -3875,6 +3876,8 @@ class Benchmark {
         method = &Benchmark::MixGraph;
       } else if (name == "customperiodic") {
         method = &Benchmark::CustomPeriodic;
+      } else if (name == "customperiodicwrite") {
+        method = &Benchmark::CustomPeriodicWrite;
       } else if (name == "readmissing") {
         ++key_size_;
         method = &Benchmark::ReadRandom;
