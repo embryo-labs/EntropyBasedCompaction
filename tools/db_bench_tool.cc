@@ -2258,17 +2258,23 @@ class ReporterAgent {
         }
       }
 
-      uint64_t num_l0_files;
+      uint64_t num_sorted_runs = 0;
       std::string tmp;
       if (db_->GetProperty(DB::Properties::kNumFilesAtLevelPrefix + "0",
                            &tmp)) {
-        num_l0_files = std::atoi(tmp.c_str());
-      } else {
-        num_l0_files = 0;
+        num_sorted_runs += std::atoi(tmp.c_str());
       }
       size_t num_levels = db_->NumberLevels();
-      assert(num_levels > 0);
-      report << ',' << num_l0_files + num_levels - 1;
+      for (size_t i = 1; i < num_levels; ++i) {
+        if (db_->GetProperty(
+                DB::Properties::kNumFilesAtLevelPrefix + std::to_string(i),
+                &tmp)) {
+          if (std::atoi(tmp.c_str())) {
+            num_sorted_runs += 1;
+          }
+        }
+      }
+      report << ',' << num_sorted_runs;
 
       uint64_t num_top_level_sorted_runs;
       bool good = db_->GetIntProperty(DB::Properties::kNumTopLevelSortedRuns,
