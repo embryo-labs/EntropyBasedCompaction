@@ -6564,11 +6564,8 @@ class Benchmark {
           if (single_iter->Valid() && single_iter->key().compare(key) == 0) {
             seek_found++;
           }
-          int64_t scan_length =
-              ParetoCdfInversion(u, FLAGS_iter_theta, FLAGS_iter_k,
-                                 FLAGS_iter_sigma) %
-              FLAGS_mix_max_scan_len;
-          for (int64_t j = 0; j < scan_length && single_iter->Valid(); j++) {
+          for (int64_t j = 0; j < FLAGS_seek_nexts && single_iter->Valid();
+               j++) {
             Slice value = single_iter->value();
             memcpy(value_buffer, value.data(),
                    std::min(value.size(), sizeof(value_buffer)));
