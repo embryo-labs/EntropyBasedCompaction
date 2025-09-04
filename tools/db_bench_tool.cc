@@ -6429,12 +6429,19 @@ class Benchmark {
   }
 
   void ReadRandom(ThreadState* thread) {
-    int64_t read = 0;
-    int64_t found = 0;
+    int64_t gets = 0;
+    int64_t get_found = 0;
+    int64_t seek = 0;
+    int64_t seek_found = 0;
+
     int64_t bytes = 0;
     int num_keys = 0;
     int64_t key_rand = 0;
     ReadOptions options = read_options_;
+
+    QueryDecider query;
+    query.Initiate({FLAGS_mix_get_ratio, FLAGS_mix_seek_ratio});
+
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
     PinnableSlice pinnable_val;
@@ -6451,6 +6458,7 @@ class Benchmark {
     }
 
     Duration duration(FLAGS_duration, reads_);
+    char value_buffer[256];
     for (;;) {
       if (FLAGS_finish_after_writes) {
         MutexLock l(&thread->shared->mu);
@@ -6481,7 +6489,6 @@ class Benchmark {
         key_rand = GetRandomKey(&thread->rand);
       }
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
-      read++;
       std::string ts_ret;
       std::string* ts_ptr = nullptr;
       if (user_timestamp_size_ > 0) {
@@ -6500,55 +6507,91 @@ class Benchmark {
       } else {
         cfh = db_with_cfh->db->DefaultColumnFamily();
       }
-      if (read_operands_) {
-        GetMergeOperandsOptions get_merge_operands_options;
-        get_merge_operands_options.expected_max_number_of_operands =
-            static_cast<int>(pinnable_vals.size());
-        int number_of_operands;
-        s = db_with_cfh->db->GetMergeOperands(
-            options, cfh, key, pinnable_vals.data(),
-            &get_merge_operands_options, &number_of_operands);
-        if (s.IsIncomplete()) {
-          // Should only happen a few times when we encounter a key that had
-          // more merge operands than any key seen so far. Production use case
-          // would typically retry in such event to get all the operands so do
-          // that here.
-          pinnable_vals.resize(number_of_operands);
+
+      int64_t ini_rand = GetRandomKey(&thread->rand);
+      int64_t rand_v = ini_rand % FLAGS_num;
+      double u = static_cast<double>(rand_v) / FLAGS_num;
+      int query_type = query.GetType(rand_v);
+
+      // Start the query
+      if (query_type == 0) {
+        // the Get query
+        gets++;
+        if (read_operands_) {
+          GetMergeOperandsOptions get_merge_operands_options;
           get_merge_operands_options.expected_max_number_of_operands =
               static_cast<int>(pinnable_vals.size());
+          int number_of_operands;
           s = db_with_cfh->db->GetMergeOperands(
               options, cfh, key, pinnable_vals.data(),
               &get_merge_operands_options, &number_of_operands);
+          if (s.IsIncomplete()) {
+            // Should only happen a few times when we encounter a key that had
+            // more merge operands than any key seen so far. Production use case
+            // would typically retry in such event to get all the operands so do
+            // that here.
+            pinnable_vals.resize(number_of_operands);
+            get_merge_operands_options.expected_max_number_of_operands =
+                static_cast<int>(pinnable_vals.size());
+            s = db_with_cfh->db->GetMergeOperands(
+                options, cfh, key, pinnable_vals.data(),
+                &get_merge_operands_options, &number_of_operands);
+          }
+        } else {
+          s = db_with_cfh->db->Get(options, cfh, key, &pinnable_val, ts_ptr);
         }
-      } else {
-        s = db_with_cfh->db->Get(options, cfh, key, &pinnable_val, ts_ptr);
-      }
 
-      if (s.ok()) {
-        found++;
-        bytes += key.size() + pinnable_val.size() + user_timestamp_size_;
-        for (size_t i = 0; i < pinnable_vals.size(); ++i) {
-          bytes += pinnable_vals[i].size();
-          pinnable_vals[i].Reset();
+        if (s.ok()) {
+          get_found++;
+          bytes += key.size() + pinnable_val.size() + user_timestamp_size_;
+          for (size_t i = 0; i < pinnable_vals.size(); ++i) {
+            bytes += pinnable_vals[i].size();
+            pinnable_vals[i].Reset();
+          }
+        } else if (!s.IsNotFound()) {
+          fprintf(stderr, "Get returned an error: %s\n", s.ToString().c_str());
+          abort();
         }
-      } else if (!s.IsNotFound()) {
-        fprintf(stderr, "Get returned an error: %s\n", s.ToString().c_str());
-        abort();
+        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kRead);
+      } else {
+        // Seek query
+        Iterator* single_iter = db_with_cfh->db->NewIterator(read_options_);
+        if (single_iter != nullptr) {
+          single_iter->Seek(key);
+          seek++;
+          if (single_iter->Valid() && single_iter->key().compare(key) == 0) {
+            seek_found++;
+          }
+          int64_t scan_length =
+              ParetoCdfInversion(u, FLAGS_iter_theta, FLAGS_iter_k,
+                                 FLAGS_iter_sigma) %
+              FLAGS_mix_max_scan_len;
+          for (int64_t j = 0; j < scan_length && single_iter->Valid(); j++) {
+            Slice value = single_iter->value();
+            memcpy(value_buffer, value.data(),
+                   std::min(value.size(), sizeof(value_buffer)));
+            bytes += single_iter->key().size() + single_iter->value().size();
+            single_iter->Next();
+            assert(single_iter->status().ok());
+          }
+        }
+        delete single_iter;
+        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kSeek);
       }
 
       if (thread->shared->read_rate_limiter.get() != nullptr &&
-          read % 256 == 255) {
+          gets % 256 == 255) {
         thread->shared->read_rate_limiter->Request(
             256, Env::IO_HIGH, nullptr /* stats */, RateLimiter::OpType::kRead);
         thread->stats.ResetLastOpTime();
       }
-
-      thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kRead);
     }
 
-    char msg[100];
-    snprintf(msg, sizeof(msg), "(%" PRIu64 " of %" PRIu64 " found)\n", found,
-             read);
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "Gets: %" PRIu64 " in %" PRIu64 " found\nSeek: %" PRIu64
+             " in %" PRIu64 " found\n",
+             get_found, gets, seek_found, seek);
 
     thread->stats.AddBytes(bytes);
     thread->stats.AddMessage(msg);
