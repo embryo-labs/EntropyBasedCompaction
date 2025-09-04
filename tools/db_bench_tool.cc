@@ -6429,6 +6429,7 @@ class Benchmark {
   }
 
   void ReadRandom(ThreadState* thread) {
+    int64_t reads = 0;
     int64_t gets = 0;
     int64_t get_found = 0;
     int64_t seek = 0;
@@ -6514,6 +6515,7 @@ class Benchmark {
       int query_type = query.GetType(rand_v);
 
       // Start the query
+      reads += 1;
       if (query_type == 0) {
         // the Get query
         gets++;
@@ -6580,7 +6582,7 @@ class Benchmark {
       }
 
       if (thread->shared->read_rate_limiter.get() != nullptr &&
-          gets % 256 == 255) {
+          reads % 256 == 255) {
         thread->shared->read_rate_limiter->Request(
             256, Env::IO_HIGH, nullptr /* stats */, RateLimiter::OpType::kRead);
         thread->stats.ResetLastOpTime();
