@@ -2103,6 +2103,7 @@ struct DBWithColumnFamilies {
 
 enum OperationType : unsigned char {
   kRead = 0,
+  kGet,
   kWrite,
   kDelete,
   kSeek,
@@ -2117,12 +2118,11 @@ enum OperationType : unsigned char {
 };
 
 static std::unordered_map<OperationType, std::string, std::hash<unsigned char>>
-    OperationTypeString = {{kRead, "read"},         {kWrite, "write"},
-                           {kDelete, "delete"},     {kSeek, "seek"},
-                           {kMerge, "merge"},       {kUpdate, "update"},
-                           {kCompress, "compress"}, {kCompress, "uncompress"},
-                           {kCrc, "crc"},           {kHash, "hash"},
-                           {kOthers, "op"}};
+    OperationTypeString = {
+        {kRead, "read"},     {kGet, "get"},           {kWrite, "write"},
+        {kDelete, "delete"}, {kSeek, "seek"},         {kMerge, "merge"},
+        {kUpdate, "update"}, {kCompress, "compress"}, {kCompress, "uncompress"},
+        {kCrc, "crc"},       {kHash, "hash"},         {kOthers, "op"}};
 
 // A class that reports stats to CSV file.
 class ReporterAgent {
@@ -6552,7 +6552,7 @@ class Benchmark {
           fprintf(stderr, "Get returned an error: %s\n", s.ToString().c_str());
           abort();
         }
-        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kRead);
+        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kGet);
       } else {
         // Seek query
         Iterator* single_iter = db_with_cfh->db->NewIterator(read_options_);
