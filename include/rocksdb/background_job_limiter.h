@@ -136,15 +136,9 @@ class BackgroundJobLimiter
     return CompactionHandle(shared_from_this(), std::move(compaction_status));
   }
 
-  size_t num_running_flushes() const {
-    return num_running_flushes_.load(std::memory_order_relaxed);
-  }
-  size_t num_running_compactions() const {
-    return num_running_compactions_.load(std::memory_order_relaxed);
-  }
-  size_t num_compactions() const {
-    std::unique_lock<std::mutex> lock(lock_);
-    return compactions_.size();
+  size_t num_running_bg_jobs() const {
+    return num_running_flushes_.load(std::memory_order_relaxed) +
+           num_running_compactions_.load(std::memory_order_relaxed);
   }
 
  private:

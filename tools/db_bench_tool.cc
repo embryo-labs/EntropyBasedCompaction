@@ -2200,8 +2200,9 @@ class ReporterAgent {
     header << ",num-sorted-runs," << DB::Properties::kNumTopLevelSortedRuns
            << ',' << DB::Properties::kNumMergingMainLevelSortedRuns << ','
            << DB::Properties::kBufferLevelSize;
+    header << ",num-flushes,num-compactions";
     if (options.background_job_limiter) {
-      header << ",num-running-flushes,num-running-compactions,num-compactions";
+      header << ",num-running-bg-jobs";
     }
     if (options.rate_limiter.get()) {
       header << ",IO_LOW,IO_FLATTEN,IO_MAIN_LEVEL,IO_HIGH,IO_USER,rate-limit";
@@ -2276,28 +2277,32 @@ class ReporterAgent {
       }
       report << ',' << num_sorted_runs;
 
-      uint64_t num_top_level_sorted_runs;
-      bool good = db_->GetIntProperty(DB::Properties::kNumTopLevelSortedRuns,
-                                      &num_top_level_sorted_runs);
+      uint64_t value;
+      bool good =
+          db_->GetIntProperty(DB::Properties::kNumTopLevelSortedRuns, &value);
       assert(good);
-      report << ',' << num_top_level_sorted_runs;
+      report << ',' << value;
 
-      uint64_t num_merging_main_level_sorted_runs;
       good = db_->GetIntProperty(DB::Properties::kNumMergingMainLevelSortedRuns,
-                                 &num_merging_main_level_sorted_runs);
+                                 &value);
       assert(good);
-      report << ',' << num_merging_main_level_sorted_runs;
+      report << ',' << value;
 
-      uint64_t buffer_level_size;
-      good = db_->GetIntProperty(DB::Properties::kBufferLevelSize,
-                                 &buffer_level_size);
+      good = db_->GetIntProperty(DB::Properties::kBufferLevelSize, &value);
       assert(good);
-      report << ',' << buffer_level_size;
+      report << ',' << value;
+
+      good = db_->GetIntProperty(DB::Properties::kNumRunningFlushes, &value);
+      assert(good);
+      report << ',' << value;
+
+      good =
+          db_->GetIntProperty(DB::Properties::kNumRunningCompactions, &value);
+      assert(good);
+      report << ',' << value;
 
       if (background_job_limiter) {
-        report << ',' << background_job_limiter->num_running_flushes() << ','
-               << background_job_limiter->num_running_compactions() << ','
-               << background_job_limiter->num_compactions();
+        report << ',' << background_job_limiter->num_running_bg_jobs();
       }
 
       if (rate_limiter) {
