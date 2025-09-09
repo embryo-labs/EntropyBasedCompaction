@@ -426,6 +426,8 @@ DEFINE_double(read_random_exp_range, 0.0,
               "The larger the number is, the more skewed the reads are. "
               "Only used in readrandom and multireadrandom benchmarks.");
 
+DEFINE_double(write_random_exp_range, 0.0, "");
+
 DEFINE_bool(histogram, false, "Print histogram of operation timings");
 
 DEFINE_bool(confidence_interval_only, false,
@@ -3020,6 +3022,7 @@ class Benchmark {
   int64_t reads_;
   int64_t deletes_;
   double read_random_exp_range_;
+  double write_random_exp_range_;
   int64_t writes_;
   int64_t readwrites_;
   int64_t merge_keys_;
@@ -3501,6 +3504,7 @@ class Benchmark {
         entries_per_batch_(1),
         reads_(FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads),
         read_random_exp_range_(0.0),
+        write_random_exp_range_(0.0),
         writes_(FLAGS_writes < 0 ? FLAGS_num : FLAGS_writes),
         readwrites_(
             (FLAGS_writes < 0 && FLAGS_reads < 0)
@@ -3735,6 +3739,7 @@ class Benchmark {
       max_num_range_tombstones_ = FLAGS_max_num_range_tombstones;
       write_options_ = WriteOptions();
       read_random_exp_range_ = FLAGS_read_random_exp_range;
+      write_random_exp_range_ = FLAGS_write_random_exp_range;
       if (FLAGS_sync) {
         write_options_.sync = true;
       }
@@ -6412,16 +6417,15 @@ class Benchmark {
     thread->stats.AddMessage(msg);
   }
 
-  int64_t GetRandomKey(Random64* rand) {
+  int64_t GetRandomKey(Random64* rand, double random_exp_range) {
     uint64_t rand_int = rand->Next();
     int64_t key_rand;
-    if (read_random_exp_range_ == 0) {
+    if (random_exp_range == 0) {
       key_rand = rand_int % FLAGS_num;
     } else {
       const uint64_t kBigInt = static_cast<uint64_t>(1U) << 62;
       long double order = -static_cast<long double>(rand_int % kBigInt) /
-                          static_cast<long double>(kBigInt) *
-                          read_random_exp_range_;
+                          static_cast<long double>(kBigInt) * random_exp_range;
       long double exp_ran = std::exp(order);
       uint64_t rand_num =
           static_cast<int64_t>(exp_ran * static_cast<long double>(FLAGS_num));
@@ -6483,7 +6487,7 @@ class Benchmark {
       if (entries_per_batch_ > 1 && FLAGS_multiread_stride) {
         if (++num_keys == entries_per_batch_) {
           num_keys = 0;
-          key_rand = GetRandomKey(&thread->rand);
+          key_rand = GetRandomKey(&thread->rand, read_random_exp_range_);
           if ((key_rand + (entries_per_batch_ - 1) * FLAGS_multiread_stride) >=
               FLAGS_num) {
             key_rand = FLAGS_num - entries_per_batch_ * FLAGS_multiread_stride;
@@ -6492,7 +6496,7 @@ class Benchmark {
           key_rand += FLAGS_multiread_stride;
         }
       } else {
-        key_rand = GetRandomKey(&thread->rand);
+        key_rand = GetRandomKey(&thread->rand, read_random_exp_range_);
       }
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
       std::string ts_ret;
@@ -6514,7 +6518,7 @@ class Benchmark {
         cfh = db_with_cfh->db->DefaultColumnFamily();
       }
 
-      int64_t ini_rand = GetRandomKey(&thread->rand);
+      int64_t ini_rand = GetRandomKey(&thread->rand, read_random_exp_range_);
       int64_t rand_v = ini_rand % FLAGS_num;
       double u = static_cast<double>(rand_v) / FLAGS_num;
       int query_type = query.GetType(rand_v);
@@ -6629,7 +6633,7 @@ class Benchmark {
     while (!duration.Done(entries_per_batch_)) {
       DB* db = SelectDB(thread);
       if (FLAGS_multiread_stride) {
-        int64_t key = GetRandomKey(&thread->rand);
+        int64_t key = GetRandomKey(&thread->rand, read_random_exp_range_);
         if ((key + (entries_per_batch_ - 1) * FLAGS_multiread_stride) >=
             static_cast<int64_t>(FLAGS_num)) {
           key = FLAGS_num - entries_per_batch_ * FLAGS_multiread_stride;
@@ -6640,7 +6644,9 @@ class Benchmark {
         }
       } else {
         for (int64_t i = 0; i < entries_per_batch_; ++i) {
-          GenerateKeyFromInt(GetRandomKey(&thread->rand), FLAGS_num, &keys[i]);
+          GenerateKeyFromInt(
+              GetRandomKey(&thread->rand, read_random_exp_range_), FLAGS_num,
+              &keys[i]);
         }
       }
       Slice ts;
@@ -6753,8 +6759,8 @@ class Benchmark {
     while (!duration.Done(1)) {
       DB* db = SelectDB(thread);
       for (size_t i = 0; i < batch_size; ++i) {
-        int64_t lkey = GetRandomKey(&thread->rand);
-        int64_t rkey = GetRandomKey(&thread->rand);
+        int64_t lkey = GetRandomKey(&thread->rand, read_random_exp_range_);
+        int64_t rkey = GetRandomKey(&thread->rand, read_random_exp_range_);
         if (lkey > rkey) {
           std::swap(lkey, rkey);
         }
@@ -7049,7 +7055,7 @@ class Benchmark {
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
       int64_t ini_rand, rand_v, key_rand, key_seed;
-      ini_rand = GetRandomKey(&thread->rand);
+      ini_rand = GetRandomKey(&thread->rand, read_random_exp_range_);
       rand_v = ini_rand % FLAGS_num;
       double u = static_cast<double>(rand_v) / FLAGS_num;
 
@@ -7276,7 +7282,7 @@ class Benchmark {
     Duration duration(FLAGS_duration, std::numeric_limits<int64_t>::max());
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
-      auto key_rand = GetRandomKey(&thread->rand) % FLAGS_num;
+      auto key_rand = GetRandomKey(&thread->rand, write_random_exp_range_) % FLAGS_num;
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
 
       thread->stats.ResetLastOpTime();
@@ -7323,7 +7329,7 @@ class Benchmark {
     Duration duration(FLAGS_duration, std::numeric_limits<int64_t>::max());
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
-      auto key_rand = GetRandomKey(&thread->rand) % FLAGS_num;
+      auto key_rand = GetRandomKey(&thread->rand, read_random_exp_range_) % FLAGS_num;
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
 
       pinnable_val.Reset();
@@ -7707,7 +7713,9 @@ class Benchmark {
         }
       }
 
-      GenerateKeyFromInt(thread->rand.Next() % FLAGS_num, FLAGS_num, &key);
+      auto key_rand = GetRandomKey(&thread->rand, write_random_exp_range_) % FLAGS_num;
+      GenerateKeyFromInt(key_rand, FLAGS_num, &key);
+
       Status s;
 
       Slice val = gen.Generate();
@@ -8317,7 +8325,7 @@ class Benchmark {
     Duration duration(FLAGS_duration, readwrites_);
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
-      int64_t key_rand = thread->rand.Next() % merge_keys_;
+      auto key_rand = GetRandomKey(&thread->rand, write_random_exp_range_) % merge_keys_;
       GenerateKeyFromInt(key_rand, merge_keys_, &key);
 
       Status s;
