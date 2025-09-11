@@ -7128,7 +7128,7 @@ class Benchmark {
           thread->shared->read_rate_limiter->Request(100, Env::IO_HIGH,
                                                      nullptr /*stats*/);
         }
-        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kRead);
+        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kGet);
       } else if (query_type == 1) {
         // the Put query
         puts++;
@@ -7343,7 +7343,7 @@ class Benchmark {
         fprintf(stderr, "Get returned an error: %s\n", s.ToString().c_str());
         abort();
       }
-      thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kRead);
+      thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kGet);
       thread->shared->read_rate_limiter->Request(1, Env::IO_HIGH,
                                                  nullptr /*stats*/);
     }
