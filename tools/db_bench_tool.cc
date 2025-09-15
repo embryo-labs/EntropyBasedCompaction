@@ -112,6 +112,8 @@ using GFLAGS_NAMESPACE::RegisterFlagValidator;
 using GFLAGS_NAMESPACE::SetUsageMessage;
 using GFLAGS_NAMESPACE::SetVersionString;
 
+DEFINE_string(benchmarks_json, "", "");
+
 DEFINE_string(
     benchmarks,
     "fillseq,"
@@ -3023,6 +3025,8 @@ class Benchmark {
   int64_t deletes_;
   double read_random_exp_range_;
   double write_random_exp_range_;
+
+  uint64_t duration_;
   int64_t writes_;
   int64_t readwrites_;
   int64_t merge_keys_;
@@ -3721,14 +3725,47 @@ class Benchmark {
     }
     Open(&open_options_);
     PrintHeader(open_options_);
-    std::stringstream benchmark_stream(FLAGS_benchmarks);
-    std::string name;
-    std::unique_ptr<ExpiredTimeFilter> filter;
-    while (std::getline(benchmark_stream, name, ',')) {
+    std::variant<std::pair<nlohmann::json, nlohmann::json::iterator>,
+                 std::stringstream>
+        benchmarks;
+    if (!FLAGS_benchmarks_json.empty()) {
+      auto json = nlohmann::json::parse(FLAGS_benchmarks_json);
+      benchmarks = std::make_pair(std::move(json), nlohmann::json::iterator());
+      auto& pair = std::get<0>(benchmarks);
+      pair.second = pair.first.begin();
+    } else {
+      benchmarks = std::stringstream(FLAGS_benchmarks);
+    }
+    bool first_benchmark = true;
+    for (;;) {
+      std::string name;
+      std::unique_ptr<ExpiredTimeFilter> filter;
+      if (benchmarks.index() == 0) {
+        auto& [json, benchmarks_it] = std::get<0>(benchmarks);
+        if (!first_benchmark) {
+          ++benchmarks_it;
+        }
+        if (benchmarks_it == json.end()) {
+          break;
+        }
+        auto& benchmark = *benchmarks_it;
+        name = benchmark["name"];
+        auto it = benchmark.find("duration");
+        duration_ = (it != benchmark.end() ? static_cast<uint64_t>(*it)
+                                           : FLAGS_duration);
+        it = benchmark.find("writes");
+        writes_ = (it != benchmark.end()
+                       ? static_cast<int64_t>(*it)
+                       : (FLAGS_writes < 0 ? FLAGS_num : FLAGS_writes));
+      } else {
+        std::getline(std::get<1>(benchmarks), name, ',');
+        duration_ = FLAGS_duration;
+        writes_ = (FLAGS_writes < 0 ? FLAGS_num : FLAGS_writes);
+      }
+      first_benchmark = false;
       // Sanitize parameters
       num_ = FLAGS_num;
       reads_ = (FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads);
-      writes_ = (FLAGS_writes < 0 ? FLAGS_num : FLAGS_writes);
       deletes_ = (FLAGS_deletes < 0 ? FLAGS_num : FLAGS_deletes);
       value_size = FLAGS_value_size;
       key_size_ = FLAGS_key_size;
@@ -4183,7 +4220,7 @@ class Benchmark {
       secondary_update_thread_.reset();
     }
 
-    if (name != "replay" && FLAGS_trace_file != "") {
+    if (FLAGS_trace_file != "") {
       Status s = db_.db->EndTrace();
       if (!s.ok()) {
         fprintf(stderr, "Encountered an error ending the trace, %s\n",
@@ -5478,7 +5515,7 @@ class Benchmark {
   }
 
   void DoWrite(ThreadState* thread, WriteMode write_mode) {
-    const int test_duration = write_mode == RANDOM ? FLAGS_duration : 0;
+    const int test_duration = write_mode == RANDOM ? duration_ : 0;
     const int64_t num_ops = writes_ == 0 ? num_ : writes_;
 
     size_t num_key_gens = 1;
@@ -6373,7 +6410,7 @@ class Benchmark {
       pot <<= 1;
     }
 
-    Duration duration(FLAGS_duration, reads_);
+    Duration duration(duration_, reads_);
     do {
       for (int i = 0; i < 100; ++i) {
         int64_t key_rand = thread->rand.Next() & (pot - 1);
@@ -6467,7 +6504,7 @@ class Benchmark {
       ts_guard.reset(new char[user_timestamp_size_]);
     }
 
-    Duration duration(FLAGS_duration, reads_);
+    Duration duration(duration_, reads_);
     char value_buffer[256];
     for (;;) {
       if (FLAGS_finish_after_writes) {
@@ -6629,7 +6666,7 @@ class Benchmark {
       ts_guard.reset(new char[user_timestamp_size_]);
     }
 
-    Duration duration(FLAGS_duration, reads_);
+    Duration duration(duration_, reads_);
     while (!duration.Done(entries_per_batch_)) {
       DB* db = SelectDB(thread);
       if (FLAGS_multiread_stride) {
@@ -6712,7 +6749,7 @@ class Benchmark {
     Slice skey = AllocateKey(&skey_guard);
     std::unique_ptr<const char[]> ekey_guard;
     Slice ekey = AllocateKey(&ekey_guard);
-    Duration duration(FLAGS_duration, reads_);
+    Duration duration(duration_, reads_);
     if (FLAGS_num < static_cast<int64_t>(batch_size)) {
       std::terminate();
     }
@@ -6755,7 +6792,7 @@ class Benchmark {
       ranges.emplace_back(lkeys.back(), rkeys.back());
       sizes.push_back(0);
     }
-    Duration duration(FLAGS_duration, reads_);
+    Duration duration(duration_, reads_);
     while (!duration.Done(1)) {
       DB* db = SelectDB(thread);
       for (size_t i = 0; i < batch_size; ++i) {
@@ -7051,7 +7088,7 @@ class Benchmark {
       use_random_modeling = true;
     }
 
-    Duration duration(FLAGS_duration, reads_);
+    Duration duration(duration_, reads_);
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
       int64_t ini_rand, rand_v, key_rand, key_seed;
@@ -7279,7 +7316,7 @@ class Benchmark {
     PerSec compaction_limit(FLAGS_compaction_limit_file);
     PerSec reads_per_second(FLAGS_reads_per_second_file);
 
-    Duration duration(FLAGS_duration, std::numeric_limits<int64_t>::max());
+    Duration duration(duration_, std::numeric_limits<int64_t>::max());
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
       auto key_rand = GetRandomKey(&thread->rand, write_random_exp_range_) % FLAGS_num;
@@ -7326,7 +7363,7 @@ class Benchmark {
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
 
-    Duration duration(FLAGS_duration, std::numeric_limits<int64_t>::max());
+    Duration duration(duration_, std::numeric_limits<int64_t>::max());
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
       auto key_rand = GetRandomKey(&thread->rand, read_random_exp_range_) % FLAGS_num;
@@ -7350,7 +7387,7 @@ class Benchmark {
   }
 
   void IteratorCreation(ThreadState* thread) {
-    Duration duration(FLAGS_duration, reads_);
+    Duration duration(duration_, reads_);
     ReadOptions options = read_options_;
     std::unique_ptr<char[]> ts_guard;
     if (user_timestamp_size_ > 0) {
@@ -7419,7 +7456,7 @@ class Benchmark {
       batch = 256;
     }
 
-    Duration duration(FLAGS_duration, reads_);
+    Duration duration(duration_, reads_);
     char value_buffer[256];
     for (;;) {
       if (FLAGS_finish_after_writes) {
@@ -7545,7 +7582,7 @@ class Benchmark {
     std::chrono::nanoseconds interval(1000000000 / per_sec);
     auto arrive_time = std::chrono::steady_clock::now();
 
-    Duration duration(FLAGS_duration, reads_);
+    Duration duration(duration_, reads_);
     char value_buffer[256];
     for (;;) {
       if (FLAGS_finish_after_writes) {
@@ -7587,7 +7624,7 @@ class Benchmark {
     WriteBatch batch(/*reserved_bytes=*/0, /*max_bytes=*/0,
                      FLAGS_write_batch_protection_bytes_per_key,
                      user_timestamp_size_);
-    Duration duration(seq ? 0 : FLAGS_duration, deletes_);
+    Duration duration(seq ? 0 : duration_, deletes_);
     int64_t i = 0;
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
@@ -7815,7 +7852,7 @@ class Benchmark {
     Iterator* iter = db_.db->NewIterator(read_options);
 
     fprintf(stderr, "num reads to do %" PRIu64 "\n", reads_);
-    Duration duration(FLAGS_duration, reads_);
+    Duration duration(duration_, reads_);
     uint64_t num_seek_to_first = 0;
     uint64_t num_next = 0;
     while (!duration.Done(1)) {
@@ -8037,7 +8074,7 @@ class Benchmark {
     int put_weight = 0;
     int64_t reads_done = 0;
     int64_t writes_done = 0;
-    Duration duration(FLAGS_duration, readwrites_);
+    Duration duration(duration_, readwrites_);
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
@@ -8110,7 +8147,7 @@ class Benchmark {
     std::string value;
     int64_t found = 0;
     int64_t bytes = 0;
-    Duration duration(FLAGS_duration, readwrites_);
+    Duration duration(duration_, readwrites_);
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
@@ -8176,7 +8213,7 @@ class Benchmark {
     RandomGenerator gen;
     std::string existing_value;
     int64_t found = 0;
-    Duration duration(FLAGS_duration, readwrites_);
+    Duration duration(duration_, readwrites_);
 
     BytesXOROperator xor_operator;
 
@@ -8252,7 +8289,7 @@ class Benchmark {
       ts_guard.reset(new char[user_timestamp_size_]);
     }
     // The number of iterations is the larger of read_ or write_
-    Duration duration(FLAGS_duration, readwrites_);
+    Duration duration(duration_, readwrites_);
     while (!duration.Done(1)) {
       DB* db = SelectDB(thread);
       GenerateKeyFromInt(thread->rand.Next() % FLAGS_num, FLAGS_num, &key);
@@ -8322,7 +8359,7 @@ class Benchmark {
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
     // The number of iterations is the larger of read_ or write_
-    Duration duration(FLAGS_duration, readwrites_);
+    Duration duration(duration_, readwrites_);
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
       auto key_rand = GetRandomKey(&thread->rand, write_random_exp_range_) % merge_keys_;
@@ -8371,7 +8408,7 @@ class Benchmark {
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
     // the number of iterations is the larger of read_ or write_
-    Duration duration(FLAGS_duration, readwrites_);
+    Duration duration(duration_, readwrites_);
     while (!duration.Done(1)) {
       DB* db = SelectDB(thread);
       GenerateKeyFromInt(thread->rand.Next() % merge_keys_, merge_keys_, &key);
@@ -8601,7 +8638,7 @@ class Benchmark {
   // RandomTransactionVerify() will then validate the correctness of the results
   // by checking if the sum of all keys in each set is the same.
   void RandomTransaction(ThreadState* thread) {
-    Duration duration(FLAGS_duration, readwrites_);
+    Duration duration(duration_, readwrites_);
     uint16_t num_prefix_ranges = static_cast<uint16_t>(FLAGS_transaction_sets);
     uint64_t transactions_done = 0;
 
@@ -8717,7 +8754,7 @@ class Benchmark {
     std::default_random_engine generator;
     std::normal_distribution<double> distribution(FLAGS_numdistinct / 2.0,
                                                   FLAGS_stddev);
-    Duration duration(FLAGS_duration, FLAGS_num);
+    Duration duration(duration_, FLAGS_num);
     while (!duration.Done(1)) {
       int64_t rnd_id = static_cast<int64_t>(distribution(generator));
       int64_t key_id = std::max(std::min(FLAGS_numdistinct - 1, rnd_id),
@@ -8853,7 +8890,7 @@ class Benchmark {
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
 
-    Duration duration(FLAGS_duration, writes_);
+    Duration duration(duration_, writes_);
     while (!duration.Done(1)) {
       DB* db = SelectDB(thread);
 
