@@ -16,30 +16,40 @@ CompactionPolicyTiering::PickCompaction(
   if (i == status.end() || i->merging) {
     return std::nullopt;
   }
+  size_t num = 1;
   auto j = i;
   ++j;
   while (j != status.end() && !j->merging) {
-    auto next = j;
-    ++next;
+    if (j->count != i->count) {
+      i = j;
+      num = 1;
+      ++j;
+      continue;
+    }
+    num += 1;
+    ++j;
+    if (num < T_) {
+      continue;
+    }
+    assert(num == T_);
     bool pick = false;
-    if (i->count == j->count) {
-      if (next == status.end()) {
-        pick = true;
-      } else if (next->merging) {
-        if (j->count * 2 != next->count) {
-          pick = true;
-        }
-      } else if (j->count != next->count) {
+    if (j == status.end()) {
+      pick = true;
+    } else if (j->merging) {
+      if (i->count * T_ != j->count) {
         pick = true;
       }
+    } else if (i->count != j->count) {
+      pick = true;
     }
     if (pick) {
-      uint64_t x = j->count;
-      assert(lowbit(x) == x);
+      --j;
+      uint64_t x = i->count;
       uint64_t ans = 0;
       assert(x > 0);
       while (x > 1) {
-        x >>= 1;
+        assert(x % T_ == 0);
+        x /= T_;
         ans += 1;
       }
       assert(ans <= Env::IOPriority::IO_MID - 1);
@@ -47,8 +57,8 @@ CompactionPolicyTiering::PickCompaction(
           i, j,
           static_cast<Env::IOPriority>(Env::IOPriority::IO_MID - 1 - ans));
     }
-    i = j;
-    j = next;
+    ++i;
+    num -= 1;
   }
   return std::nullopt;
 }
