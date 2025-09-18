@@ -3739,6 +3739,7 @@ class Benchmark {
     bool first_benchmark = true;
     for (;;) {
       std::string name;
+      int num_threads;
       std::unique_ptr<ExpiredTimeFilter> filter;
       if (benchmarks.index() == 0) {
         auto& [json, benchmarks_it] = std::get<0>(benchmarks);
@@ -3750,7 +3751,10 @@ class Benchmark {
         }
         auto& benchmark = *benchmarks_it;
         name = benchmark["name"];
-        auto it = benchmark.find("duration");
+        auto it = benchmark.find("threads");
+        num_threads = (it != benchmark.end() ? static_cast<uint64_t>(*it)
+                                             : FLAGS_threads);
+        it = benchmark.find("duration");
         duration_ = (it != benchmark.end() ? static_cast<uint64_t>(*it)
                                            : FLAGS_duration);
         it = benchmark.find("writes");
@@ -3759,6 +3763,7 @@ class Benchmark {
                        : (FLAGS_writes < 0 ? FLAGS_num : FLAGS_writes));
       } else {
         std::getline(std::get<1>(benchmarks), name, ',');
+        num_threads = FLAGS_threads;
         duration_ = FLAGS_duration;
         writes_ = (FLAGS_writes < 0 ? FLAGS_num : FLAGS_writes);
       }
@@ -3799,7 +3804,6 @@ class Benchmark {
       void (Benchmark::*post_process_method)() = nullptr;
 
       bool fresh_db = false;
-      int num_threads = FLAGS_threads;
 
       int num_repeat = 1;
       int num_warmup = 0;
