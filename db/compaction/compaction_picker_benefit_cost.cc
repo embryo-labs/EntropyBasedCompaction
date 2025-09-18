@@ -63,15 +63,16 @@ CompactionPickerBenefitCost::PickCompaction() const {
     size += j->size;
     num += 1;
     sum_nlog2n += j->size * log2(j->size);
-    while (i->size < j->size && num > 2 &&
-           i->size < (double)(size - i->size) / (num - 1) / k_c) {
+    while (num > 2 && i->size <= (double)(size - i->size) / (num - 1) / k_c) {
       size -= i->size;
       num -= 1;
       sum_nlog2n -= i->size * log2(i->size);
       ++i;
     }
     double ratio_benefit = log2(size) - sum_nlog2n / size;
-    if (!best.has_value() || best->ratio_benefit < ratio_benefit) {
+    if (!best.has_value() || best->ratio_benefit < ratio_benefit - 1e-6 ||
+        (best->ratio_benefit < ratio_benefit + 1e-6 &&
+         best->ratio_num < (double)num / size)) {
       best = BestInfo{
           .ratio_benefit = ratio_benefit,
           .ratio_num = (double)num / size,
@@ -85,7 +86,7 @@ CompactionPickerBenefitCost::PickCompaction() const {
   }
   if (j != sorted_runs_.end()) {
     assert(j->is_merging());
-    if (best->ratio_benefit < j->benefit_cost_ratio ||
+    if (best->ratio_benefit < j->benefit_cost_ratio - 1e-6 ||
         best->ratio_num < (double)j->num_sorted_runs / j->size * k_c) {
       return std::nullopt;
     }
