@@ -70,9 +70,17 @@ CompactionPickerBenefitCost::PickCompaction() const {
       ++i;
     }
     double ratio_benefit = log2(size) - sum_nlog2n / size;
-    if (!best.has_value() || best->ratio_benefit < ratio_benefit - 1e-6 ||
-        (best->ratio_benefit < ratio_benefit + 1e-6 &&
-         best->ratio_num < (double)num / size)) {
+    bool better = false;
+    if (best.has_value()) {
+      if (best->ratio_benefit < ratio_benefit - 1e-6) {
+        better = true;
+      } else if (best->ratio_benefit < ratio_benefit + 1e-6) {
+        better = best->ratio_num < (double)num / size;
+      }
+    } else {
+      better = ratio_benefit > threshold_ - 1e-6;
+    }
+    if (better) {
       best = BestInfo{
           .ratio_benefit = ratio_benefit,
           .ratio_num = (double)num / size,

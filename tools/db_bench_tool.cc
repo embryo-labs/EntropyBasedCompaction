@@ -550,7 +550,7 @@ DEFINE_bool(allow_intra_l0_compactions,
             ROCKSDB_NAMESPACE::Options().allow_intra_l0_compactions, "");
 
 DEFINE_string(compaction_policy, "", "steady/lazy-leveling/dynamic-tiering");
-DEFINE_double(benefit_cost_threshold, 0, "");
+DEFINE_double(benefit_cost_threshold, 0.439496986921513, "");
 
 DEFINE_string(steady_policy_file, "", "");
 
