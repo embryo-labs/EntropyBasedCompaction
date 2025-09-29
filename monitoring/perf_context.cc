@@ -122,6 +122,8 @@ struct PerfContextByLevelInt {
   defCmd(bloom_memtable_miss_count)                \
   defCmd(bloom_sst_hit_count)                      \
   defCmd(bloom_sst_miss_count)                     \
+  defCmd(check_filter_count)                       \
+  defCmd(check_filter_nanos)                       \
   defCmd(key_lock_wait_time)                       \
   defCmd(key_lock_wait_count)                      \
   defCmd(env_new_sequential_file_nanos)            \

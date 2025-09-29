@@ -2121,6 +2121,12 @@ bool BlockBasedTable::FullFilterKeyMayMatch(
   if (filter == nullptr) {
     return true;
   }
+  bool timer_enabled = GetPerfLevel() >= PerfLevel::kEnableTimeExceptForMutex;
+  std::chrono::steady_clock::time_point start_time;
+  if (timer_enabled) {
+    start_time = std::chrono::steady_clock::now();
+  }
+
   Slice user_key = ExtractUserKey(internal_key);
   const Slice* const const_ikey_ptr = &internal_key;
   bool may_match = true;
@@ -2152,6 +2158,13 @@ bool BlockBasedTable::FullFilterKeyMayMatch(
       // Includes prefix stats
       PERF_COUNTER_BY_LEVEL_ADD(bloom_filter_useful, 1, rep_->level);
     }
+  }
+  PERF_COUNTER_ADD(check_filter_count, 1);
+  if (timer_enabled) {
+    auto time = std::chrono::steady_clock::now() - start_time;
+    auto nanos =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(time).count();
+    PERF_COUNTER_ADD(check_filter_nanos, nanos);
   }
   return may_match;
 }

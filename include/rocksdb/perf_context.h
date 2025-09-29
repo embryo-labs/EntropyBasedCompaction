@@ -228,6 +228,8 @@ struct PerfContextBase {
   uint64_t bloom_sst_hit_count;
   // total number of SST bloom misses
   uint64_t bloom_sst_miss_count;
+  uint64_t check_filter_count;
+  uint64_t check_filter_nanos;
 
   // Time spent waiting on key locks in transaction lock manager.
   uint64_t key_lock_wait_time;
