@@ -311,6 +311,7 @@ DEFINE_int64(seed, 0,
 static std::optional<int64_t> seed_base;
 
 DEFINE_int32(threads, 1, "Number of concurrent threads to run.");
+DEFINE_int32(num_writers, 1, "Number of writer threads.");
 
 DEFINE_int32(duration, 0,
              "Time in seconds for the random-ops tests to run."
@@ -7673,7 +7674,7 @@ class Benchmark {
   void DeleteRandom(ThreadState* thread) { DoDelete(thread, false); }
 
   void ReadWhileWriting(ThreadState* thread) {
-    if (thread->tid > 0) {
+    if (thread->tid >= FLAGS_num_writers) {
       ReadRandom(thread);
     } else {
       BGWriter(thread, kWrite);
