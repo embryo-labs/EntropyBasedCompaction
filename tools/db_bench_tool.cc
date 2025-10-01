@@ -7385,8 +7385,10 @@ class Benchmark {
         abort();
       }
       thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kGet);
-      thread->shared->read_rate_limiter->Request(1, Env::IO_HIGH,
-                                                 nullptr /*stats*/);
+      if (thread->shared->read_rate_limiter) {
+        thread->shared->read_rate_limiter->Request(1, Env::IO_HIGH,
+                                                   nullptr /*stats*/);
+      }
     }
   }
 
