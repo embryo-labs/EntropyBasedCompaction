@@ -6560,10 +6560,7 @@ class Benchmark {
         cfh = db_with_cfh->db->DefaultColumnFamily();
       }
 
-      int64_t ini_rand = GetRandomKey(&thread->rand, read_random_exp_range_);
-      int64_t rand_v = ini_rand % FLAGS_num;
-      double u = static_cast<double>(rand_v) / FLAGS_num;
-      int query_type = query.GetType(rand_v);
+      int query_type = query.GetType(GetRandomKey(&thread->rand, 0));
 
       // Start the query
       reads += 1;
