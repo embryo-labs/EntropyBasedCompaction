@@ -3029,6 +3029,8 @@ class Benchmark {
 
   uint64_t duration_;
   int64_t writes_;
+  uint64_t benchmark_write_rate_limit_;
+
   int64_t readwrites_;
   int64_t merge_keys_;
   bool report_file_operations_;
@@ -3762,11 +3764,16 @@ class Benchmark {
         writes_ = (it != benchmark.end()
                        ? static_cast<int64_t>(*it)
                        : (FLAGS_writes < 0 ? FLAGS_num : FLAGS_writes));
+        it = benchmark.find("benchmark_write_rate_limit");
+        benchmark_write_rate_limit_ =
+            (it != benchmark.end() ? static_cast<uint64_t>(*it)
+                                   : FLAGS_benchmark_write_rate_limit);
       } else {
         std::getline(std::get<1>(benchmarks), name, ',');
         num_threads = FLAGS_threads;
         duration_ = FLAGS_duration;
         writes_ = (FLAGS_writes < 0 ? FLAGS_num : FLAGS_writes);
+        benchmark_write_rate_limit_ = FLAGS_benchmark_write_rate_limit;
       }
       first_benchmark = false;
       // Sanitize parameters
@@ -4309,9 +4316,9 @@ class Benchmark {
     shared.num_initialized = 0;
     shared.num_done = 0;
     shared.start = false;
-    if (FLAGS_benchmark_write_rate_limit > 0) {
+    if (benchmark_write_rate_limit_ > 0) {
       shared.write_rate_limiter.reset(
-          NewGenericRateLimiter(FLAGS_benchmark_write_rate_limit));
+          NewGenericRateLimiter(benchmark_write_rate_limit_));
     }
     if (FLAGS_benchmark_read_rate_limit > 0) {
       shared.read_rate_limiter.reset(NewGenericRateLimiter(
@@ -5194,7 +5201,7 @@ class Benchmark {
     }
 
     if (FLAGS_sine_write_rate) {
-      FLAGS_benchmark_write_rate_limit = static_cast<uint64_t>(SineRate(0));
+      benchmark_write_rate_limit_ = static_cast<uint64_t>(SineRate(0));
     }
 
     if (options.rate_limiter == nullptr) {
@@ -7700,9 +7707,9 @@ class Benchmark {
     int64_t bytes = 0;
 
     std::unique_ptr<RateLimiter> write_rate_limiter;
-    if (FLAGS_benchmark_write_rate_limit > 0) {
+    if (benchmark_write_rate_limit_ > 0) {
       write_rate_limiter.reset(
-          NewGenericRateLimiter(FLAGS_benchmark_write_rate_limit));
+          NewGenericRateLimiter(benchmark_write_rate_limit_));
     }
 
     // Don't merge stats from this thread with the readers.
@@ -7783,7 +7790,7 @@ class Benchmark {
       bytes += key.size() + val.size() + user_timestamp_size_;
       thread->stats.FinishedOps(&db_, db_.db, 1, kWrite);
 
-      if (FLAGS_benchmark_write_rate_limit > 0) {
+      if (benchmark_write_rate_limit_ > 0) {
         write_rate_limiter->Request(key.size() + val.size(), Env::IO_HIGH,
                                     nullptr /* stats */,
                                     RateLimiter::OpType::kWrite);
@@ -8886,9 +8893,9 @@ class Benchmark {
     thread->stats.SetExcludeFromMerge();
 
     std::unique_ptr<RateLimiter> write_rate_limiter;
-    if (FLAGS_benchmark_write_rate_limit > 0) {
+    if (benchmark_write_rate_limit_ > 0) {
       write_rate_limiter.reset(
-          NewGenericRateLimiter(FLAGS_benchmark_write_rate_limit));
+          NewGenericRateLimiter(benchmark_write_rate_limit_));
     }
 
     std::unique_ptr<const char[]> key_guard;
@@ -8930,7 +8937,7 @@ class Benchmark {
       thread->stats.FinishedOps(&db_, db_.db, 1, kWrite);
       thread->stats.AddBytes(bytes);
 
-      if (FLAGS_benchmark_write_rate_limit > 0) {
+      if (benchmark_write_rate_limit_ > 0) {
         write_rate_limiter->Request(key.size() + val.size(), Env::IO_HIGH,
                                     nullptr /* stats */,
                                     RateLimiter::OpType::kWrite);
