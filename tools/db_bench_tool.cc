@@ -1618,6 +1618,7 @@ DEFINE_double(mix_seek_ratio, 0.0,
               "The ratio of Seek queries of mix_graph workload");
 DEFINE_int64(mix_max_scan_len, 10000, "The max scan length of Iterator");
 DEFINE_int64(mix_max_value_size, 1024, "The max value size of this workload");
+DEFINE_double(mix_prefix_scan_ratio, 0.0, "");
 DEFINE_double(
     sine_mix_rate_noise, 0.0,
     "Add the noise ratio to the sine rate, it is between 0.0 and 1.0");
@@ -1732,6 +1733,7 @@ DEFINE_int64(keys_per_prefix, 0,
              "control average number of keys generated per prefix, 0 means no "
              "special handling of the prefix, i.e. use the prefix comes with "
              "the generated random number.");
+DEFINE_double(prefix_random_exp_range, 0.0, "");
 DEFINE_bool(total_order_seek, false,
             "Enable total order seek regardless of index format.");
 DEFINE_bool(prefix_same_as_start, false,
@@ -2118,16 +2120,21 @@ enum OperationType : unsigned char {
   kUncompress,
   kCrc,
   kHash,
+  kPrefixScan,
   kOthers,
   kOperationTypeEnumMax,
 };
 
 static std::unordered_map<OperationType, std::string, std::hash<unsigned char>>
     OperationTypeString = {
-        {kRead, "read"},     {kGet, "get"},           {kWrite, "write"},
-        {kDelete, "delete"}, {kSeek, "seek"},         {kMerge, "merge"},
-        {kUpdate, "update"}, {kCompress, "compress"}, {kCompress, "uncompress"},
-        {kCrc, "crc"},       {kHash, "hash"},         {kOthers, "op"}};
+        {kRead, "read"},           {kGet, "get"},
+        {kWrite, "write"},         {kDelete, "delete"},
+        {kSeek, "seek"},           {kMerge, "merge"},
+        {kUpdate, "update"},       {kCompress, "compress"},
+        {kCompress, "uncompress"}, {kCrc, "crc"},
+        {kHash, "hash"},           {kPrefixScan, "prefix-scan"},
+        {kOthers, "op"},
+};
 
 // A class that reports stats to CSV file.
 class ReporterAgent {
@@ -3012,6 +3019,7 @@ class Benchmark {
   int prefix_size_;
   int total_thread_count_;
   int64_t keys_per_prefix_;
+  double prefix_random_exp_range_;
   int64_t entries_per_batch_;
   int64_t writes_before_delete_range_;
   int64_t writes_per_range_tombstone_;
@@ -3508,6 +3516,7 @@ class Benchmark {
         prefix_size_(FLAGS_prefix_size),
         total_thread_count_(0),
         keys_per_prefix_(FLAGS_keys_per_prefix),
+        prefix_random_exp_range_(FLAGS_prefix_random_exp_range),
         entries_per_batch_(1),
         reads_(FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads),
         read_random_exp_range_(0.0),
@@ -3602,6 +3611,26 @@ class Benchmark {
     return Slice(key_guard->get(), key_size_);
   }
 
+  void FillKey(char* buf, size_t size, uint64_t v) {
+    size_t bytes_to_fill = std::min(size, sizeof(v));
+    if (port::kLittleEndian) {
+      for (size_t i = 0; i < bytes_to_fill; ++i) {
+        buf[i] = (v >> ((bytes_to_fill - i - 1) << 3)) & 0xff;
+      }
+    } else {
+      memcpy(buf, &v, bytes_to_fill);
+    }
+    if (size > sizeof(v)) {
+      // fill the rest with 0s
+      memset(buf + sizeof(v), '0', size - sizeof(v));
+    }
+  }
+  uint64_t splitmix64(uint64_t v) {
+    v = (v ^ (v >> 30)) * 0xBF58476D1CE4E5B9;
+    v = (v ^ (v >> 27)) * 0x94D049BB133111EB;
+    return v ^ (v >> 31);
+  }
+
   // Generate key according to the given specification and random number.
   // The resulting key will have the following format:
   //   - If keys_per_prefix_ is positive, extra trailing bytes are either cut
@@ -3628,34 +3657,12 @@ class Benchmark {
     char* pos = start;
     if (keys_per_prefix_ > 0) {
       int64_t num_prefix = num_keys / keys_per_prefix_;
-      int64_t prefix = v % num_prefix;
-      int bytes_to_fill = std::min(prefix_size_, 8);
-      if (port::kLittleEndian) {
-        for (int i = 0; i < bytes_to_fill; ++i) {
-          pos[i] = (prefix >> ((bytes_to_fill - i - 1) << 3)) & 0xFF;
-        }
-      } else {
-        memcpy(pos, static_cast<void*>(&prefix), bytes_to_fill);
-      }
-      if (prefix_size_ > 8) {
-        // fill the rest with 0s
-        memset(pos + 8, '0', prefix_size_ - 8);
-      }
+      auto prefix =
+          GetRandomKey(splitmix64(v), prefix_random_exp_range_, num_prefix);
+      FillKey(pos, prefix_size_, prefix);
       pos += prefix_size_;
     }
-
-    int bytes_to_fill = std::min(key_size_ - static_cast<int>(pos - start), 8);
-    if (port::kLittleEndian) {
-      for (int i = 0; i < bytes_to_fill; ++i) {
-        pos[i] = (v >> ((bytes_to_fill - i - 1) << 3)) & 0xFF;
-      }
-    } else {
-      memcpy(pos, static_cast<void*>(&v), bytes_to_fill);
-    }
-    pos += bytes_to_fill;
-    if (key_size_ > pos - start) {
-      memset(pos, '0', key_size_ - (pos - start));
-    }
+    FillKey(pos, key_size_ - static_cast<int>(pos - start), v);
   }
 
   void GenerateKeyFromIntForSeek(uint64_t v, int64_t num_keys, Slice* key) {
@@ -6466,24 +6473,28 @@ class Benchmark {
     thread->stats.AddMessage(msg);
   }
 
-  int64_t GetRandomKey(Random64* rand, double random_exp_range) {
-    uint64_t rand_int = rand->Next();
+  int64_t GetRandomKey(uint64_t rand_int, double random_exp_range,
+                       int64_t num = FLAGS_num) {
     int64_t key_rand;
     if (random_exp_range == 0) {
-      key_rand = rand_int % FLAGS_num;
+      key_rand = rand_int % num;
     } else {
       const uint64_t kBigInt = static_cast<uint64_t>(1U) << 62;
       long double order = -static_cast<long double>(rand_int % kBigInt) /
                           static_cast<long double>(kBigInt) * random_exp_range;
       long double exp_ran = std::exp(order);
       uint64_t rand_num =
-          static_cast<int64_t>(exp_ran * static_cast<long double>(FLAGS_num));
+          static_cast<int64_t>(exp_ran * static_cast<long double>(num));
       // Map to a different number to avoid locality.
       const uint64_t kBigPrime = 0x5bd1e995;
       // Overflow is like %(2^64). Will have little impact of results.
-      key_rand = static_cast<int64_t>((rand_num * kBigPrime) % FLAGS_num);
+      key_rand = static_cast<int64_t>((rand_num * kBigPrime) % num);
     }
     return key_rand;
+  }
+  int64_t GetRandomKey(Random64* rand, double random_exp_range,
+                       int64_t num = FLAGS_num) {
+    return GetRandomKey(rand->Next(), random_exp_range, num);
   }
 
   void ReadRandom(ThreadState* thread) {
@@ -6499,7 +6510,8 @@ class Benchmark {
     ReadOptions options = read_options_;
 
     QueryDecider query;
-    query.Initiate({FLAGS_mix_get_ratio, FLAGS_mix_seek_ratio});
+    query.Initiate({FLAGS_mix_get_ratio, FLAGS_mix_seek_ratio,
+                    FLAGS_mix_prefix_scan_ratio});
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
@@ -6518,6 +6530,7 @@ class Benchmark {
 
     Duration duration(duration_, reads_);
     char value_buffer[256];
+    ReadOptions prefix_scan_options = read_options_;
     for (;;) {
       if (FLAGS_finish_after_writes) {
         MutexLock l(&thread->shared->mu);
@@ -6610,7 +6623,7 @@ class Benchmark {
           abort();
         }
         thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kGet);
-      } else {
+      } else if (query_type == 1) {
         // Seek query
         Iterator* single_iter = db_with_cfh->db->NewIterator(read_options_);
         if (single_iter != nullptr) {
@@ -6631,6 +6644,32 @@ class Benchmark {
         }
         delete single_iter;
         thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kSeek);
+      } else {
+        // Prefix scan
+        std::string prefix(key.ToStringView().substr(0, prefix_size_));
+        size_t i = prefix.size();
+        while (i > 0) {
+          --i;
+          if (++prefix[i] != 0) {
+            break;
+          }
+        }
+        Slice prefix_slice = prefix;
+        prefix_scan_options.iterate_upper_bound = &prefix_slice;
+        Iterator* it = db_with_cfh->db->NewIterator(prefix_scan_options);
+        if (it != nullptr) {
+          it->Seek(key);
+          while (it->Valid()) {
+            Slice value = it->value();
+            memcpy(value_buffer, value.data(),
+                   std::min(value.size(), sizeof(value_buffer)));
+            bytes += it->key().size() + it->value().size();
+            it->Next();
+            assert(it->status().ok());
+          }
+        }
+        delete it;
+        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kPrefixScan);
       }
 
       if (thread->shared->read_rate_limiter.get() != nullptr &&
@@ -7328,7 +7367,8 @@ class Benchmark {
     Duration duration(duration_, std::numeric_limits<int64_t>::max());
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
-      auto key_rand = GetRandomKey(&thread->rand, write_random_exp_range_) % FLAGS_num;
+      auto key_rand =
+          GetRandomKey(&thread->rand, write_random_exp_range_) % FLAGS_num;
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
 
       thread->stats.ResetLastOpTime();
@@ -7375,7 +7415,8 @@ class Benchmark {
     Duration duration(duration_, std::numeric_limits<int64_t>::max());
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
-      auto key_rand = GetRandomKey(&thread->rand, read_random_exp_range_) % FLAGS_num;
+      auto key_rand =
+          GetRandomKey(&thread->rand, read_random_exp_range_) % FLAGS_num;
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
 
       pinnable_val.Reset();
@@ -7761,7 +7802,8 @@ class Benchmark {
         }
       }
 
-      auto key_rand = GetRandomKey(&thread->rand, write_random_exp_range_) % FLAGS_num;
+      auto key_rand =
+          GetRandomKey(&thread->rand, write_random_exp_range_) % FLAGS_num;
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
 
       Status s;
@@ -8373,7 +8415,8 @@ class Benchmark {
     Duration duration(duration_, readwrites_);
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
-      auto key_rand = GetRandomKey(&thread->rand, write_random_exp_range_) % merge_keys_;
+      auto key_rand =
+          GetRandomKey(&thread->rand, write_random_exp_range_) % merge_keys_;
       GenerateKeyFromInt(key_rand, merge_keys_, &key);
 
       Status s;
