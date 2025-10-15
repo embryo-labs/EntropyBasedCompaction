@@ -6503,6 +6503,8 @@ class Benchmark {
     int64_t get_found = 0;
     int64_t seek = 0;
     int64_t seek_found = 0;
+    uint64_t prefix_scan = 0;
+    uint64_t prefix_scan_scanned = 0;
 
     int64_t bytes = 0;
     int num_keys = 0;
@@ -6646,6 +6648,7 @@ class Benchmark {
         thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kSeek);
       } else {
         // Prefix scan
+        prefix_scan += 1;
         std::string prefix(key.ToStringView().substr(0, prefix_size_));
         size_t i = prefix.size();
         while (i > 0) {
@@ -6660,6 +6663,7 @@ class Benchmark {
         if (it != nullptr) {
           it->Seek(key);
           while (it->Valid()) {
+            prefix_scan_scanned += 1;
             Slice value = it->value();
             memcpy(value_buffer, value.data(),
                    std::min(value.size(), sizeof(value_buffer)));
@@ -6681,10 +6685,11 @@ class Benchmark {
     }
 
     char msg[256];
-    snprintf(msg, sizeof(msg),
-             "Gets: %" PRIu64 " in %" PRIu64 " found\nSeek: %" PRIu64
-             " in %" PRIu64 " found\n",
-             get_found, gets, seek_found, seek);
+    snprintf(
+        msg, sizeof(msg),
+        "Gets: %" PRIu64 " in %" PRIu64 " found\nSeek: %" PRIu64 " in %" PRIu64
+        " found\nPrefix scan: %" PRIu64 ", scanned %" PRIu64 "\n",
+        get_found, gets, seek_found, seek, prefix_scan, prefix_scan_scanned);
 
     thread->stats.AddBytes(bytes);
     thread->stats.AddMessage(msg);
