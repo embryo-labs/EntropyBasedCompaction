@@ -1733,7 +1733,6 @@ DEFINE_int64(keys_per_prefix, 0,
              "control average number of keys generated per prefix, 0 means no "
              "special handling of the prefix, i.e. use the prefix comes with "
              "the generated random number.");
-DEFINE_double(prefix_random_exp_range, 0.0, "");
 DEFINE_bool(total_order_seek, false,
             "Enable total order seek regardless of index format.");
 DEFINE_bool(prefix_same_as_start, false,
@@ -3019,7 +3018,6 @@ class Benchmark {
   int prefix_size_;
   int total_thread_count_;
   int64_t keys_per_prefix_;
-  double prefix_random_exp_range_;
   int64_t entries_per_batch_;
   int64_t writes_before_delete_range_;
   int64_t writes_per_range_tombstone_;
@@ -3516,7 +3514,6 @@ class Benchmark {
         prefix_size_(FLAGS_prefix_size),
         total_thread_count_(0),
         keys_per_prefix_(FLAGS_keys_per_prefix),
-        prefix_random_exp_range_(FLAGS_prefix_random_exp_range),
         entries_per_batch_(1),
         reads_(FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads),
         read_random_exp_range_(0.0),
@@ -3657,8 +3654,7 @@ class Benchmark {
     char* pos = start;
     if (keys_per_prefix_ > 0) {
       int64_t num_prefix = num_keys / keys_per_prefix_;
-      auto prefix =
-          GetRandomKey(splitmix64(v), prefix_random_exp_range_, num_prefix);
+      int64_t prefix = v % num_prefix;
       FillKey(pos, prefix_size_, prefix);
       pos += prefix_size_;
     }
