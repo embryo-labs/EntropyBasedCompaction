@@ -7406,37 +7406,84 @@ class Benchmark {
     }
   }
   void CustomPeriodicRead(ThreadState* thread) {
+    int64_t gets = 0;
     int64_t get_found = 0;
+    uint64_t prefix_scan = 0;
+    uint64_t prefix_scan_scanned = 0;
+
     RandomGenerator gen;
     PinnableSlice pinnable_val;
+
+    QueryDecider query;
+    query.Initiate({FLAGS_mix_get_ratio, FLAGS_mix_prefix_scan_ratio});
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
 
     Duration duration(duration_, std::numeric_limits<int64_t>::max());
+    char value_buffer[256];
+    ReadOptions prefix_scan_options = read_options_;
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
       auto key_rand =
           GetRandomKey(&thread->rand, read_random_exp_range_) % FLAGS_num;
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
 
-      pinnable_val.Reset();
-      thread->stats.ResetLastOpTime();
-      Status s = db_with_cfh->db->Get(read_options_,
-                                      db_with_cfh->db->DefaultColumnFamily(),
-                                      key, &pinnable_val);
-      if (s.ok()) {
-        get_found++;
-      } else if (!s.IsNotFound()) {
-        fprintf(stderr, "Get returned an error: %s\n", s.ToString().c_str());
-        abort();
+      int query_type = query.GetType(GetRandomKey(&thread->rand, 0));
+      if (query_type == 0) {
+        // Get
+        gets += 1;
+        pinnable_val.Reset();
+        thread->stats.ResetLastOpTime();
+        Status s = db_with_cfh->db->Get(read_options_,
+                                        db_with_cfh->db->DefaultColumnFamily(),
+                                        key, &pinnable_val);
+        if (s.ok()) {
+          get_found++;
+        } else if (!s.IsNotFound()) {
+          fprintf(stderr, "Get returned an error: %s\n", s.ToString().c_str());
+          abort();
+        }
+        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kGet);
+      } else {
+        // Prefix scan
+        prefix_scan += 1;
+        std::string prefix(key.ToStringView().substr(0, prefix_size_));
+        size_t i = prefix.size();
+        while (i > 0) {
+          --i;
+          if (++prefix[i] != 0) {
+            break;
+          }
+        }
+        Slice prefix_slice = prefix;
+        prefix_scan_options.iterate_upper_bound = &prefix_slice;
+        Iterator* it = db_with_cfh->db->NewIterator(prefix_scan_options);
+        if (it != nullptr) {
+          it->Seek(key);
+          while (it->Valid()) {
+            prefix_scan_scanned += 1;
+            Slice value = it->value();
+            memcpy(value_buffer, value.data(),
+                   std::min(value.size(), sizeof(value_buffer)));
+            it->Next();
+            assert(it->status().ok());
+          }
+        }
+        delete it;
+        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kPrefixScan);
       }
-      thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kGet);
       if (thread->shared->read_rate_limiter) {
         thread->shared->read_rate_limiter->Request(1, Env::IO_HIGH,
                                                    nullptr /*stats*/);
       }
     }
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "Gets: %" PRIu64 " in %" PRIu64 " found\nPrefix scan: %" PRIu64
+             ", scanned %" PRIu64 "\n",
+             get_found, gets, prefix_scan, prefix_scan_scanned);
+    thread->stats.AddMessage(msg);
   }
 
   void IteratorCreation(ThreadState* thread) {
