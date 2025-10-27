@@ -4015,7 +4015,7 @@ class Benchmark {
       } else if (name == "multireadwhilewriting") {
         fprintf(stderr, "entries_per_batch = %" PRIi64 "\n",
                 entries_per_batch_);
-        num_threads++;
+        num_threads += FLAGS_num_writers;
         method = &Benchmark::MultiReadWhileWriting;
       } else if (name == "approximatesizerandom") {
         fprintf(stderr, "entries_per_batch = %" PRIi64 "\n",
@@ -4035,18 +4035,18 @@ class Benchmark {
       } else if (name == "newiterator") {
         method = &Benchmark::IteratorCreation;
       } else if (name == "newiteratorwhilewriting") {
-        num_threads++;  // Add extra thread for writing
+        num_threads += FLAGS_num_writers;
         method = &Benchmark::IteratorCreationWhileWriting;
       } else if (name == "seekrandom") {
         method = &Benchmark::SeekRandom;
       } else if (name == "seekrandomwhilewriting") {
-        num_threads++;  // Add extra thread for writing
+        num_threads += FLAGS_num_writers;
         method = &Benchmark::SeekRandomWhileWriting;
       } else if (name == "seekrandomwhilemerging") {
-        num_threads++;  // Add extra thread for merging
+        num_threads += FLAGS_num_writers;
         method = &Benchmark::SeekRandomWhileMerging;
       } else if (name == "queuedseekrandomwhilewriting") {
-        num_threads++;  // Add extra thread for writing
+        num_threads += FLAGS_num_writers;
         method = &Benchmark::QueuedSeekRandomWhileWriting;
       } else if (name == "readrandomsmall") {
         reads_ /= 1000;
@@ -4056,13 +4056,13 @@ class Benchmark {
       } else if (name == "deleterandom") {
         method = &Benchmark::DeleteRandom;
       } else if (name == "readwhilewriting") {
-        num_threads++;  // Add extra thread for writing
+        num_threads += FLAGS_num_writers;
         method = &Benchmark::ReadWhileWriting;
       } else if (name == "readwhilemerging") {
-        num_threads++;  // Add extra thread for writing
+        num_threads += FLAGS_num_writers;
         method = &Benchmark::ReadWhileMerging;
       } else if (name == "readwhilescanning") {
-        num_threads++;  // Add extra thread for scaning
+        num_threads += FLAGS_num_writers;
         method = &Benchmark::ReadWhileScanning;
       } else if (name == "readrandomwriterandom") {
         method = &Benchmark::ReadRandomWriteRandom;
