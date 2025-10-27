@@ -50,52 +50,59 @@ CompactionPickerBenefitCost::PickCompaction() const {
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator last;
   };
   std::optional<BestInfo> best;
-  auto i = sorted_runs_.begin();
-  if (i == sorted_runs_.end() || i->is_merging()) {
-    return std::nullopt;
-  }
-  uint64_t size = i->size;
-  size_t num = 1;
-  double sum_nlog2n = i->size * log2(i->size);
-  auto j = i;
-  ++j;
-  for (; j != sorted_runs_.end() && !j->is_merging(); ++j) {
-    size += j->size;
-    num += 1;
-    sum_nlog2n += j->size * log2(j->size);
-    while (num > 2 && i->size <= (double)(size - i->size) / (num - 1) / k_c) {
-      size -= i->size;
-      num -= 1;
-      sum_nlog2n -= i->size * log2(i->size);
+  std::vector<
+      std::reference_wrapper<const CompactionPickerBenefitCost::SortedRunInfo>>
+      existing_compactions;
+  for (auto i = sorted_runs_.begin(); i != sorted_runs_.end();) {
+    if (i->is_merging()) {
+      existing_compactions.push_back(std::ref(*i));
       ++i;
+      continue;
     }
-    double ratio_benefit = log2(size) - sum_nlog2n / size;
-    bool better = false;
-    if (best.has_value()) {
-      if (best->ratio_benefit < ratio_benefit - 1e-6) {
-        better = true;
-      } else if (best->ratio_benefit < ratio_benefit + 1e-6) {
-        better = best->ratio_num < (double)num / size;
+    uint64_t size = i->size;
+    size_t num = 1;
+    double sum_nlog2n = i->size * log2(i->size);
+    auto j = i;
+    ++j;
+    for (; j != sorted_runs_.end() && !j->is_merging(); ++j) {
+      size += j->size;
+      num += 1;
+      sum_nlog2n += j->size * log2(j->size);
+      while (num > 2 && i->size <= (double)(size - i->size) / (num - 1) / k_c) {
+        size -= i->size;
+        num -= 1;
+        sum_nlog2n -= i->size * log2(i->size);
+        ++i;
       }
-    } else {
-      better = ratio_benefit > threshold_ - 1e-6;
+      double ratio_benefit = log2(size) - sum_nlog2n / size;
+      bool better = false;
+      if (best.has_value()) {
+        if (best->ratio_benefit < ratio_benefit - 1e-6) {
+          better = true;
+        } else if (best->ratio_benefit < ratio_benefit + 1e-6) {
+          better = best->ratio_num < (double)num / size;
+        }
+      } else {
+        better = ratio_benefit > threshold_ - 1e-6;
+      }
+      if (better) {
+        best = BestInfo{
+            .ratio_benefit = ratio_benefit,
+            .ratio_num = (double)num / size,
+            .first = i,
+            .last = j,
+        };
+      }
     }
-    if (better) {
-      best = BestInfo{
-          .ratio_benefit = ratio_benefit,
-          .ratio_num = (double)num / size,
-          .first = i,
-          .last = j,
-      };
-    }
+    i = j;
   }
   if (!best.has_value()) {
     return std::nullopt;
   }
-  if (j != sorted_runs_.end()) {
-    assert(j->is_merging());
-    if (best->ratio_benefit < j->benefit_cost_ratio - 1e-6 ||
-        best->ratio_num < (double)j->num_sorted_runs / j->size * k_c) {
+  for (const auto& existing_compaction : existing_compactions) {
+    const auto& c = existing_compaction.get();
+    if (best->ratio_benefit < c.benefit_cost_ratio - 1e-6 ||
+        best->ratio_num < (double)c.num_sorted_runs / c.size * k_c) {
       return std::nullopt;
     }
   }
