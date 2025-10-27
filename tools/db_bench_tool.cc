@@ -5269,6 +5269,9 @@ class Benchmark {
     options.create_missing_column_families = true;
     options.create_if_missing = true;
 
+    options.max_sequential_skip_in_iterations =
+        std::numeric_limits<uint64_t>::max();
+
     if (options.statistics == nullptr) {
       options.statistics = dbstats;
     }
