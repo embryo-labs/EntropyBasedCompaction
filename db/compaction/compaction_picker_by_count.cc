@@ -106,9 +106,8 @@ Compaction* CompactionPickerByCount::PickMainLevelCompaction(
       /* max_subcompactions */ 0, /* grandparents not supported yet */ {},
       /* earliest_snapshot */ std::nullopt,
       /* snapshot_checker */ nullptr, std::move(limiter_handle),
-      /* is manual */ false, /* trim_ts */ "", /*score*/ 2333,
-      false /* deletion_compaction */,
-      /* l0_files_might_overlap */ true, CompactionReason::kPolicyByCount,
+      CompactionReason::kPolicyByCount, /* trim_ts */ "", /*score*/ 2333,
+      /* l0_files_might_overlap */ true,
       BlobGarbageCollectionPolicy::kUseDefault, -1, merging_info, io_priority);
 }
 
@@ -118,7 +117,7 @@ Compaction* CompactionPickerByCount::PickCompaction(
     const MutableDBOptions& mutable_db_options,
     const std::vector<SequenceNumber>& existing_snapshots,
     const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
-    LogBuffer* log_buffer) {
+    LogBuffer* log_buffer, bool require_max_output_level) {
   Compaction* c = PickMainLevelCompaction(
       cfd, cf_name, mutable_cf_options, mutable_db_options, existing_snapshots,
       snapshot_checker, vstorage, log_buffer);

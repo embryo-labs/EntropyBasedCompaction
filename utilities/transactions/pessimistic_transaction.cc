@@ -84,6 +84,10 @@ void PessimisticTransaction::Initialize(const TransactionOptions& txn_options) {
         txn_db_impl_->GetTxnDBOptions().transaction_lock_timeout * 1000;
   }
 
+  // deadlock timeout should be lower than lock timeout
+  deadlock_timeout_us_ =
+      std::min(txn_options.deadlock_timeout_us, lock_timeout_);
+
   if (txn_options.expiration >= 0) {
     expiration_time_ = start_time_ + txn_options.expiration * 1000;
   } else {
@@ -103,6 +107,17 @@ void PessimisticTransaction::Initialize(const TransactionOptions& txn_options) {
 
   read_timestamp_ = kMaxTxnTimestamp;
   commit_timestamp_ = kMaxTxnTimestamp;
+
+  if (txn_options.commit_bypass_memtable) {
+    // No need to optimize for empty transction
+    commit_bypass_memtable_threshold_ = 1;
+  } else {
+    commit_bypass_memtable_threshold_ =
+        txn_options.large_txn_commit_optimize_threshold;
+  }
+
+  commit_bypass_memtable_byte_threshold_ =
+      txn_options.large_txn_commit_optimize_byte_threshold;
 }
 
 PessimisticTransaction::~PessimisticTransaction() {
@@ -802,7 +817,7 @@ Status WriteCommittedTxn::CommitWithoutPrepareInternal() {
   }
   auto s = db_impl_->WriteImpl(
       write_options_, wb,
-      /*callback*/ nullptr, /*user_write_cb=*/nullptr, /*log_used*/ nullptr,
+      /*callback*/ nullptr, /*user_write_cb=*/nullptr, /*wal_used*/ nullptr,
       /*log_ref*/ 0, /*disable_memtable*/ false, &seq_used, /*batch_cnt=*/0,
       /*pre_release_callback=*/nullptr, post_mem_cb);
   assert(!s.ok() || seq_used != kMaxSequenceNumber);
@@ -816,7 +831,7 @@ Status WriteCommittedTxn::CommitBatchInternal(WriteBatch* batch, size_t) {
   uint64_t seq_used = kMaxSequenceNumber;
   auto s = db_impl_->WriteImpl(write_options_, batch, /*callback*/ nullptr,
                                /*user_write_cb=*/nullptr,
-                               /*log_used*/ nullptr, /*log_ref*/ 0,
+                               /*wal_used*/ nullptr, /*log_ref*/ 0,
                                /*disable_memtable*/ false, &seq_used);
   assert(!s.ok() || seq_used != kMaxSequenceNumber);
   if (s.ok()) {
@@ -843,6 +858,8 @@ Status WriteCommittedTxn::CommitInternal() {
   if (!needs_ts) {
     s = WriteBatchInternal::MarkCommit(working_batch, name_);
   } else {
+    assert(!commit_bypass_memtable_threshold_);
+    assert(!commit_bypass_memtable_byte_threshold_);
     assert(commit_timestamp_ != kMaxTxnTimestamp);
     char commit_ts_buf[sizeof(kMaxTxnTimestamp)];
     EncodeFixed64(commit_ts_buf, commit_timestamp_);
@@ -878,11 +895,46 @@ Status WriteCommittedTxn::CommitInternal() {
   // any operations appended to this working_batch will be ignored from WAL
   working_batch->MarkWalTerminationPoint();
 
-  // insert prepared batch into Memtable only skipping WAL.
-  // Memtable will ignore BeginPrepare/EndPrepare markers
-  // in non recovery mode and simply insert the values
-  s = WriteBatchInternal::Append(working_batch, wb);
-  assert(s.ok());
+  uint32_t wb_count = wb->Count();
+  RecordInHistogram(db_impl_->immutable_db_options_.stats,
+                    NUM_OP_PER_TRANSACTION, wb_count);
+  bool bypass_memtable = false;
+  if (!needs_ts) {
+    if (commit_bypass_memtable_threshold_ &&
+        wb_count >= commit_bypass_memtable_threshold_) {
+      if (wbwi->GetWBWIOpCount() != wb_count) {
+        ROCKS_LOG_WARN(
+            db_impl_->immutable_db_options().info_log,
+            "Transaction %s qualifies for commit optimization due to update "
+            "count. However, it will commit normally due to wbwi and wb record "
+            "count mismatch. Some updates were added directly to the "
+            "transaction's underlying write batch.",
+            GetName().c_str());
+      } else {
+        bypass_memtable = true;
+      }
+    } else if (commit_bypass_memtable_byte_threshold_ &&
+               wb->GetDataSize() >= commit_bypass_memtable_byte_threshold_) {
+      if (wbwi->GetWBWIOpCount() != wb_count) {
+        ROCKS_LOG_WARN(
+            db_impl_->immutable_db_options().info_log,
+            "Transaction %s qualifies for commit optimization due to write "
+            "batch size. However, it will commit normally due to wbwi and wb "
+            "record count mismatch. Some updates were added directly to the "
+            "transaction's underlying write batch.",
+            GetName().c_str());
+      } else {
+        bypass_memtable = true;
+      }
+    }
+  }
+  if (!bypass_memtable) {
+    // insert prepared batch into Memtable only skipping WAL.
+    // Memtable will ignore BeginPrepare/EndPrepare markers
+    // in non recovery mode and simply insert the values
+    s = WriteBatchInternal::Append(working_batch, wb);
+    assert(s.ok());
+  }
 
   uint64_t seq_used = kMaxSequenceNumber;
   SnapshotCreationCallback snapshot_creation_cb(db_impl_, commit_timestamp_,
@@ -896,12 +948,33 @@ Status WriteCommittedTxn::CommitInternal() {
       post_mem_cb = &snapshot_creation_cb;
     }
   }
-  s = db_impl_->WriteImpl(write_options_, working_batch, /*callback*/ nullptr,
-                          /*user_write_cb=*/nullptr,
-                          /*log_used*/ nullptr, /*log_ref*/ log_number_,
-                          /*disable_memtable*/ false, &seq_used,
-                          /*batch_cnt=*/0, /*pre_release_callback=*/nullptr,
-                          post_mem_cb);
+  assert(log_number_ > 0);
+  TEST_SYNC_POINT_CALLBACK("WriteCommittedTxn::CommitInternal:bypass_memtable",
+                           static_cast<void*>(&bypass_memtable));
+  if (bypass_memtable) {
+    // Used for differentiating commiting WBWI vs directly ingesting WBWI
+    // see (IngestWriteBatchWithIndex())
+    assert(working_batch->HasCommit());
+    s = db_impl_->WriteImpl(
+        write_options_, working_batch, /*callback*/ nullptr,
+        /*user_write_cb=*/nullptr,
+        /*wal_used*/ nullptr, /*log_ref*/ log_number_,
+        /*disable_memtable*/ false, &seq_used,
+        /*batch_cnt=*/0, /*pre_release_callback=*/nullptr, post_mem_cb,
+        /*wbwi=*/
+        std::make_shared<WriteBatchWithIndex>(std::move(write_batch_)));
+    // Reset write_batch_ since it's accessed in transaction clean up and
+    // might be used for transaction reuse.
+    write_batch_ = WriteBatchWithIndex(cmp_, 0, true, 0,
+                                       write_options_.protection_bytes_per_key);
+  } else {
+    s = db_impl_->WriteImpl(write_options_, working_batch, /*callback*/ nullptr,
+                            /*user_write_cb=*/nullptr,
+                            /*wal_used*/ nullptr, /*log_ref*/ log_number_,
+                            /*disable_memtable*/ false, &seq_used,
+                            /*batch_cnt=*/0, /*pre_release_callback=*/nullptr,
+                            post_mem_cb);
+  }
   assert(!s.ok() || seq_used != kMaxSequenceNumber);
   if (s.ok()) {
     SetId(seq_used);

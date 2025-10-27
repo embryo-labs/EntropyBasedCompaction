@@ -119,7 +119,7 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
     const MutableDBOptions& mutable_db_options,
     const std::vector<SequenceNumber>& existing_snapshots,
     const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
-    LogBuffer* log_buffer) {
+    LogBuffer* log_buffer, bool require_max_output_level) {
   auto ret = PickCompaction();
   if (!ret.has_value()) {
     return nullptr;
@@ -188,9 +188,8 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
       /* max_subcompactions */ 0, /* grandparents not supported yet */ {},
       /* earliest_snapshot */ std::nullopt,
       /* snapshot_checker */ nullptr, std::move(limiter_handle),
-      /* is manual */ false, /* trim_ts */ "", /*score*/ 2333,
-      false /* deletion_compaction */,
-      /* l0_files_might_overlap */ true, CompactionReason::kPolicyByCount,
+      CompactionReason::kPolicyByCount, /* trim_ts */ "", /*score*/ 2333,
+      /* l0_files_might_overlap */ true,
       BlobGarbageCollectionPolicy::kUseDefault, -1, &*it, io_priority);
   it->c = c;
   print_status();

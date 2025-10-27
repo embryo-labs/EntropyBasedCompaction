@@ -3,7 +3,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-
 #include "table/plain/plain_table_reader.h"
 
 #include <string>
@@ -121,7 +120,9 @@ Status PlainTableReader::Open(
     bool full_scan_mode, const bool immortal_table,
     const SliceTransform* prefix_extractor) {
   if (file_size > PlainTableIndex::kMaxFileSize) {
-    return Status::NotSupported("File is too large for PlainTableReader!");
+    return Status::NotSupported("File size " + std::to_string(file_size) +
+                                " exceeds PlainTableReader max file size " +
+                                std::to_string(PlainTableIndex::kMaxFileSize));
   }
 
   std::unique_ptr<TableProperties> props;

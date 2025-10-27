@@ -18,11 +18,13 @@
 
 #include <stdint.h>
 
+#include <any>
 #include <chrono>
 #include <cstdarg>
 #include <functional>
 #include <limits>
 #include <memory>
+#include <shared_mutex>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -88,6 +90,7 @@ enum FSSupportedOps {
   kVerifyAndReconstructRead,  // Supports a higher level of data integrity. See
                               // the verify_and_reconstruct_read flag in
                               // IOOptions.
+  kFSPrefetch,                // Supports prefetch operations
 };
 
 // Per-request options that can be passed down to the FileSystem
@@ -192,6 +195,12 @@ struct FileOptions : EnvOptions {
   // handoff during file writes.
   ChecksumType handoff_checksum_type;
 
+  // Expose write lifetime hint on the FileOptions level to provide more
+  // flexibility in setting the hint in downstream, custom implementations
+  // that might be able to process the hint only at the time of the actual
+  // FSWritableFile object creation.
+  Env::WriteLifeTimeHint write_hint = Env::WLTH_NOT_SET;
+
   FileOptions() : EnvOptions(), handoff_checksum_type(ChecksumType::kCRC32c) {}
 
   FileOptions(const DBOptions& opts)
@@ -206,13 +215,16 @@ struct FileOptions : EnvOptions {
       : EnvOptions(opts),
         io_options(opts.io_options),
         temperature(opts.temperature),
-        handoff_checksum_type(opts.handoff_checksum_type) {}
+        handoff_checksum_type(opts.handoff_checksum_type),
+        write_hint(opts.write_hint) {}
 
   FileOptions& operator=(const FileOptions&) = default;
 };
 
 // A structure to pass back some debugging information from the FileSystem
 // implementation to RocksDB in case of an IO error
+// TODO(virajthakur): Update all calls to FS APIs for writes to pass in
+// IODebugContext
 struct IODebugContext {
   // file_path to be filled in by RocksDB in case of an error
   std::string file_path;
@@ -223,8 +235,9 @@ struct IODebugContext {
   // To be set by the FileSystem implementation
   std::string msg;
 
-  // To be set by the underlying FileSystem implementation.
-  std::string request_id;
+  // To be set by the application, to allow tracing logs/metrics from user ->
+  // RocksDB -> FS.
+  const std::string* request_id = nullptr;
 
   // In order to log required information in IO tracing for different
   // operations, Each bit in trace_data stores which corresponding info from
@@ -240,7 +253,39 @@ struct IODebugContext {
   };
   uint64_t trace_data = 0;
 
+  // Arbitrary structure containing cost information about the IO request
+  std::any cost_info;
+
+  // FileSystem implementations can use this mutex to synchronize concurrent
+  // reads/writes as needed (e.g. to update the counters or cost_info field)
+  std::shared_mutex mutex;
+
   IODebugContext() {}
+
+  // Copy constructor
+  IODebugContext(const IODebugContext& other)
+      : file_path(other.file_path),
+        counters(other.counters),
+        msg(other.msg),
+        trace_data(other.trace_data),
+        cost_info(other.cost_info),
+        _request_id(other.request_id ? *other.request_id : "") {
+    request_id = other.request_id ? &_request_id : nullptr;
+  }
+
+  // Copy assignment operator
+  IODebugContext& operator=(const IODebugContext& other) {
+    if (this != &other) {
+      file_path = other.file_path;
+      counters = other.counters;
+      msg = other.msg;
+      trace_data = other.trace_data;
+      cost_info = other.cost_info;
+      _request_id = other.request_id ? *other.request_id : "";
+      request_id = other.request_id ? &_request_id : nullptr;
+    }
+    return *this;
+  }
 
   void AddCounter(std::string& name, uint64_t value) {
     counters.emplace(name, value);
@@ -248,8 +293,8 @@ struct IODebugContext {
 
   // Called by underlying file system to set request_id and log request_id in
   // IOTracing.
-  void SetRequestId(const std::string& _request_id) {
-    request_id = _request_id;
+  void SetRequestId(const std::string* updated_request_id) {
+    request_id = updated_request_id;
     trace_data |= (1 << TraceData::kRequestID);
   }
 
@@ -262,6 +307,12 @@ struct IODebugContext {
     ss << msg;
     return ss.str();
   }
+
+ private:
+  // Private member that allows for safe copying of IODebugContext without any
+  // memory ownership issues. After copying, request_id can point directly to
+  // this field.
+  std::string _request_id;
 };
 
 // A function pointer type for custom destruction of void pointer passed to
@@ -721,12 +772,13 @@ class FileSystem : public Customizable {
   //  If async_io is supported by the underlying FileSystem, then supported_ops
   //  will have corresponding bit (i.e FSSupportedOps::kAsyncIO) set to 1.
   //
-  // By default, async_io operation is set and FS should override this API and
-  // set all the operations they support provided in FSSupportedOps (including
-  // async_io).
+  // By default, async_io and prefetch operation are set and FS should override
+  // this API and set all the operations they support provided in FSSupportedOps
+  // (including async_io and prefetch).
   virtual void SupportedOps(int64_t& supported_ops) {
     supported_ops = 0;
     supported_ops |= (1 << FSSupportedOps::kAsyncIO);
+    supported_ops |= (1 << FSSupportedOps::kFSPrefetch);
   }
 
   // If you're adding methods here, remember to add them to EnvWrapper too.
@@ -821,54 +873,47 @@ struct FSReadRequest {
   // and will be passed to underlying FileSystem.
   char* scratch;
 
-  // Output parameter set by MultiRead() to point to the data buffer, and
-  // the number of valid bytes
+  // Output parameter set by MultiRead() to point to the start of the data
+  // buffer.
   //
-  // In case of asynchronous reads, this output parameter is set by Async Read
-  // APIs to point to the data buffer, and
-  // the number of valid bytes.
-  // Slice result should point to scratch i.e the data should
-  // always be read into scratch.
+  // When FSReadRequest::scratch is provided, this should point to
+  // FSReadRequest::scratch. When FSSupportedOps::kFSBuffer is enabled and
+  // FSReadRequest::scratch is nullptr, this points to the start of the
+  // data buffer allocated by the FileSystem.
+  //
+  // WARNING: Even with the FSSupportedOps::kFSBuffer optimization, you must
+  // still use result.data() to get the start of the actual data that was read.
+  // Do NOT treat FSReadRequest::fs_scratch as a char* to the start of a valid
+  // data buffer.
   Slice result;
 
   // Output parameter set by underlying FileSystem that represents status of
   // read request.
   IOStatus status;
 
-  // fs_scratch is a data buffer allocated and provided by underlying FileSystem
-  // to RocksDB during reads, when FS wants to provide its own buffer with data
-  // instead of using RocksDB provided FSReadRequest::scratch.
+  // fs_scratch is a unique pointer to an arbitrary object allocated by the
+  // underlying FileSystem.
   //
-  // FileSystem needs to provide a buffer and custom delete function. The
-  // lifecycle of fs_scratch until data is used by RocksDB. The buffer
-  // should be released by RocksDB using custom delete function provided in
-  // unique_ptr fs_scratch.
+  // Instead of having the FileSystem spend CPU cycles copying data into the
+  // FSReadRequest::scratch buffer provided by RocksDB, RocksDB can directly use
+  // a buffer allocated by the FileSystem.
   //
-  // Optimization benefits:
-  // This is helpful in cases where underlying FileSystem has to do additional
-  // copy of data to RocksDB provided buffer which can consume CPU cycles. It
-  // can be optimized by avoiding copying to RocksDB buffer and directly using
-  // FS provided buffer.
+  // This optimization is enabled for MultiReads (sync and async) with non
+  // direct io, when these conditions hold:
+  // 1. The FileSystem has overriden the SupportedOps() API and set
+  // FSSupportedOps::kFSBuffer.
+  // 2. FSReadRequest::scratch is set to nullptr.
   //
-  // How to enable:
-  // In order to enable this option, FS needs to override SupportedOps() API and
-  // set FSSupportedOps::kFSBuffer in SupportedOps() as:
-  //  {
-  //    supported_ops |= (1 << FSSupportedOps::kFSBuffer);
-  //  }
+  // RocksDB will:
+  // 1. Reuse the buffer allocated by the FileSystem.
+  // 2. Take ownership of the object managed by fs_scratch.
+  // 3. Handle invoking the custom deleter function from the FSAllocationPtr.
   //
-  // Work in progress:
-  // Right now it's only enabled for MultiReads (sync and async
-  // both) with non direct io.
-  // If RocksDB provide its own buffer (scratch) during reads, that's a
-  //  signal for FS to use RocksDB buffer.
-  // If FSSupportedOps::kFSBuffer is enabled and scratch == nullptr,
-  //   then FS have to provide its own buffer in fs_scratch.
-  //
-  // NOTE:
-  // - FSReadRequest::result should point to fs_scratch.
-  // - This is needed only if FSSupportedOps::kFSBuffer support is provided by
-  // underlying FS.
+  // WARNING: Do NOT assume that fs_scratch points to the start of the actual
+  // char* data returned by the read. As the type signature suggests, fs_scratch
+  // is a pointer to any arbitrary data type. Use result.data() to get a valid
+  // start to the real data. See https://github.com/facebook/rocksdb/pull/13189
+  // for more context.
   FSAllocationPtr fs_scratch;
 };
 
@@ -1012,6 +1057,14 @@ class FSRandomAccessFile {
   // though the temperature is generally expected not to change while a file is
   // open.
   virtual Temperature GetTemperature() const { return Temperature::kUnknown; }
+
+  // Get the file size on an open-for-reading file without re-seeking the file's
+  // path in the filesystem. The default implementation returns "not supported"
+  // so that user implementations of FSRandomAccessFile do not need to
+  // immediately implement this function.
+  virtual IOStatus GetFileSize(uint64_t* /*result*/) {
+    return IOStatus::NotSupported("GetFileSize Not Supported");
+  }
 
   // If you're adding methods here, remember to add them to
   // RandomAccessFileWrapper too.
@@ -1732,6 +1785,10 @@ class FSRandomAccessFileWrapper : public FSRandomAccessFile {
   }
   Temperature GetTemperature() const override {
     return target_->GetTemperature();
+  }
+
+  virtual IOStatus GetFileSize(uint64_t* result) override {
+    return target_->GetFileSize(result);
   }
 
  private:

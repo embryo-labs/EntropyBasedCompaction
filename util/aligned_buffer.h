@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cassert>
 
+#include "port/malloc.h"
 #include "port/port.h"
 #include "rocksdb/file_system.h"
 namespace ROCKSDB_NAMESPACE {
@@ -113,15 +114,19 @@ class AlignedBuffer {
     alignment_ = alignment;
   }
 
-  // Points the buffer to new_buf (taking ownership) without allocating extra
-  // memory or performing any data copies. This method is called when we want to
-  // reuse the buffer provided by the file system
-  void SetBuffer(size_t size, FSAllocationPtr&& new_buf) {
+  // Points the buffer to the result without allocating extra
+  // memory or performing any data copies. Takes ownership of the
+  // FSAllocationPtr. This method is called when we want to reuse the buffer
+  // provided by the file system
+  void SetBuffer(Slice& result, FSAllocationPtr new_buf) {
     alignment_ = 1;
-    capacity_ = size;
-    cursize_ = size;
-    bufstart_ = reinterpret_cast<char*>(new_buf.get());
+    capacity_ = result.size();
+    cursize_ = result.size();
     buf_ = std::move(new_buf);
+    assert(buf_.get() != nullptr);
+    // Note: bufstart_ must point to result.data() and not new_buf, which can
+    // point to any arbitrary object
+    bufstart_ = const_cast<char*>(result.data());
   }
 
   // Allocates a new buffer and sets the start position to the first aligned
@@ -247,4 +252,72 @@ class AlignedBuffer {
 
   void Size(size_t cursize) { cursize_ = cursize; }
 };
+
+// Related to std::string but more easily avoids zeroing out a buffer that's
+// going to be overwritten anyway.
+class GrowableBuffer {
+ public:
+  GrowableBuffer() : capacity_(0) {}
+  ~GrowableBuffer() { free(data_); }
+  // No copies
+  GrowableBuffer(const GrowableBuffer&) = delete;
+  GrowableBuffer& operator=(const GrowableBuffer&) = delete;
+  // Movable
+  GrowableBuffer(GrowableBuffer&& other) noexcept
+      : data_(other.data_), size_(other.size_), capacity_(other.capacity_) {
+    other.data_ = nullptr;
+    other.size_ = 0;
+    other.capacity_ = 0;
+  }
+  GrowableBuffer& operator=(GrowableBuffer&& other) noexcept {
+    if (this == &other) {
+      return *this;
+    }
+    free(data_);
+    data_ = other.data_;
+    size_ = other.size_;
+    capacity_ = other.capacity_;
+    other.data_ = nullptr;
+    other.size_ = 0;
+    other.capacity_ = 0;
+    return *this;
+  }
+
+  char* data() { return data_; }
+  const char* data() const { return data_; }
+
+  size_t size() const { return size_; }
+  size_t& MutableSize() { return size_; }
+
+  bool empty() const { return size_ == 0; }
+
+  void Reset() { size_ = 0; }
+  void ResetForSize(size_t new_size) {
+    if (new_size > capacity_) {
+      free(data_);
+      size_t new_capacity = std::max(capacity_ * 2, new_size);
+      new_capacity = std::max(size_t{64}, new_capacity);
+      data_ = static_cast<char*>(malloc(new_capacity));
+#ifdef ROCKSDB_MALLOC_USABLE_SIZE
+      capacity_ = malloc_usable_size(data_);
+#else
+      capacity_ = new_capacity;
+#endif
+      // Warm the memory in CPU cache
+      for (size_t i = 0; i < new_capacity; i += CACHE_LINE_SIZE) {
+        data_[i] = 1;
+      }
+    }
+    size_ = new_size;
+  }
+
+  Slice AsSlice() const { return Slice(data_, size_); }
+  operator Slice() const { return AsSlice(); }
+
+ private:
+  char* data_ = nullptr;
+  size_t size_ = 0;
+  size_t capacity_;
+};
+
 }  // namespace ROCKSDB_NAMESPACE

@@ -205,9 +205,7 @@ TEST_F(WritableFileWriterTest, IncrementalBuffer) {
     env_options.writable_file_max_buffer_size =
         (attempt < kNumAttempts / 2) ? 512 * 1024 : 700 * 1024;
     std::string actual;
-    std::unique_ptr<FakeWF> wf(new FakeWF(&actual,
-                                          attempt % 2 == 1,
-                                          no_flush));
+    std::unique_ptr<FakeWF> wf(new FakeWF(&actual, attempt % 2 == 1, no_flush));
     std::unique_ptr<WritableFileWriter> writer(new WritableFileWriter(
         std::move(wf), "" /* don't care */, env_options));
 
@@ -1120,7 +1118,7 @@ TEST_F(WritableFileWriterIOPriorityTest, Append) {
 }
 
 TEST_F(WritableFileWriterIOPriorityTest, Pad) {
-  ASSERT_OK(writer_->Pad(IOOptions(), 500));
+  ASSERT_OK(writer_->Pad(IOOptions(), 500, kDefaultPageSize));
 }
 
 TEST_F(WritableFileWriterIOPriorityTest, Flush) {

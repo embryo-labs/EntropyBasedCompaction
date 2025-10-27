@@ -22,7 +22,7 @@ class CompactionPickerBySize : public CompactionPicker {
       const MutableDBOptions& mutable_db_options,
       const std::vector<SequenceNumber>& existing_snapshots,
       const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
-      LogBuffer* log_buffer) override;
+      LogBuffer* log_buffer, bool require_max_output_level) override;
 
  private:
   Compaction* PickMainLevelCompaction(
