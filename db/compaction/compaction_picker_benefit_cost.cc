@@ -112,6 +112,10 @@ CompactionPickerBenefitCost::PickCompaction() const {
 bool CompactionPickerBenefitCost::CalcNeedsCompaction(
     const ColumnFamilyData* cfd, const MutableCFOptions& mutable_cf_options,
     const VersionStorageInfo* vstorage) const {
+  if (vstorage_ != vstorage) {
+    // sorted_runs_ not synced yet. Will try again shortly.
+    return false;
+  }
   assert(vstorage->num_levels() == 1);
   return PickCompaction().has_value();
 }
@@ -203,8 +207,9 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
   return c;
 }
 
-void CompactionPickerBenefitCost::CompactionFinished(void* info,
-                                                     uint64_t size) {
+void CompactionPickerBenefitCost::CompactionFinished(
+    const VersionStorageInfo* vstorage, void* info, uint64_t size) {
+  vstorage_ = vstorage;
   auto sr = static_cast<SortedRunInfo*>(info);
   sr->num_sorted_runs = 1;
   sr->size = size;
@@ -221,7 +226,9 @@ void CompactionPickerBenefitCost::CompactionFinished(void* info,
   print_status();
 }
 
-void CompactionPickerBenefitCost::Flushed(const FileMetaData& file) {
+void CompactionPickerBenefitCost::Flushed(const VersionStorageInfo* vstorage,
+                                          const FileMetaData& file) {
+  vstorage_ = vstorage;
   // raw_key_size and raw_value_size seem to be zero
   sorted_runs_.emplace_front(1, file.fd.GetFileSize(), 0);
   print_status();

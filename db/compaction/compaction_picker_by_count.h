@@ -24,8 +24,10 @@ class CompactionPickerByCount : public CompactionPicker {
       const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
       LogBuffer* log_buffer, bool require_max_output_level) override;
 
-  void CompactionFinished(void* merging_info, uint64_t size) override;
-  void Flushed(const FileMetaData& file) override;
+  void CompactionFinished(const VersionStorageInfo* vstorage,
+                          void* merging_info, uint64_t size) override;
+  void Flushed(const VersionStorageInfo* vstorage,
+               const FileMetaData& file) override;
 
  private:
   Compaction* PickMainLevelCompaction(

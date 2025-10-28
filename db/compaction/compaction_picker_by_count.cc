@@ -131,8 +131,8 @@ Compaction* CompactionPickerByCount::PickCompaction(
   return nullptr;
 }
 
-void CompactionPickerByCount::CompactionFinished(void* merging_info,
-                                                 uint64_t size) {
+void CompactionPickerByCount::CompactionFinished(
+    const VersionStorageInfo* vstorage, void* merging_info, uint64_t size) {
   auto info =
       static_cast<CompactionPolicyByCount::SortedRunInfo*>(merging_info);
   assert(info->merging);
@@ -141,7 +141,8 @@ void CompactionPickerByCount::CompactionFinished(void* merging_info,
   fflush(stdout);
 }
 
-void CompactionPickerByCount::Flushed(const FileMetaData& file) {
+void CompactionPickerByCount::Flushed(const VersionStorageInfo* vstorage,
+                                      const FileMetaData& file) {
   sorted_runs_.push_front(CompactionPolicyByCount::SortedRunInfo{false, 1});
 }
 

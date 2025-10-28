@@ -26,8 +26,10 @@ class CompactionPickerBenefitCost : public CompactionPicker {
       const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
       LogBuffer* log_buffer, bool require_max_output_level) override;
 
-  void CompactionFinished(void* info, uint64_t size) override;
-  void Flushed(const FileMetaData& file) override;
+  void CompactionFinished(const VersionStorageInfo* vstorage, void* info,
+                          uint64_t size) override;
+  void Flushed(const VersionStorageInfo* vstorage,
+               const FileMetaData& file) override;
 
  private:
   struct SortedRunInfo {
@@ -57,6 +59,7 @@ class CompactionPickerBenefitCost : public CompactionPicker {
   double threshold_;
   // Ideally this should be vstorage
   std::list<SortedRunInfo> sorted_runs_;
+  const VersionStorageInfo* vstorage_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

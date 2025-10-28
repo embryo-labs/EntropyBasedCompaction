@@ -647,7 +647,8 @@ Status MemTableList::TryInstallMemtableFlushResults(
               }
               if (!new_files.empty()) {
                 assert(new_files.size() == 1);
-                cfd->compaction_picker()->Flushed(new_files[0].second);
+                cfd->compaction_picker()->Flushed(
+                    cfd->current()->storage_info(), new_files[0].second);
               }
             }
             cfd->current()->storage_info()->ComputeCompactionScore(

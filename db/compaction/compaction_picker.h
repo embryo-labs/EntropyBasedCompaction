@@ -98,8 +98,10 @@ class CompactionPicker {
   virtual bool NeedsCompaction(const ColumnFamilyData* cfd,
                                const VersionStorageInfo* vstorage) const = 0;
 
-  virtual void CompactionFinished(void*, uint64_t size){};
-  virtual void Flushed(const FileMetaData& file){};
+  virtual void CompactionFinished(const VersionStorageInfo* vstorage, void*,
+                                  uint64_t size){};
+  virtual void Flushed(const VersionStorageInfo* vstorage,
+                       const FileMetaData& file){};
 
   // Sanitize the input set of compaction input files and convert it to
   // `std::vector<CompactionInputFiles>` in the output parameter
