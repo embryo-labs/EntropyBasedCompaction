@@ -145,24 +145,21 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
   }
 
   auto [i, j] = ret.value();
-  int num_compactions = 0;
-  for (const auto& sr : sorted_runs_) {
-    if (sr.is_merging()) {
-      num_compactions += 1;
-    }
-  }
-  Env::IOPriority io_priority = static_cast<Env::IOPriority>(num_compactions);
 
   std::vector<CompactionInputFiles> inputs(1);
   inputs[0].level = 0;
+  const auto& l0_files = vstorage->LevelFiles(0);
   size_t file_i = 0;
   auto it = sorted_runs_.begin();
   while (it != i) {
+    file_i += it->num_sorted_runs;
+    assert(file_i < l0_files.size());
+    if (it->c) {
+      it->c->io_priority().fetch_add(1, std::memory_order_relaxed);
+    }
     ++it;
-    ++file_i;
   }
 
-  const auto& l0_files = vstorage->LevelFiles(0);
   auto first_to_erase = i;
   double sum_nlog2n = 0;
   uint64_t size = 0;
@@ -171,7 +168,7 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
     sum_nlog2n += i->size * log2(i->size);
     size += i->size;
     num += 1;
-    auto file = l0_files[file_i];
+    auto file = l0_files.at(file_i);
     assert(!file->being_compacted);
     inputs[0].files.push_back(file);
     if (i == j) {
@@ -180,6 +177,15 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
     ++i;
     ++file_i;
   }
+
+  int num_compactions = 0;
+  for (++i; i != sorted_runs_.end(); ++i) {
+    if (i->is_merging()) {
+      num_compactions += 1;
+    }
+  }
+  Env::IOPriority io_priority = static_cast<Env::IOPriority>(num_compactions);
+
   it = sorted_runs_.erase(first_to_erase, j);
   assert(it == j);
   it->num_sorted_runs = num;
