@@ -2278,7 +2278,7 @@ class ReporterAgent {
     header << ",num-sorted-runs," << DB::Properties::kNumTopLevelSortedRuns
            << ',' << DB::Properties::kNumMergingMainLevelSortedRuns << ','
            << DB::Properties::kBufferLevelSize;
-    header << ",num-flushes,num-compactions";
+    header << ",num-flushes,num-compactions,size";
     if (options.background_job_limiter) {
       header << ",num-running-bg-jobs";
     }
@@ -2378,6 +2378,10 @@ class ReporterAgent {
           db_->GetIntProperty(DB::Properties::kNumRunningCompactions, &value);
       assert(good);
       report << ',' << value;
+
+      ColumnFamilyMetaData cf_meta;
+      db_->GetColumnFamilyMetaData(&cf_meta);
+      report << ',' << cf_meta.size;
 
       if (background_job_limiter) {
         report << ',' << background_job_limiter->num_running_bg_jobs();
