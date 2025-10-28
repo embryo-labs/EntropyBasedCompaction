@@ -29,7 +29,7 @@ class GenericRateLimiter : public RateLimiter {
   GenericRateLimiter(int64_t refill_bytes, int64_t refill_period_us,
                      int32_t fairness, RateLimiter::Mode mode,
                      const std::shared_ptr<SystemClock>& clock, bool auto_tuned,
-                     int64_t single_burst_bytes, int64_t num_refills_per_tune);
+                     int64_t single_burst_bytes);
 
   virtual ~GenericRateLimiter();
 
@@ -110,7 +110,8 @@ class GenericRateLimiter : public RateLimiter {
 
  private:
   static constexpr int kMicrosecondsPerSecond = 1000000;
-  void RefillBytesAndGrantRequestsLocked(Statistics* stats, bool drained);
+  void RefillBytesAndGrantRequestsLocked();
+  std::vector<Env::IOPriority> GeneratePriorityIterationOrderLocked();
   int64_t CalculateRefillBytesPerPeriodLocked(int64_t rate_bytes_per_sec);
   Status TuneLocked();
   void SetBytesPerSecondLocked(int64_t bytes_per_second);
@@ -136,7 +137,7 @@ class GenericRateLimiter : public RateLimiter {
 
   int64_t total_requests_[Env::IO_TOTAL];
   int64_t total_bytes_through_[Env::IO_TOTAL];
-  int64_t available_bytes_[Env::IO_TOTAL];
+  int64_t available_bytes_;
   int64_t next_refill_us_;
 
   int32_t fairness_;
@@ -149,8 +150,7 @@ class GenericRateLimiter : public RateLimiter {
   bool auto_tuned_;
   int64_t num_drains_;
   const int64_t max_bytes_per_sec_;
-  const uint64_t num_refills_per_tune_;
-  uint64_t num_refills_since_last_tune_;
+  std::chrono::microseconds tuned_time_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE
