@@ -2303,6 +2303,17 @@ class ReporterAgent {
     RateLimiter* rate_limiter = options.rate_limiter.get();
     std::unordered_map<OperationType, std::unique_ptr<WritableFile>>
         op_count_time;
+
+    std::unique_ptr<WritableFile> sorted_run_status_file;
+    std::string fname = "sorted-run-status.txt";
+    Status s =
+        env_->NewWritableFile(fname, &sorted_run_status_file, EnvOptions());
+    if (!s.ok()) {
+      fprintf(stderr, "Can't open %s: %s\n", fname.c_str(),
+              s.ToString().c_str());
+      abort();
+    }
+
     auto* clock = env_->GetSystemClock().get();
     auto time_started = clock->NowMicros();
     while (true) {
@@ -2421,7 +2432,7 @@ class ReporterAgent {
       }
       report << '\n';
 
-      auto s = report_file_->Append(report.str());
+      s = report_file_->Append(report.str());
       if (s.ok()) {
         s = report_file_->Flush();
       }
@@ -2442,7 +2453,7 @@ class ReporterAgent {
         last_count_time_[op] = count_time;
         auto it = op_count_time.find(op);
         if (it == op_count_time.end()) {
-          std::string fname = OperationTypeString[op] + "-count-time.csv";
+          fname = OperationTypeString[op] + "-count-time.csv";
           std::unique_ptr<WritableFile> file;
           s = env_->NewWritableFile(fname, &file, EnvOptions());
           if (s.ok()) {
@@ -2471,6 +2482,21 @@ class ReporterAgent {
           return;
         }
       }
+
+      assert(cf_meta.levels.size() == 1);
+      bool first = true;
+      for (const auto& file : cf_meta.levels[0].files) {
+        if (first) {
+          first = false;
+        } else {
+          sorted_run_status_file->Append(", ");
+        }
+        if (file.being_compacted) {
+          sorted_run_status_file->Append("merging ");
+        }
+        sorted_run_status_file->Append(std::to_string(file.size));
+      }
+      sorted_run_status_file->Append("\n");
     }
   }
 
