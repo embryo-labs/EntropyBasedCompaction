@@ -2483,7 +2483,6 @@ class ReporterAgent {
         }
       }
 
-      assert(cf_meta.levels.size() == 1);
       bool first = true;
       for (const auto& file : cf_meta.levels[0].files) {
         if (first) {
@@ -2495,6 +2494,18 @@ class ReporterAgent {
           sorted_run_status_file->Append("merging ");
         }
         sorted_run_status_file->Append(std::to_string(file.size));
+      }
+      for (size_t i = 1; i < cf_meta.levels.size(); ++i) {
+        if (cf_meta.levels[i].size == 0) {
+          continue;
+        }
+        if (first) {
+          first = false;
+        } else {
+          sorted_run_status_file->Append(", ");
+        }
+        sorted_run_status_file->Append("Level ");
+        sorted_run_status_file->Append(std::to_string(cf_meta.levels[i].size));
       }
       sorted_run_status_file->Append("\n");
     }
