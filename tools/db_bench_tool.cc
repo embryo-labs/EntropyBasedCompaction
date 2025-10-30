@@ -4055,6 +4055,7 @@ class Benchmark {
         method = &Benchmark::MixGraph;
       } else if (name == "customperiodic") {
         method = &Benchmark::CustomPeriodic;
+        num_threads += FLAGS_num_writers;
       } else if (name == "customperiodicwrite") {
         method = &Benchmark::CustomPeriodicWrite;
       } else if (name == "readmissing") {
@@ -7508,7 +7509,7 @@ class Benchmark {
   }
 
   void CustomPeriodic(ThreadState* thread) {
-    if (thread->tid == 0) {
+    if (thread->tid < FLAGS_num_writers) {
       CustomPeriodicWrite(thread);
     } else {
       CustomPeriodicRead(thread);
