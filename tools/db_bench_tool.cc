@@ -7644,6 +7644,7 @@ class Benchmark {
   void CustomPeriodicRead(ThreadState* thread) {
     int64_t gets = 0;
     int64_t get_found = 0;
+    int64_t seek = 0;
     uint64_t prefix_scan = 0;
     uint64_t prefix_scan_scanned = 0;
 
@@ -7651,7 +7652,8 @@ class Benchmark {
     PinnableSlice pinnable_val;
 
     QueryDecider query;
-    query.Initiate({FLAGS_mix_get_ratio, FLAGS_mix_prefix_scan_ratio});
+    query.Initiate({FLAGS_mix_get_ratio, FLAGS_mix_seek_ratio,
+                    FLAGS_mix_prefix_scan_ratio});
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
@@ -7681,6 +7683,23 @@ class Benchmark {
           abort();
         }
         thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kGet);
+      } else if (query_type == 1) {
+        // Seek
+        Iterator* single_iter = db_with_cfh->db->NewIterator(read_options_);
+        if (single_iter != nullptr) {
+          single_iter->Seek(key);
+          seek++;
+          for (int64_t j = 0; j < FLAGS_seek_nexts && single_iter->Valid();
+               j++) {
+            Slice value = single_iter->value();
+            memcpy(value_buffer, value.data(),
+                   std::min(value.size(), sizeof(value_buffer)));
+            single_iter->Next();
+            assert(single_iter->status().ok());
+          }
+        }
+        delete single_iter;
+        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kSeek);
       } else {
         // Prefix scan
         prefix_scan += 1;
@@ -7716,9 +7735,9 @@ class Benchmark {
     }
     char msg[256];
     snprintf(msg, sizeof(msg),
-             "Gets: %" PRIu64 " in %" PRIu64 " found\nPrefix scan: %" PRIu64
-             ", scanned %" PRIu64 "\n",
-             get_found, gets, prefix_scan, prefix_scan_scanned);
+             "Gets: %" PRIu64 " in %" PRIu64 " found\nSeek: %" PRIu64
+             "\nPrefix scan: %" PRIu64 ", scanned %" PRIu64 "\n",
+             get_found, gets, seek, prefix_scan, prefix_scan_scanned);
     thread->stats.AddMessage(msg);
   }
 
