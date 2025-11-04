@@ -154,9 +154,6 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
   while (it != i) {
     file_i += it->num_sorted_runs;
     assert(file_i < l0_files.size());
-    if (it->c) {
-      it->c->io_priority().fetch_add(1, std::memory_order_relaxed);
-    }
     ++it;
   }
 
@@ -177,14 +174,6 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
     ++i;
     ++file_i;
   }
-
-  int num_compactions = 0;
-  for (++i; i != sorted_runs_.end(); ++i) {
-    if (i->is_merging()) {
-      num_compactions += 1;
-    }
-  }
-  Env::IOPriority io_priority = static_cast<Env::IOPriority>(num_compactions);
 
   it = sorted_runs_.erase(first_to_erase, j);
   assert(it == j);
@@ -207,7 +196,7 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
       /* snapshot_checker */ nullptr, std::move(limiter_handle),
       CompactionReason::kPolicyByCount, /* trim_ts */ "", /*score*/ 2333,
       /* l0_files_might_overlap */ true,
-      BlobGarbageCollectionPolicy::kUseDefault, -1, &*it, io_priority);
+      BlobGarbageCollectionPolicy::kUseDefault, -1, &*it, Env::IO_LOW);
   it->c = c;
   print_status();
   return c;
@@ -221,14 +210,6 @@ void CompactionPickerBenefitCost::CompactionFinished(
   sr->size = size;
   sr->benefit_cost_ratio = 0;
   sr->c = nullptr;
-  for (const auto& i : sorted_runs_) {
-    if (&i == sr) {
-      break;
-    }
-    if (i.c != nullptr) {
-      i.c->io_priority().fetch_sub(1, std::memory_order_relaxed);
-    }
-  }
   print_status();
 }
 
