@@ -36,8 +36,6 @@ void CompactionPickerBenefitCost::print_status() const {
   }
 }
 
-// Compaction from class i to class i+1 has a priority of
-// IO_LOW + num_classes - i
 std::optional<std::pair<
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator,
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
