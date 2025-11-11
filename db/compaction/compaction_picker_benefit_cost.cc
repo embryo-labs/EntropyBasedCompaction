@@ -39,7 +39,9 @@ void CompactionPickerBenefitCost::print_status() const {
 std::optional<std::pair<
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator,
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
-CompactionPickerBenefitCost::PickCompaction() const {
+CompactionPickerBenefitCost::PickCompaction(
+    const MutableCFOptions& mutable_cf_options) const {
+  const double k_e = mutable_cf_options.k_e;
   constexpr double k_n = 1.7;
   struct BestInfo {
     double r_e;
@@ -81,7 +83,7 @@ CompactionPickerBenefitCost::PickCompaction() const {
           better = best->r_n < (double)(num - 1) / size;
         }
       } else {
-        better = r_e > k_e_ - 1e-6;
+        better = r_e > k_e - 1e-6;
       }
       if (better) {
         best = BestInfo{
@@ -116,7 +118,7 @@ bool CompactionPickerBenefitCost::CalcNeedsCompaction(
     return false;
   }
   assert(vstorage->num_levels() == 1);
-  return PickCompaction().has_value();
+  return PickCompaction(mutable_cf_options).has_value();
 }
 bool CompactionPickerBenefitCost::NeedsCompaction(
     const ColumnFamilyData* cfd, const VersionStorageInfo* vstorage) const {
@@ -130,7 +132,7 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
     const std::vector<SequenceNumber>& existing_snapshots,
     const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
     LogBuffer* log_buffer, bool require_max_output_level) {
-  auto ret = PickCompaction();
+  auto ret = PickCompaction(mutable_cf_options);
   if (!ret.has_value()) {
     return nullptr;
   }

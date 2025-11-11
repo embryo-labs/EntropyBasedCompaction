@@ -688,8 +688,8 @@ ColumnFamilyData::ColumnFamilyData(
       compaction_picker_.reset(
           new CompactionPickerBySize(ioptions_, &internal_comparator_));
     } else if (ioptions_.compaction_style == kCompactionStyleBenefitCost) {
-      compaction_picker_.reset(new CompactionPickerBenefitCost(
-          ioptions_, &internal_comparator_, cf_options.benefit_cost_threshold));
+      compaction_picker_.reset(
+          new CompactionPickerBenefitCost(ioptions_, &internal_comparator_));
     } else {
       ROCKS_LOG_ERROR(ioptions_.logger,
                       "Unable to recognize the specified compaction style %d. "

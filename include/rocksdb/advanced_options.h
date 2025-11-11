@@ -631,7 +631,7 @@ struct AdvancedColumnFamilyOptions {
                              std::shared_ptr<CompactionPolicyBySize>>>
       compaction_policy;
 
-  double benefit_cost_threshold = 0;
+  double k_e = 0;
 
   // An iteration->Next() sequentially skips over keys with the same
   // user-key unless this option is set. This number specifies the number

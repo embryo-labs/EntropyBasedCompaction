@@ -7,9 +7,8 @@ namespace ROCKSDB_NAMESPACE {
 class CompactionPickerBenefitCost : public CompactionPicker {
  public:
   CompactionPickerBenefitCost(const ImmutableOptions& ioptions,
-                              const InternalKeyComparator* icmp,
-                              double threshold)
-      : CompactionPicker(ioptions, icmp), k_e_(threshold) {}
+                              const InternalKeyComparator* icmp)
+      : CompactionPicker(ioptions, icmp) {}
 
   bool CalcNeedsCompaction(const ColumnFamilyData* cfd,
                            const MutableCFOptions& mutable_cf_options,
@@ -54,9 +53,8 @@ class CompactionPickerBenefitCost : public CompactionPicker {
   std::optional<std::pair<
       std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator,
       std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
-  PickCompaction() const;
+  PickCompaction(const MutableCFOptions& mutable_cf_options) const;
 
-  double k_e_;
   // Ideally this should be vstorage
   std::list<SortedRunInfo> sorted_runs_;
   const VersionStorageInfo* vstorage_;
