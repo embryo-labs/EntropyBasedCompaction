@@ -41,7 +41,7 @@ std::optional<std::pair<
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
 CompactionPickerBenefitCost::PickCompaction(
     const MutableCFOptions& mutable_cf_options) const {
-  const double k_e = mutable_cf_options.k_e;
+  const double entropy_threshold = mutable_cf_options.entropy_threshold;
   constexpr double k_n = 1.7;
   struct BestInfo {
     double r_e;
@@ -83,7 +83,7 @@ CompactionPickerBenefitCost::PickCompaction(
           better = best->r_n < (double)(num - 1) / size;
         }
       } else {
-        better = r_e > k_e - 1e-6;
+        better = r_e > entropy_threshold - 1e-6;
       }
       if (better) {
         best = BestInfo{
