@@ -42,7 +42,7 @@ std::optional<std::pair<
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator,
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
 CompactionPickerBenefitCost::PickCompaction() const {
-  constexpr double k_c = 1.7;
+  constexpr double k_n = 1.7;
   struct BestInfo {
     double r_e;
     double r_n;
@@ -68,7 +68,7 @@ CompactionPickerBenefitCost::PickCompaction() const {
       size += j->size;
       num += 1;
       sum_nlog2n += j->size * log2(j->size);
-      while (num > 2 && i->size <= (double)(size - i->size) / (num - 1) / k_c) {
+      while (num > 2 && i->size <= (double)(size - i->size) / (num - 1) / k_n) {
         size -= i->size;
         num -= 1;
         sum_nlog2n -= i->size * log2(i->size);
@@ -80,7 +80,7 @@ CompactionPickerBenefitCost::PickCompaction() const {
         if (best->r_e < r_e - 1e-6) {
           better = true;
         } else if (best->r_e < r_e + 1e-6) {
-          better = best->r_n < (double)num / size;
+          better = best->r_n < (double)(num - 1) / size;
         }
       } else {
         better = r_e > k_e_ - 1e-6;
@@ -88,7 +88,7 @@ CompactionPickerBenefitCost::PickCompaction() const {
       if (better) {
         best = BestInfo{
             .r_e = r_e,
-            .r_n = (double)num / size,
+            .r_n = (double)(num - 1) / size,
             .first = i,
             .last = j,
         };
@@ -99,10 +99,11 @@ CompactionPickerBenefitCost::PickCompaction() const {
   if (!best.has_value()) {
     return std::nullopt;
   }
+  // Check preemption condition
   for (const auto& existing_compaction : existing_compactions) {
     const auto& c = existing_compaction.get();
     if (best->r_e < c.r_e - 1e-6 ||
-        best->r_n < (double)c.num_sorted_runs / c.size * k_c) {
+        best->r_n < (double)(c.num_sorted_runs - 1) / c.size * k_n) {
       return std::nullopt;
     }
   }
