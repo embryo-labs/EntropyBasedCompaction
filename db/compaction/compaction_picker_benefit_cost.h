@@ -9,7 +9,7 @@ class CompactionPickerBenefitCost : public CompactionPicker {
   CompactionPickerBenefitCost(const ImmutableOptions& ioptions,
                               const InternalKeyComparator* icmp,
                               double threshold)
-      : CompactionPicker(ioptions, icmp), threshold_(threshold) {}
+      : CompactionPicker(ioptions, icmp), k_e_(threshold) {}
 
   bool CalcNeedsCompaction(const ColumnFamilyData* cfd,
                            const MutableCFOptions& mutable_cf_options,
@@ -36,14 +36,14 @@ class CompactionPickerBenefitCost : public CompactionPicker {
     // > 1 means merging
     size_t num_sorted_runs;
     uint64_t size;
-    double benefit_cost_ratio;
+    double r_e;
     Compaction* c;
 
     SortedRunInfo(size_t _num_sorted_runs, uint64_t _size,
                   double _benefit_cost_ratio)
         : num_sorted_runs(_num_sorted_runs),
           size(_size),
-          benefit_cost_ratio(_benefit_cost_ratio),
+          r_e(_benefit_cost_ratio),
           c(nullptr) {}
 
     bool is_merging() const { return num_sorted_runs > 1; }
@@ -56,7 +56,7 @@ class CompactionPickerBenefitCost : public CompactionPicker {
       std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
   PickCompaction() const;
 
-  double threshold_;
+  double k_e_;
   // Ideally this should be vstorage
   std::list<SortedRunInfo> sorted_runs_;
   const VersionStorageInfo* vstorage_;

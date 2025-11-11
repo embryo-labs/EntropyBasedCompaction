@@ -44,8 +44,8 @@ std::optional<std::pair<
 CompactionPickerBenefitCost::PickCompaction() const {
   constexpr double k_c = 1.7;
   struct BestInfo {
-    double ratio_benefit;
-    double ratio_num;
+    double r_e;
+    double r_n;
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator first;
     std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator last;
   };
@@ -74,21 +74,21 @@ CompactionPickerBenefitCost::PickCompaction() const {
         sum_nlog2n -= i->size * log2(i->size);
         ++i;
       }
-      double ratio_benefit = log2(size) - sum_nlog2n / size;
+      double r_e = log2(size) - sum_nlog2n / size;
       bool better = false;
       if (best.has_value()) {
-        if (best->ratio_benefit < ratio_benefit - 1e-6) {
+        if (best->r_e < r_e - 1e-6) {
           better = true;
-        } else if (best->ratio_benefit < ratio_benefit + 1e-6) {
-          better = best->ratio_num < (double)num / size;
+        } else if (best->r_e < r_e + 1e-6) {
+          better = best->r_n < (double)num / size;
         }
       } else {
-        better = ratio_benefit > threshold_ - 1e-6;
+        better = r_e > k_e_ - 1e-6;
       }
       if (better) {
         best = BestInfo{
-            .ratio_benefit = ratio_benefit,
-            .ratio_num = (double)num / size,
+            .r_e = r_e,
+            .r_n = (double)num / size,
             .first = i,
             .last = j,
         };
@@ -101,8 +101,8 @@ CompactionPickerBenefitCost::PickCompaction() const {
   }
   for (const auto& existing_compaction : existing_compactions) {
     const auto& c = existing_compaction.get();
-    if (best->ratio_benefit < c.benefit_cost_ratio - 1e-6 ||
-        best->ratio_num < (double)c.num_sorted_runs / c.size * k_c) {
+    if (best->r_e < c.r_e - 1e-6 ||
+        best->r_n < (double)c.num_sorted_runs / c.size * k_c) {
       return std::nullopt;
     }
   }
@@ -179,7 +179,7 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
   assert(it == j);
   it->num_sorted_runs = num;
   it->size = size;
-  it->benefit_cost_ratio = log2(size) - sum_nlog2n / size;
+  it->r_e = log2(size) - sum_nlog2n / size;
   auto c = new Compaction(
       vstorage, ioptions_, mutable_cf_options, mutable_db_options,
       std::move(inputs), 0,
@@ -208,7 +208,7 @@ void CompactionPickerBenefitCost::CompactionFinished(
   auto sr = static_cast<SortedRunInfo*>(info);
   sr->num_sorted_runs = 1;
   sr->size = size;
-  sr->benefit_cost_ratio = 0;
+  sr->r_e = 0;
   sr->c = nullptr;
   print_status();
 }
