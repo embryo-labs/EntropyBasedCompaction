@@ -147,6 +147,10 @@ struct MutableCFOptions {
         compaction_options_universal(options.compaction_options_universal),
         compaction_policy(options.compaction_policy),
         entropy_threshold(options.entropy_threshold),
+        k_e(options.k_e),
+        sliding_window(options.sliding_window),
+        preempt_by_entropy(options.preempt_by_entropy),
+        preempt_by_num(options.preempt_by_num),
         preclude_last_level_data_seconds(
             options.preclude_last_level_data_seconds),
         preserve_internal_time_seconds(options.preserve_internal_time_seconds),
@@ -327,6 +331,10 @@ struct MutableCFOptions {
                              std::shared_ptr<CompactionPolicyBySize>>>
       compaction_policy;
   double entropy_threshold;
+  double k_e;
+  bool sliding_window;
+  bool preempt_by_entropy;
+  bool preempt_by_num;
   uint64_t preclude_last_level_data_seconds;
   uint64_t preserve_internal_time_seconds;
 

@@ -68,19 +68,34 @@ CompactionPickerBenefitCost::PickCompaction(
       size += j->size;
       num += 1;
       sum_nlog2n += j->size * log2(j->size);
-      while (num > 2 && i->size <= (double)(size - i->size) / (num - 1) / k_n) {
-        size -= i->size;
-        num -= 1;
-        sum_nlog2n -= i->size * log2(i->size);
-        ++i;
+      if (mutable_cf_options.sliding_window) {
+        while (num > 2 &&
+               i->size <= (double)(size - i->size) / (num - 1) / k_n) {
+          size -= i->size;
+          num -= 1;
+          sum_nlog2n -= i->size * log2(i->size);
+          ++i;
+        }
       }
       double r_e = log2(size) - sum_nlog2n / size;
-      bool better = false;
+      bool better;
       if (best.has_value()) {
-        if (best->r_e < r_e - 1e-6) {
-          better = true;
-        } else if (best->r_e < r_e + 1e-6) {
-          better = best->r_n < (double)(num - 1) / size;
+        bool decided = false;
+        if (mutable_cf_options.preempt_by_entropy) {
+          if (best->r_e < r_e - 1e-6) {
+            decided = true;
+            better = true;
+          } else if (best->r_e > r_e + 1e-6) {
+            decided = true;
+            better = false;
+          }
+        }
+        if (!decided) {
+          if (mutable_cf_options.preempt_by_num) {
+            better = best->r_n < (double)(num - 1) / size;
+          } else {
+            better = false;
+          }
         }
       } else {
         better = r_e > entropy_threshold - 1e-6;
@@ -102,7 +117,11 @@ CompactionPickerBenefitCost::PickCompaction(
   // Check preemption condition
   for (const auto& existing_compaction : existing_compactions) {
     const auto& c = existing_compaction.get();
-    if (best->r_e < c.r_e - 1e-6 ||
+    if (mutable_cf_options.preempt_by_entropy &&
+        best->r_e < c.r_e * mutable_cf_options.k_e) {
+      return std::nullopt;
+    }
+    if (mutable_cf_options.preempt_by_num &&
         best->r_n < (double)(c.num_sorted_runs - 1) / c.size * k_n) {
       return std::nullopt;
     }

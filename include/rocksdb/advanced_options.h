@@ -632,6 +632,10 @@ struct AdvancedColumnFamilyOptions {
       compaction_policy;
 
   double entropy_threshold = 0;
+  double k_e = 1;
+  bool sliding_window = true;
+  bool preempt_by_entropy = true;
+  bool preempt_by_num = true;
 
   // An iteration->Next() sequentially skips over keys with the same
   // user-key unless this option is set. This number specifies the number

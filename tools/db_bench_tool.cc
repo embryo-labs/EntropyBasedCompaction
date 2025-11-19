@@ -547,6 +547,10 @@ DEFINE_bool(allow_intra_l0_compactions,
 
 DEFINE_string(compaction_policy, "", "steady/lazy-leveling/dynamic-tiering");
 DEFINE_double(entropy_threshold, 0.55, "");
+DEFINE_double(k_e, 1, "");
+DEFINE_bool(sliding_window, true, "");
+DEFINE_bool(preempt_by_entropy, true, "");
+DEFINE_bool(preempt_by_num, true, "");
 
 DEFINE_string(steady_policy_file, "", "");
 
@@ -5241,6 +5245,10 @@ class Benchmark {
       assert(FLAGS_compaction_policy == "");
     }
     options.entropy_threshold = FLAGS_entropy_threshold;
+    options.k_e = FLAGS_k_e;
+    options.sliding_window = FLAGS_sliding_window;
+    options.preempt_by_entropy = FLAGS_preempt_by_entropy;
+    options.preempt_by_num = FLAGS_preempt_by_num;
     if (FLAGS_thread_status_per_interval > 0) {
       options.enable_thread_tracking = true;
     }
