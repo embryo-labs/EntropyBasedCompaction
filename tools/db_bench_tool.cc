@@ -7680,7 +7680,6 @@ class Benchmark {
         // Get
         gets += 1;
         pinnable_val.Reset();
-        thread->stats.ResetLastOpTime();
         Status s = db_with_cfh->db->Get(read_options_,
                                         db_with_cfh->db->DefaultColumnFamily(),
                                         key, &pinnable_val);
@@ -7739,6 +7738,7 @@ class Benchmark {
       if (thread->shared->read_rate_limiter) {
         thread->shared->read_rate_limiter->Request(1, Env::IO_HIGH,
                                                    nullptr /*stats*/);
+        thread->stats.ResetLastOpTime();
       }
     }
     char msg[256];
