@@ -4073,6 +4073,7 @@ class Benchmark {
         num_threads += FLAGS_num_writers;
       } else if (name == "customperiodicwrite") {
         method = &Benchmark::CustomPeriodicWrite;
+        num_threads += FLAGS_num_writers;
       } else if (name == "readmissing") {
         ++key_size_;
         method = &Benchmark::ReadRandom;
@@ -7529,9 +7530,16 @@ class Benchmark {
 
   void CustomPeriodic(ThreadState* thread) {
     if (thread->tid < FLAGS_num_writers) {
-      CustomPeriodicWrite(thread);
+      CustomPeriodicWriter(thread);
     } else {
-      CustomPeriodicRead(thread);
+      CustomPeriodicReader(thread);
+    }
+  }
+  void CustomPeriodicWrite(ThreadState* thread) {
+    if (thread->tid < FLAGS_num_writers) {
+      CustomPeriodicWriter(thread);
+    } else {
+      ReadRandom(thread);
     }
   }
   class PerSec {
@@ -7594,7 +7602,7 @@ class Benchmark {
     uint64_t cur_begin_us_;
     uint64_t last_recalc_us_;
   };
-  void CustomPeriodicWrite(ThreadState* thread) {
+  void CustomPeriodicWriter(ThreadState* thread) {
     RandomGenerator gen;
 
     std::unique_ptr<const char[]> key_guard;
@@ -7649,7 +7657,7 @@ class Benchmark {
       }
     }
   }
-  void CustomPeriodicRead(ThreadState* thread) {
+  void CustomPeriodicReader(ThreadState* thread) {
     int64_t gets = 0;
     int64_t get_found = 0;
     int64_t seek = 0;
