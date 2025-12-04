@@ -142,7 +142,6 @@ DEFINE_string(
     "multiscan,"
     "mixgraph,"
     "customperiodic,"
-    "customperiodicwrite,"
     "readseq,"
     "readtorowcache,"
     "readtocache,"
@@ -4071,9 +4070,6 @@ class Benchmark {
       } else if (name == "customperiodic") {
         method = &Benchmark::CustomPeriodic;
         num_threads += FLAGS_num_writers;
-      } else if (name == "customperiodicwrite") {
-        method = &Benchmark::CustomPeriodicWrite;
-        num_threads += FLAGS_num_writers;
       } else if (name == "readmissing") {
         ++key_size_;
         method = &Benchmark::ReadRandom;
@@ -4459,7 +4455,8 @@ class Benchmark {
       PerSec reads_per_second(FLAGS_reads_per_second_file);
       auto init = reads_per_second.init();
       if (init >= 0) {
-        shared.read_rate_limiter.reset(NewGenericRateLimiter(init));
+        shared.read_rate_limiter.reset(NewGenericRateLimiter(init, 100000 /* refill_period_us */,
+          10 /* fairness */, RateLimiter::Mode::kReadsOnly));
       }
     }
 
@@ -6848,10 +6845,9 @@ class Benchmark {
         thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kPrefixScan);
       }
 
-      if (thread->shared->read_rate_limiter.get() != nullptr &&
-          reads % 256 == 255) {
+      if (thread->shared->read_rate_limiter.get() != nullptr) {
         thread->shared->read_rate_limiter->Request(
-            256, Env::IO_HIGH, nullptr /* stats */, RateLimiter::OpType::kRead);
+            1, Env::IO_HIGH, nullptr /* stats */, RateLimiter::OpType::kRead);
         thread->stats.ResetLastOpTime();
       }
     }
@@ -7532,13 +7528,6 @@ class Benchmark {
     if (thread->tid < FLAGS_num_writers) {
       CustomPeriodicWriter(thread);
     } else {
-      CustomPeriodicReader(thread);
-    }
-  }
-  void CustomPeriodicWrite(ThreadState* thread) {
-    if (thread->tid < FLAGS_num_writers) {
-      CustomPeriodicWriter(thread);
-    } else {
       ReadRandom(thread);
     }
   }
@@ -7656,105 +7645,6 @@ class Benchmark {
             new_limit_read.value());
       }
     }
-  }
-  void CustomPeriodicReader(ThreadState* thread) {
-    int64_t gets = 0;
-    int64_t get_found = 0;
-    int64_t seek = 0;
-    uint64_t prefix_scan = 0;
-    uint64_t prefix_scan_scanned = 0;
-
-    RandomGenerator gen;
-    PinnableSlice pinnable_val;
-
-    QueryDecider query;
-    query.Initiate({FLAGS_mix_get_ratio, FLAGS_mix_seek_ratio,
-                    FLAGS_mix_prefix_scan_ratio});
-
-    std::unique_ptr<const char[]> key_guard;
-    Slice key = AllocateKey(&key_guard);
-
-    Duration duration(duration_, std::numeric_limits<int64_t>::max());
-    char value_buffer[256];
-    ReadOptions prefix_scan_options = read_options_;
-    while (!duration.Done(1)) {
-      DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
-      auto key_rand =
-          GetRandomKey(&thread->rand, read_random_exp_range_) % FLAGS_num;
-      GenerateKeyFromInt(key_rand, FLAGS_num, &key);
-
-      int query_type = query.GetType(GetRandomKey(&thread->rand, 0));
-      if (query_type == 0) {
-        // Get
-        gets += 1;
-        pinnable_val.Reset();
-        Status s = db_with_cfh->db->Get(read_options_,
-                                        db_with_cfh->db->DefaultColumnFamily(),
-                                        key, &pinnable_val);
-        if (s.ok()) {
-          get_found++;
-        } else if (!s.IsNotFound()) {
-          fprintf(stderr, "Get returned an error: %s\n", s.ToString().c_str());
-          abort();
-        }
-        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kGet);
-      } else if (query_type == 1) {
-        // Seek
-        Iterator* single_iter = db_with_cfh->db->NewIterator(read_options_);
-        if (single_iter != nullptr) {
-          single_iter->Seek(key);
-          seek++;
-          for (int64_t j = 0; j < FLAGS_seek_nexts && single_iter->Valid();
-               j++) {
-            Slice value = single_iter->value();
-            memcpy(value_buffer, value.data(),
-                   std::min(value.size(), sizeof(value_buffer)));
-            single_iter->Next();
-            assert(single_iter->status().ok());
-          }
-        }
-        delete single_iter;
-        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kSeek);
-      } else {
-        // Prefix scan
-        prefix_scan += 1;
-        std::string prefix(key.ToStringView().substr(0, prefix_size_));
-        size_t i = prefix.size();
-        while (i > 0) {
-          --i;
-          if (++prefix[i] != 0) {
-            break;
-          }
-        }
-        Slice prefix_slice = prefix;
-        prefix_scan_options.iterate_upper_bound = &prefix_slice;
-        Iterator* it = db_with_cfh->db->NewIterator(prefix_scan_options);
-        if (it != nullptr) {
-          it->Seek(key);
-          while (it->Valid()) {
-            prefix_scan_scanned += 1;
-            Slice value = it->value();
-            memcpy(value_buffer, value.data(),
-                   std::min(value.size(), sizeof(value_buffer)));
-            it->Next();
-            assert(it->status().ok());
-          }
-        }
-        delete it;
-        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kPrefixScan);
-      }
-      if (thread->shared->read_rate_limiter) {
-        thread->shared->read_rate_limiter->Request(1, Env::IO_HIGH,
-                                                   nullptr /*stats*/);
-        thread->stats.ResetLastOpTime();
-      }
-    }
-    char msg[256];
-    snprintf(msg, sizeof(msg),
-             "Gets: %" PRIu64 " in %" PRIu64 " found\nSeek: %" PRIu64
-             "\nPrefix scan: %" PRIu64 ", scanned %" PRIu64 "\n",
-             get_found, gets, seek, prefix_scan, prefix_scan_scanned);
-    thread->stats.AddMessage(msg);
   }
 
   void IteratorCreation(ThreadState* thread) {
