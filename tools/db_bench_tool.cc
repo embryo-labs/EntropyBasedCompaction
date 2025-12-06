@@ -1597,6 +1597,7 @@ DEFINE_uint64(period_secs, 0, "");
 DEFINE_string(writes_per_second_file, "", "");
 DEFINE_string(reads_per_second_file, "", "");
 DEFINE_string(compaction_limit_file, "", "");
+DEFINE_string(scan_length_cdf_file, "", "");
 
 DEFINE_bool(rate_limit_bg_reads, false,
             "Use options.rate_limiter on compaction reads");
@@ -6672,6 +6673,7 @@ class Benchmark {
     int64_t get_found = 0;
     int64_t seek = 0;
     int64_t seek_found = 0;
+    uint64_t seek_scanned = 0;
     uint64_t prefix_scan = 0;
     uint64_t prefix_scan_scanned = 0;
 
@@ -6683,6 +6685,29 @@ class Benchmark {
     QueryDecider query;
     query.Initiate({FLAGS_mix_get_ratio, FLAGS_mix_seek_ratio,
                     FLAGS_mix_prefix_scan_ratio});
+
+    std::vector<std::pair<double, uint64_t>> scan_length_cdf;
+    if (!FLAGS_scan_length_cdf_file.empty()) {
+      std::ifstream scan_length_cdf_file(FLAGS_scan_length_cdf_file);
+      if (!scan_length_cdf_file) {
+        fprintf(stderr, "Fail to open %s. errno = %d\n",
+                FLAGS_scan_length_cdf_file.c_str(), errno);
+        return;
+      }
+      do {
+        double cdf;
+        uint64_t scan_length;
+        scan_length_cdf_file >> cdf >> scan_length;
+        if (!scan_length_cdf.empty()) {
+          if (scan_length_cdf.back().first > cdf) {
+            fprintf(stderr, "scan_length_cdf_file is invalid: %f > %f\n",
+                    scan_length_cdf.back().first, cdf);
+            return;
+          }
+        }
+        scan_length_cdf.emplace_back(cdf, scan_length);
+      } while (scan_length_cdf_file);
+    }
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
@@ -6798,13 +6823,30 @@ class Benchmark {
         // Seek query
         Iterator* single_iter = db_with_cfh->db->NewIterator(read_options_);
         if (single_iter != nullptr) {
+          uint64_t scan_length;
+          if (scan_length_cdf.empty()) {
+            scan_length = FLAGS_seek_nexts;
+          } else {
+            auto it = std::lower_bound(
+                scan_length_cdf.begin(), scan_length_cdf.end(),
+                (double)thread->rand.Next() /
+                    (double)std::numeric_limits<uint64_t>::max(),
+                [](std::pair<double, uint64_t> a, double b) {
+                  return a.first < b;
+                });
+            if (it == scan_length_cdf.end()) {
+              scan_length = scan_length_cdf.back().second;
+            } else {
+              scan_length = it->second;
+            }
+          }
           single_iter->Seek(key);
           seek++;
           if (single_iter->Valid() && single_iter->key().compare(key) == 0) {
             seek_found++;
           }
-          for (int64_t j = 0; j < FLAGS_seek_nexts && single_iter->Valid();
-               j++) {
+          seek_scanned += scan_length;
+          for (uint64_t j = 0; j < scan_length && single_iter->Valid(); j++) {
             Slice value = single_iter->value();
             memcpy(value_buffer, value.data(),
                    std::min(value.size(), sizeof(value_buffer)));
@@ -6856,8 +6898,8 @@ class Benchmark {
     snprintf(
         msg, sizeof(msg),
         "Gets: %" PRIu64 " in %" PRIu64 " found\nSeek: %" PRIu64 " in %" PRIu64
-        " found\nPrefix scan: %" PRIu64 ", scanned %" PRIu64 "\n",
-        get_found, gets, seek_found, seek, prefix_scan, prefix_scan_scanned);
+        " found, scanned %" PRIu64 "\nPrefix scan: %" PRIu64 ", scanned %" PRIu64 "\n",
+        get_found, gets, seek_found, seek, seek_scanned, prefix_scan, prefix_scan_scanned);
 
     thread->stats.AddBytes(bytes);
     thread->stats.AddMessage(msg);
