@@ -6668,7 +6668,6 @@ class Benchmark {
   }
 
   void ReadRandom(ThreadState* thread) {
-    int64_t reads = 0;
     int64_t gets = 0;
     int64_t get_found = 0;
     int64_t seek = 0;
@@ -6779,7 +6778,6 @@ class Benchmark {
       int query_type = query.GetType(GetRandomKey(&thread->rand, 0));
 
       // Start the query
-      reads += 1;
       if (query_type == 0) {
         // the Get query
         gets++;
