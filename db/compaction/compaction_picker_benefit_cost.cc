@@ -92,7 +92,7 @@ CompactionPickerBenefitCost::PickCompaction(
         }
         if (!decided) {
           if (mutable_cf_options.preempt_by_num) {
-            better = best->r_n < (double)(num - 1) / size;
+            better = best->r_n < (double)num / size;
           } else {
             better = false;
           }
@@ -103,7 +103,7 @@ CompactionPickerBenefitCost::PickCompaction(
       if (better) {
         best = BestInfo{
             .r_e = r_e,
-            .r_n = (double)(num - 1) / size,
+            .r_n = (double)num / size,
             .first = i,
             .last = j,
         };
@@ -122,7 +122,7 @@ CompactionPickerBenefitCost::PickCompaction(
       return std::nullopt;
     }
     if (mutable_cf_options.preempt_by_num &&
-        best->r_n < (double)(c.num_sorted_runs - 1) / c.size * k_n) {
+        best->r_n < (double)c.num_sorted_runs / c.size * k_n) {
       return std::nullopt;
     }
   }
