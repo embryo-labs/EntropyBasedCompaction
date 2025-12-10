@@ -2245,13 +2245,26 @@ class ReporterAgent {
       OperationType op = static_cast<OperationType>(i);
       const auto& hist = hist_[op];
       if (!hist.Empty()) {
-        printf(
-            "%s\nAverage latency(us) %f\nTail latencies (us)\n50%% %f\n99%% "
-            "%f\n99.9%% "
-            "%f\n99.99%% %f\n",
-            OperationTypeString[op].c_str(), hist.Average(),
-            hist.Percentile(50), hist.Percentile(99), hist.Percentile(99.9),
-            hist.Percentile(99.99));
+        std::string fname = OperationTypeString[op] + "-latency-us.json";
+        std::unique_ptr<WritableFile> file;
+        Status s = env_->NewWritableFile(fname, &file, EnvOptions());
+        if (!s.ok()) {
+          printf("Can't open %s: %s\n", fname.c_str(), s.ToString().c_str());
+        }
+        if (s.ok()) {
+          s = file->Append(
+              "{\n\t\"Average\": " + std::to_string(hist.Average()) +
+              ",\n\t\"10%\": " + std::to_string(hist.Percentile(10)) +
+              ",\n\t\"50%\": " + std::to_string(hist.Percentile(50)) +
+              ",\n\t\"90%\": " + std::to_string(hist.Percentile(90)) +
+              ",\n\t\"99%\": " + std::to_string(hist.Percentile(99)) +
+              ",\n\t\"99.9%\": " + std::to_string(hist.Percentile(99.9)) +
+              ",\n\t\"99.99%\": " + std::to_string(hist.Percentile(99.99)) +
+              "\n}\n");
+        }
+        if (s.ok()) {
+          s = file->Flush();
+        }
       }
     }
   }
@@ -6726,6 +6739,7 @@ class Benchmark {
     Duration duration(duration_, reads_);
     char value_buffer[256];
     ReadOptions prefix_scan_options = read_options_;
+    auto last_op_finish = std::chrono::steady_clock::now();
     for (;;) {
       if (FLAGS_finish_after_writes) {
         MutexLock l(&thread->shared->mu);
@@ -6778,8 +6792,9 @@ class Benchmark {
       int query_type = query.GetType(GetRandomKey(&thread->rand, 0));
 
       // Start the query
+      OperationType op_type;
       if (query_type == 0) {
-        // the Get query
+        op_type = kGet;
         gets++;
         if (read_operands_) {
           GetMergeOperandsOptions get_merge_operands_options;
@@ -6816,9 +6831,8 @@ class Benchmark {
           fprintf(stderr, "Get returned an error: %s\n", s.ToString().c_str());
           abort();
         }
-        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kGet);
       } else if (query_type == 1) {
-        // Seek query
+        op_type = kSeek;
         Iterator* single_iter = db_with_cfh->db->NewIterator(read_options_);
         if (single_iter != nullptr) {
           uint64_t scan_length;
@@ -6856,6 +6870,7 @@ class Benchmark {
         delete single_iter;
         thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kSeek);
       } else {
+        op_type = kPrefixScan;
         // Prefix scan
         prefix_scan += 1;
         std::string prefix(key.ToStringView().substr(0, prefix_size_));
@@ -6882,13 +6897,22 @@ class Benchmark {
           }
         }
         delete it;
-        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kPrefixScan);
       }
 
+      auto now = std::chrono::steady_clock::now();
+      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(
+                        now - last_op_finish)
+                        .count();
+      last_op_finish = now;
+      thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, op_type,
+                                micros);
+      thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1,
+                                OperationType::kRead, micros);
+
       if (thread->shared->read_rate_limiter.get() != nullptr) {
-        thread->shared->read_rate_limiter->Request(
-            1, Env::IO_HIGH, nullptr /* stats */, RateLimiter::OpType::kRead);
-        thread->stats.ResetLastOpTime();
+                                  thread->shared->read_rate_limiter->Request(
+                                      1, Env::IO_HIGH, nullptr /* stats */,
+                                      RateLimiter::OpType::kRead);
       }
     }
 
