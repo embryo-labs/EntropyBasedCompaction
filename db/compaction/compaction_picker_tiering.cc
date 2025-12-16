@@ -154,31 +154,24 @@ CompactionPickerTiering::PickCompaction(
     if (i == sorted_runs_.end()) {
       return std::nullopt;
     }
-    bool idle = true;
     bool T_increased = false;
     auto j = i;
     size_t num = 0;
     while (j != sorted_runs_.end()) {
       if (j->is_merging()) {
-        idle = false;
         assert(num <= T_);
         if (num == T_) {
-          if (j->compaction_times == i->compaction_times + 1) {
-            if (mutable_cf_options.autotune_size_ratio) {
-              T_ += 1;
-              T_increased = true;
-              printf("Congested. Increase T to %zu\n", T_);
-            }
-          } else {
-            assert(j->compaction_times > i->compaction_times + 1);
+          if (j->compaction_times > i->compaction_times + 1) {
             --j;
             return std::make_pair(i, j);
           }
+          assert((j->compaction_times == i->compaction_times + 1));
+          if (mutable_cf_options.autotune_size_ratio) {
+            T_ += 1;
+            printf("Congested. Increase T to %zu\n", T_);
+          }
         }
-        ++j;
-        i = j;
-        num = 0;
-        continue;
+        return std::nullopt;
       }
       if (j->compaction_times > i->compaction_times) {
         if (num == T_) {
@@ -212,9 +205,6 @@ CompactionPickerTiering::PickCompaction(
     }
     assert(num < T_);
     if (!mutable_cf_options.autotune_size_ratio) {
-      return std::nullopt;
-    }
-    if (!idle) {
       return std::nullopt;
     }
     assert(!T_increased);
