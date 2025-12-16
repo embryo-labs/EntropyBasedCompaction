@@ -24,6 +24,7 @@
 #include "db/compaction/compaction_picker_by_size.h"
 #include "db/compaction/compaction_picker_fifo.h"
 #include "db/compaction/compaction_picker_level.h"
+#include "db/compaction/compaction_picker_tiering.h"
 #include "db/compaction/compaction_picker_universal.h"
 #include "db/db_impl/db_impl.h"
 #include "db/internal_stats.h"
@@ -674,6 +675,18 @@ ColumnFamilyData::ColumnFamilyData(
     } else if (ioptions_.compaction_style == kCompactionStyleFIFO) {
       compaction_picker_.reset(
           new FIFOCompactionPicker(ioptions_, &internal_comparator_));
+    } else if (ioptions_.compaction_style == kCompactionStyleTiering) {
+      compaction_picker_.reset(
+          new CompactionPickerTiering(ioptions_, &internal_comparator_));
+    } else if (ioptions_.compaction_style == kCompactionStyleBySize) {
+      compaction_picker_.reset(
+          new CompactionPickerBySize(ioptions_, &internal_comparator_));
+    } else if (ioptions_.compaction_style == kCompactionStyleBenefitCost) {
+      compaction_picker_.reset(
+          new CompactionPickerBenefitCost(ioptions_, &internal_comparator_));
+    } else if (ioptions_.compaction_style == kCompactionStyleByCount) {
+      compaction_picker_.reset(
+          new CompactionPickerByCount(ioptions_, &internal_comparator_));
     } else if (ioptions_.compaction_style == kCompactionStyleNone) {
       compaction_picker_.reset(
           new NullCompactionPicker(ioptions_, &internal_comparator_));
@@ -681,15 +694,6 @@ ColumnFamilyData::ColumnFamilyData(
                      "Column family %s does not use any background compaction. "
                      "Compactions can only be done via CompactFiles\n",
                      GetName().c_str());
-    } else if (ioptions_.compaction_style == kCompactionStyleByCount) {
-      compaction_picker_.reset(
-          new CompactionPickerByCount(ioptions_, &internal_comparator_));
-    } else if (ioptions_.compaction_style == kCompactionStyleBySize) {
-      compaction_picker_.reset(
-          new CompactionPickerBySize(ioptions_, &internal_comparator_));
-    } else if (ioptions_.compaction_style == kCompactionStyleBenefitCost) {
-      compaction_picker_.reset(
-          new CompactionPickerBenefitCost(ioptions_, &internal_comparator_));
     } else {
       ROCKS_LOG_ERROR(ioptions_.logger,
                       "Unable to recognize the specified compaction style %d. "

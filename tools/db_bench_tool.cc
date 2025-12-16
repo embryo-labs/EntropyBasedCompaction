@@ -54,7 +54,6 @@
 #include "rocksdb/compaction_policy_dynamic_tiering.h"
 #include "rocksdb/compaction_policy_lazy_leveling.h"
 #include "rocksdb/compaction_policy_steady.h"
-#include "rocksdb/compaction_policy_tiering.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
@@ -545,6 +544,7 @@ DEFINE_bool(allow_intra_l0_compactions,
             ROCKSDB_NAMESPACE::Options().allow_intra_l0_compactions, "");
 
 DEFINE_string(compaction_policy, "", "steady/lazy-leveling/dynamic-tiering");
+DEFINE_bool(autotune_size_ratio, false, "");
 DEFINE_double(entropy_threshold, 0.55, "");
 DEFINE_double(k_e, 1, "");
 DEFINE_bool(sliding_window, true, "");
@@ -5208,8 +5208,9 @@ class Benchmark {
         FLAGS_universal_incremental;
     options.compaction_options_universal.stop_style =
         static_cast<CompactionStopStyle>(FLAGS_universal_stop_style);
-    if (FLAGS_compaction_style_e == CompactionStyle::kCompactionStyleByCount) {
-      if (FLAGS_compaction_policy == "steady") {
+    switch (FLAGS_compaction_style_e) {
+      case CompactionStyle::kCompactionStyleByCount: {
+        assert(FLAGS_compaction_policy == "steady");
         assert(!FLAGS_steady_policy_file.empty());
         auto policy_json =
             nlohmann::json::parse(std::ifstream(FLAGS_steady_policy_file));
@@ -5227,35 +5228,35 @@ class Benchmark {
         }
         options.compaction_policy = std::make_shared<CompactionPolicySteady>(
             policy_s, R, std::move(rounds));
-      } else if (FLAGS_compaction_policy == "tiering") {
-        options.compaction_policy = std::make_shared<CompactionPolicyTiering>(
-            FLAGS_max_bytes_for_level_multiplier);
-      }
-    } else if (FLAGS_compaction_style_e ==
-               CompactionStyle::kCompactionStyleBySize) {
-      if (FLAGS_compaction_policy == "lazy-leveling") {
-        std::vector<std::string> num_sorted_runs_str =
-            ROCKSDB_NAMESPACE::StringSplit(FLAGS_lazy_leveling_num_sorted_runs,
-                                           ',');
-        std::vector<size_t> num_sorted_runs;
-        for (const std::string& item : num_sorted_runs_str) {
-          num_sorted_runs.push_back(std::stoi(item));
+      } break;
+      case CompactionStyle::kCompactionStyleBySize: {
+        if (FLAGS_compaction_policy == "lazy-leveling") {
+          std::vector<std::string> num_sorted_runs_str =
+              ROCKSDB_NAMESPACE::StringSplit(
+                  FLAGS_lazy_leveling_num_sorted_runs, ',');
+          std::vector<size_t> num_sorted_runs;
+          for (const std::string& item : num_sorted_runs_str) {
+            num_sorted_runs.push_back(std::stoi(item));
+          }
+          options.compaction_policy =
+              std::make_shared<CompactionPolicyLazyLeveling>(
+                  std::move(num_sorted_runs));
+        } else if (FLAGS_compaction_policy == "dynamic-size-ratio") {
+          options.compaction_policy =
+              std::make_shared<CompactionPolicyDynamicSizeRatio>(FLAGS_C);
+        } else if (FLAGS_compaction_policy == "dynamic-tiering") {
+          options.compaction_policy =
+              std::make_shared<CompactionPolicyDynamicTiering>(FLAGS_C);
+        } else {
+          assert(false);
         }
-        options.compaction_policy =
-            std::make_shared<CompactionPolicyLazyLeveling>(
-                std::move(num_sorted_runs));
-      } else if (FLAGS_compaction_policy == "dynamic-size-ratio") {
-        options.compaction_policy =
-            std::make_shared<CompactionPolicyDynamicSizeRatio>(FLAGS_C);
-      } else if (FLAGS_compaction_policy == "dynamic-tiering") {
-        options.compaction_policy =
-            std::make_shared<CompactionPolicyDynamicTiering>(FLAGS_C);
-      } else {
-        assert(false);
+        break;
+        default:
+          assert(FLAGS_compaction_policy == "");
+          break;
       }
-    } else {
-      assert(FLAGS_compaction_policy == "");
-    }
+    };
+    options.autotune_size_ratio = FLAGS_autotune_size_ratio;
     options.entropy_threshold = FLAGS_entropy_threshold;
     options.k_e = FLAGS_k_e;
     options.sliding_window = FLAGS_sliding_window;

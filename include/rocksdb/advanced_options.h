@@ -33,13 +33,14 @@ enum CompactionStyle : char {
   kCompactionStyleUniversal = 0x1,
   // FIFO compaction style
   kCompactionStyleFIFO = 0x2,
-  // Trigger compactions based on the count of merged flushed SSTables
-  kCompactionStyleByCount = 0x3,
+  kCompactionStyleTiering = 0x3,
   kCompactionStyleBySize = 0x4,
   kCompactionStyleBenefitCost = 0x5,
+  // Trigger compactions based on the count of merged flushed SSTables
+  kCompactionStyleByCount = 0x6,
   // Disable background compaction. Compaction jobs are submitted
   // via CompactFiles().
-  kCompactionStyleNone = 0x6,
+  kCompactionStyleNone = 0x7,
 };
 
 // In Level-based compaction, it Determines which file from a level to be
@@ -630,6 +631,8 @@ struct AdvancedColumnFamilyOptions {
   std::optional<std::variant<std::shared_ptr<CompactionPolicyByCount>,
                              std::shared_ptr<CompactionPolicyBySize>>>
       compaction_policy;
+
+  bool autotune_size_ratio = false;
 
   double entropy_threshold = 0;
   double k_e = 1;

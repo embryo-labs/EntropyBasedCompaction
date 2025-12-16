@@ -3613,9 +3613,10 @@ void VersionStorageInfo::ComputeCompactionScore(
   int max_output_level =
       MaxOutputLevel(immutable_options.cf_allow_ingest_behind ||
                      immutable_options.allow_ingest_behind);
-  if (compaction_style_ == kCompactionStyleByCount ||
+  if (compaction_style_ == kCompactionStyleTiering ||
       compaction_style_ == kCompactionStyleBySize ||
-      compaction_style_ == kCompactionStyleBenefitCost) {
+      compaction_style_ == kCompactionStyleBenefitCost ||
+      compaction_style_ == kCompactionStyleByCount) {
     assert(compaction_level_.size() == compaction_score_.size());
     assert(compaction_level_.size() == (size_t)num_levels());
     compaction_level_[0] = 0;
@@ -4273,9 +4274,10 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
   if (compaction_style_ == kCompactionStyleNone ||
       compaction_style_ == kCompactionStyleFIFO ||
       compaction_style_ == kCompactionStyleUniversal ||
-      compaction_style_ == kCompactionStyleByCount ||
+      compaction_style_ == kCompactionStyleTiering ||
       compaction_style_ == kCompactionStyleBySize ||
-      compaction_style_ == kCompactionStyleBenefitCost) {
+      compaction_style_ == kCompactionStyleBenefitCost ||
+      compaction_style_ == kCompactionStyleByCount) {
     // don't need this
     return;
   }

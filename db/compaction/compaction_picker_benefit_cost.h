@@ -8,7 +8,7 @@ class CompactionPickerBenefitCost : public CompactionPicker {
  public:
   CompactionPickerBenefitCost(const ImmutableOptions& ioptions,
                               const InternalKeyComparator* icmp)
-      : CompactionPicker(ioptions, icmp) {}
+      : CompactionPicker(ioptions, icmp), vstorage_(nullptr) {}
 
   bool CalcNeedsCompaction(const ColumnFamilyData* cfd,
                            const MutableCFOptions& mutable_cf_options,
@@ -55,7 +55,7 @@ class CompactionPickerBenefitCost : public CompactionPicker {
       std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
   PickCompaction(const MutableCFOptions& mutable_cf_options) const;
 
-  // Ideally this should be vstorage
+  // Ideally this should be in vstorage
   std::list<SortedRunInfo> sorted_runs_;
   const VersionStorageInfo* vstorage_;
 };
