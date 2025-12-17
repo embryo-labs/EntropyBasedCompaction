@@ -30,7 +30,8 @@ void CompactionPickerTiering::CompactionFinished(
 void CompactionPickerTiering::Flushed(const VersionStorageInfo* vstorage,
                                       const FileMetaData& file) {
   vstorage_ = vstorage;
-  sorted_runs_.emplace_front(1, 0, 1);
+  sorted_runs_.push_front(
+      SortedRunInfo{.num_sorted_runs = 1, .compaction_times = 0, .count = 1});
   print_status();
 }
 
