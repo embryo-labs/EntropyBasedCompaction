@@ -545,7 +545,7 @@ DEFINE_bool(allow_intra_l0_compactions,
 
 DEFINE_string(compaction_policy, "", "steady/lazy-leveling/dynamic-tiering");
 DEFINE_bool(autotune_size_ratio, false, "");
-DEFINE_double(entropy_threshold, 0.55, "");
+DEFINE_double(entropy_threshold, 0.78, "");
 DEFINE_double(k_e, 1, "");
 DEFINE_bool(sliding_window, true, "");
 DEFINE_bool(preempt_by_entropy, true, "");
