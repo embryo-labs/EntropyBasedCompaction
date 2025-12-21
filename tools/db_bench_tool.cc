@@ -6869,7 +6869,6 @@ class Benchmark {
           }
         }
         delete single_iter;
-        thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kSeek);
       } else {
         op_type = kPrefixScan;
         // Prefix scan
