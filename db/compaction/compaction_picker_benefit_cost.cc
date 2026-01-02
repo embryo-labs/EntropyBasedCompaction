@@ -114,7 +114,7 @@ CompactionPickerBenefitCost::PickCompaction(
   if (!best.has_value()) {
     return std::nullopt;
   }
-  // Check preemption condition
+  // Check preemption conditions
   for (const auto& existing_compaction : existing_compactions) {
     const auto& c = existing_compaction.get();
     if (mutable_cf_options.preempt_by_entropy &&
