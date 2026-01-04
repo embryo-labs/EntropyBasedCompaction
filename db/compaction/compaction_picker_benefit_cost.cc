@@ -109,7 +109,11 @@ CompactionPickerBenefitCost::PickCompaction(
         };
       }
     }
-    i = j;
+    if (mutable_cf_options.sliding_window) {
+      i = j;
+    } else {
+      ++i;
+    }
   }
   if (!best.has_value()) {
     return std::nullopt;
