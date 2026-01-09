@@ -112,6 +112,8 @@ using GFLAGS_NAMESPACE::RegisterFlagValidator;
 using GFLAGS_NAMESPACE::SetUsageMessage;
 using GFLAGS_NAMESPACE::SetVersionString;
 
+DEFINE_string(exec_before_exit, "", "");
+
 DEFINE_string(benchmarks_json, "", "");
 
 DEFINE_string(
@@ -9799,6 +9801,10 @@ int db_bench_tool(int argc, char** argv, ToolHooks& hooks) {
     std::string stats_string;
     ROCKSDB_NAMESPACE::DumpMallocStats(&stats_string);
     fprintf(stdout, "Malloc stats:\n%s\n", stats_string.c_str());
+  }
+
+  if (!FLAGS_exec_before_exit.empty()) {
+    std::system(FLAGS_exec_before_exit.c_str());
   }
 
   return 0;
