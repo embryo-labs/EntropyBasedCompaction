@@ -6726,6 +6726,9 @@ class Benchmark {
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
+    std::unique_ptr<const char[]> upper_bound_key_guard;
+    Slice upper_bound = AllocateKey(&upper_bound_key_guard);
+
     PinnableSlice pinnable_val;
     std::vector<PinnableSlice> pinnable_vals;
     if (read_operands_) {
@@ -6836,6 +6839,17 @@ class Benchmark {
         }
       } else if (query_type == 1) {
         op_type = kSeek;
+        if (FLAGS_max_scan_distance != 0) {
+          assert(keys_.empty());
+          assert(keys_per_prefix_ == 0);
+          assert(!FLAGS_reverse_iterator);
+          assert(!FLAGS_seek_missing_prefix);
+          auto min_num =
+              std::min(FLAGS_num, key_rand + FLAGS_max_scan_distance);
+          GenerateKeyFromInt(static_cast<uint64_t>(min_num), FLAGS_num,
+                             &upper_bound);
+          read_options_.iterate_upper_bound = &upper_bound;
+        }
         Iterator* single_iter = db_with_cfh->db->NewIterator(read_options_);
         if (single_iter != nullptr) {
           uint64_t scan_length;
