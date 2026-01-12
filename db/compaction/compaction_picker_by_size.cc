@@ -27,13 +27,13 @@ bool CompactionPickerBySize::NeedsCompaction(
   return vstorage->CompactionScore(0) >= 1;
 }
 
-Compaction* CompactionPickerBySize::PickMainLevelCompaction(
+Compaction* CompactionPickerBySize::PickCompaction(
     ColumnFamilyData* cfd, const std::string& cf_name,
     const MutableCFOptions& mutable_cf_options,
     const MutableDBOptions& mutable_db_options,
     const std::vector<SequenceNumber>& existing_snapshots,
     const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
-    LogBuffer* log_buffer) {
+    LogBuffer* log_buffer, bool require_max_output_level) {
   CompactionPolicyBySize* policy =
       std::get<1>(mutable_cf_options.compaction_policy.value()).get();
   assert(policy != nullptr);
@@ -96,23 +96,6 @@ Compaction* CompactionPickerBySize::PickMainLevelCompaction(
       CompactionReason::kPolicyBySize, /* trim_ts */ "", /*score*/ 2333,
       /* l0_files_might_overlap */ true,
       BlobGarbageCollectionPolicy::kUseDefault, -1, nullptr, io_priority);
-}
-
-Compaction* CompactionPickerBySize::PickCompaction(
-    ColumnFamilyData* cfd, const std::string& cf_name,
-    const MutableCFOptions& mutable_cf_options,
-    const MutableDBOptions& mutable_db_options,
-    const std::vector<SequenceNumber>& existing_snapshots,
-    const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
-    LogBuffer* log_buffer, bool require_max_output_level) {
-  Compaction* c = PickMainLevelCompaction(
-      cfd, cf_name, mutable_cf_options, mutable_db_options, existing_snapshots,
-      snapshot_checker, vstorage, log_buffer);
-  if (c) {
-    return c;
-  }
-  return PickIncrementalLastLevelCompaction(cfd, cf_name, mutable_cf_options,
-                                            mutable_db_options, vstorage);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

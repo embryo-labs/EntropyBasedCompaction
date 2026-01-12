@@ -23,15 +23,6 @@ class CompactionPickerBySize : public CompactionPicker {
       const std::vector<SequenceNumber>& existing_snapshots,
       const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
       LogBuffer* log_buffer, bool require_max_output_level) override;
-
- private:
-  Compaction* PickMainLevelCompaction(
-      ColumnFamilyData* cfd, const std::string& cf_name,
-      const MutableCFOptions& mutable_cf_options,
-      const MutableDBOptions& mutable_db_options,
-      const std::vector<SequenceNumber>& existing_snapshots,
-      const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
-      LogBuffer* log_buffer);
 };
 
 }  // namespace ROCKSDB_NAMESPACE

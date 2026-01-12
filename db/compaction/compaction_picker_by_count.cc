@@ -20,13 +20,14 @@ bool CompactionPickerByCount::NeedsCompaction(
   return vstorage->CompactionScore(0) >= 1;
 }
 
-Compaction* CompactionPickerByCount::PickMainLevelCompaction(
+Compaction* CompactionPickerByCount::PickCompaction(
     ColumnFamilyData* cfd, const std::string& cf_name,
     const MutableCFOptions& mutable_cf_options,
     const MutableDBOptions& mutable_db_options,
     const std::vector<SequenceNumber>& existing_snapshots,
     const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
-    LogBuffer* log_buffer) {
+    LogBuffer* log_buffer, bool require_max_output_level) {
+  assert(vstorage->num_levels() == 1);
   CompactionPolicyByCount::print(sorted_runs_);
   fflush(stdout);
   CompactionPolicyByCount* policy =
@@ -109,26 +110,6 @@ Compaction* CompactionPickerByCount::PickMainLevelCompaction(
       CompactionReason::kPolicyByCount, /* trim_ts */ "", /*score*/ 2333,
       /* l0_files_might_overlap */ true,
       BlobGarbageCollectionPolicy::kUseDefault, -1, merging_info, io_priority);
-}
-
-Compaction* CompactionPickerByCount::PickCompaction(
-    ColumnFamilyData* cfd, const std::string& cf_name,
-    const MutableCFOptions& mutable_cf_options,
-    const MutableDBOptions& mutable_db_options,
-    const std::vector<SequenceNumber>& existing_snapshots,
-    const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
-    LogBuffer* log_buffer, bool require_max_output_level) {
-  Compaction* c = PickMainLevelCompaction(
-      cfd, cf_name, mutable_cf_options, mutable_db_options, existing_snapshots,
-      snapshot_checker, vstorage, log_buffer);
-  if (c) {
-    return c;
-  }
-  if (vstorage->num_levels() > 1) {
-    return PickIncrementalLastLevelCompaction(cfd, cf_name, mutable_cf_options,
-                                              mutable_db_options, vstorage);
-  }
-  return nullptr;
 }
 
 void CompactionPickerByCount::CompactionFinished(
