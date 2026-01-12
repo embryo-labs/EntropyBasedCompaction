@@ -83,10 +83,11 @@ Compaction* CompactionPickerTiering::PickCompaction(
     ++i;
     ++file_i;
   }
+  auto input_compaction_times = first_to_erase->compaction_times;
   it = sorted_runs_.erase(first_to_erase, j);
   assert(it == j);
   it->num_sorted_runs = num;
-  it->compaction_times = first_to_erase->compaction_times + 1;
+  it->compaction_times = input_compaction_times + 1;
   it->count = count;
   auto c = new Compaction(
       vstorage, ioptions_, mutable_cf_options, mutable_db_options,
