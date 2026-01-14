@@ -2211,15 +2211,18 @@ static std::unordered_map<OperationType, std::string, std::hash<unsigned char>>
 // A class that reports stats to CSV file.
 class ReporterAgent {
  public:
-  ReporterAgent(DB* db, Env* env, const std::string& fname,
+  ReporterAgent(DB* db, Env* env, std::filesystem::path output_dir,
                 uint64_t report_interval_secs)
       : db_(db),
         env_(env),
+        output_dir_(std::move(output_dir)),
         total_ops_done_(0),
         last_report_(0),
         report_interval_secs_(report_interval_secs),
         stop_(false) {
-    auto s = env_->NewWritableFile(fname, &report_file_, EnvOptions());
+    auto report_file_path = output_dir_ / FLAGS_report_file;
+    auto s =
+        env_->NewWritableFile(report_file_path, &report_file_, EnvOptions());
     if (s.ok()) {
       s = report_file_->Append(Header() + "\n");
     }
@@ -2227,7 +2230,7 @@ class ReporterAgent {
       s = report_file_->Flush();
     }
     if (!s.ok()) {
-      fprintf(stderr, "Can't open %s: %s\n", fname.c_str(),
+      fprintf(stderr, "Can't open %s: %s\n", report_file_path.c_str(),
               s.ToString().c_str());
       abort();
     }
@@ -2472,7 +2475,7 @@ class ReporterAgent {
         last_count_time_[op] = count_time;
         auto it = op_count_time.find(op);
         if (it == op_count_time.end()) {
-          fname = OperationTypeString[op] + "-count-time.csv";
+          fname = output_dir_ / (OperationTypeString[op] + "-count-time.csv");
           std::unique_ptr<WritableFile> file;
           s = env_->NewWritableFile(fname, &file, EnvOptions());
           if (s.ok()) {
@@ -2532,6 +2535,7 @@ class ReporterAgent {
 
   DB* db_;
   Env* env_;
+  std::filesystem::path output_dir_;
   std::unique_ptr<WritableFile> report_file_;
   std::atomic<int64_t> total_ops_done_;
   int64_t last_report_;
@@ -3134,6 +3138,8 @@ class Duration {
 
 class Benchmark {
  private:
+  std::filesystem::path output_dir_;
+
   std::shared_ptr<Cache> cache_;
   std::shared_ptr<Cache> compressed_cache_;
   std::shared_ptr<const SliceTransform> prefix_extractor_;
@@ -3890,7 +3896,10 @@ class Benchmark {
         }
         auto& benchmark = *benchmarks_it;
         name = benchmark["name"];
-        auto it = benchmark.find("threads");
+        auto it = benchmark.find("output_dir");
+        output_dir_ =
+            (it != benchmark.end()) ? static_cast<std::string>(*it) : ".";
+        it = benchmark.find("threads");
         num_threads = (it != benchmark.end() ? static_cast<uint64_t>(*it)
                                              : FLAGS_threads);
         it = benchmark.find("duration");
@@ -4478,8 +4487,8 @@ class Benchmark {
 
     std::unique_ptr<ReporterAgent> reporter_agent;
     if (FLAGS_report_interval_seconds > 0) {
-      reporter_agent.reset(new ReporterAgent(
-          db_.db, FLAGS_env, FLAGS_report_file, FLAGS_report_interval_seconds));
+      reporter_agent.reset(new ReporterAgent(db_.db, FLAGS_env, output_dir_,
+                                             FLAGS_report_interval_seconds));
     }
 
     ThreadArg* arg = new ThreadArg[n];
