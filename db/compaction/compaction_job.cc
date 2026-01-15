@@ -1483,8 +1483,11 @@ Status CompactionJob::ProcessKeyValue(
 
   while (status.ok() && !cfd->IsDropped() && c_iter->Valid() &&
          c_iter->status().ok()) {
-    if (sub_compact->compaction->limiter_handle()) {
-      sub_compact->compaction->limiter_handle()->RequestToRun();
+    {
+      auto limiter_handle = sub_compact->compaction->limiter_handle();
+      if (limiter_handle) {
+        limiter_handle->Status()->WaitForPermissionToRun();
+      }
     }
     assert(!end.has_value() ||
            cfd->user_comparator()->Compare(c_iter->user_key(), *end) < 0);

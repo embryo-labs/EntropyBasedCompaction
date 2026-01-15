@@ -24,14 +24,46 @@ namespace ROCKSDB_NAMESPACE {
 // Earier compaction < later compaction
 class BackgroundJobLimiter
     : public std::enable_shared_from_this<BackgroundJobLimiter> {
- private:
-  struct CompactionStatus {
-    std::mutex lock;
-    std::condition_variable cv;
-    std::atomic<bool> permit_to_run = true;
+ public:
+  class CompactionHandle;
+  class CompactionStatus {
+   public:
+    void PermitToRun() const {
+      bool ori_permit_to_run;
+      {
+        ori_permit_to_run =
+            permit_to_run_.exchange(true, std::memory_order_relaxed);
+      }
+      assert(ori_permit_to_run == false);
+      cv_.notify_one();
+    }
+    void DontPermitToRun() const {
+      std::unique_lock<std::mutex> lock(lock_);
+      bool ori_permit_to_run =
+          permit_to_run_.exchange(false, std::memory_order_relaxed);
+      assert(ori_permit_to_run);
+    }
+    void WaitForPermissionToRun() const {
+      // Most of time we don't need to request a lock.
+      if (permit_to_run_.load(std::memory_order_relaxed)) {
+        return;
+      }
+      {
+        std::unique_lock<std::mutex> lock(lock_);
+        cv_.wait(lock, [this]() {
+          return permit_to_run_.load(std::memory_order_relaxed);
+        });
+      }
+    }
+
+   private:
+    mutable std::mutex lock_;
+    mutable std::condition_variable cv_;
+    mutable std::atomic<bool> permit_to_run_ = true;
+
+    friend class BackgroundJobLimiter::CompactionHandle;
   };
 
- public:
   class FlushHandle {
    public:
     FlushHandle(const FlushHandle&) = delete;
@@ -83,25 +115,16 @@ class BackgroundJobLimiter
         --it;
       } while (*it != status_);
       limiter_->compactions_.erase(it);
-      if (status_->permit_to_run.load(std::memory_order_relaxed)) {
+      if (status_->permit_to_run_.load(std::memory_order_relaxed)) {
         limiter_->num_running_compactions_.fetch_sub(1,
                                                      std::memory_order_relaxed);
+      } else {
+        status_->PermitToRun();
       }
       limiter_->MaybeResumeCompactionLocked(std::move(lock));
     }
 
-    void RequestToRun() const {
-      // Most of time we don't need to request a lock.
-      if (status_->permit_to_run.load(std::memory_order_relaxed)) {
-        return;
-      }
-      {
-        std::unique_lock<std::mutex> lock(status_->lock);
-        status_->cv.wait(lock, [this]() {
-          return status_->permit_to_run.load(std::memory_order_relaxed);
-        });
-      }
-    }
+    std::shared_ptr<CompactionStatus> Status() const { return status_; }
 
    private:
     CompactionHandle(std::shared_ptr<BackgroundJobLimiter> limiter,
@@ -162,10 +185,8 @@ class BackgroundJobLimiter
         return;
       }
       assert(compactions_.size() >= num_running_compactions);
-      bool ori_permit_to_run =
-          compactions_[compactions_.size() - num_running_compactions]
-              ->permit_to_run.exchange(false, std::memory_order_relaxed);
-      assert(ori_permit_to_run);
+      compactions_[compactions_.size() - num_running_compactions]
+          ->DontPermitToRun();
       num_running_compactions_.fetch_sub(1, std::memory_order_relaxed);
     }
   }
@@ -189,12 +210,9 @@ class BackgroundJobLimiter
            max_running_background_jobs - 1);
     auto compaction_to_wake_up =
         compactions_[compactions_.size() - num_running_compactions - 1];
-    bool ori_permit_to_run = compaction_to_wake_up->permit_to_run.exchange(
-        true, std::memory_order_relaxed);
-    assert(ori_permit_to_run == false);
     num_running_compactions_.fetch_add(1, std::memory_order_relaxed);
     lock.unlock();
-    compaction_to_wake_up->cv.notify_one();
+    compaction_to_wake_up->PermitToRun();
   }
 
   void FlushFinishes() {
