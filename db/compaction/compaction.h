@@ -432,11 +432,10 @@ class Compaction {
 
   void* merging_info() const { return merging_info_; }
 
-  Env::IOPriority io_priority() const {
-    return static_cast<Env::IOPriority>(
-        io_priority_.load(std::memory_order_relaxed));
+  const std::atomic<Env::IOPriority>& io_priority() const {
+    return io_priority_;
   }
-  std::atomic<int>& io_priority() { return io_priority_; }
+  std::atomic<Env::IOPriority>& io_priority() { return io_priority_; }
 
   // start and end are sub compact range. Null if no boundary.
   // This is used to calculate the newest_key_time table property after
@@ -653,7 +652,7 @@ class Compaction {
   void* merging_info_;
 
   // Actually no need to be atomic. Just to suppress data race warning.
-  std::atomic<int> io_priority_;
+  std::atomic<Env::IOPriority> io_priority_;
 
   SequenceNumber keep_in_last_level_through_seqno_ = kMaxSequenceNumber;
 

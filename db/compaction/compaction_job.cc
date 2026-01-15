@@ -2382,8 +2382,9 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
 
   // TODO(hx235): pass in the correct `oldest_key_time` instead of `0`
   const ReadOptions read_options(Env::IOActivity::kCompaction);
-  const WriteOptions write_options(sub_compact->compaction->io_priority(),
-                                   Env::IOActivity::kCompaction);
+  const WriteOptions write_options(
+      sub_compact->compaction->io_priority().load(std::memory_order_relaxed),
+      Env::IOActivity::kCompaction);
   TableBuilderOptions tboptions(
       cfd->ioptions(), sub_compact->compaction->mutable_cf_options(),
       read_options, write_options, cfd->internal_comparator(),
