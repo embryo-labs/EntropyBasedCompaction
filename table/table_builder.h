@@ -121,7 +121,8 @@ struct TableBuilderOptions : public TablePropertiesCollectorFactory::Context {
       const std::string& _db_session_id = "",
       const uint64_t _target_file_size = 0, const uint64_t _cur_file_num = 0,
       const SequenceNumber _last_level_inclusive_max_seqno_threshold =
-          kMaxSequenceNumber)
+          kMaxSequenceNumber,
+      const std::atomic<Env::IOPriority>* _io_priority = nullptr)
       : TablePropertiesCollectorFactory::Context(
             _column_family_id, _level, _ioptions.num_levels,
             _last_level_inclusive_max_seqno_threshold),
@@ -129,6 +130,7 @@ struct TableBuilderOptions : public TablePropertiesCollectorFactory::Context {
         moptions(_moptions),
         read_options(_read_options),
         write_options(_write_options),
+        io_priority(_io_priority),
         internal_comparator(_internal_comparator),
         internal_tbl_prop_coll_factories(_internal_tbl_prop_coll_factories),
         compression_type(_compression_type),
@@ -148,6 +150,7 @@ struct TableBuilderOptions : public TablePropertiesCollectorFactory::Context {
   const MutableCFOptions& moptions;
   const ReadOptions& read_options;
   const WriteOptions& write_options;
+  const std::atomic<Env::IOPriority>* io_priority;
   const InternalKeyComparator& internal_comparator;
   const InternalTblPropCollFactories* internal_tbl_prop_coll_factories;
   const CompressionType compression_type;

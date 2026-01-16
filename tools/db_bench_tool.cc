@@ -550,6 +550,7 @@ DEFINE_bool(autotune_size_ratio, false, "");
 DEFINE_double(entropy_threshold, 0.78, "");
 DEFINE_double(k_e, 1, "");
 DEFINE_bool(sliding_window, true, "");
+DEFINE_bool(prioritize_last_sorted_run_compaction, false, "");
 DEFINE_bool(preempt_by_entropy, true, "");
 DEFINE_bool(preempt_by_num, true, "");
 
@@ -1568,6 +1569,7 @@ DEFINE_uint64(write_thread_slow_yield_usec, 3,
               "other processes or threads want the core.");
 
 DEFINE_uint64(rate_limiter_bytes_per_sec, 0, "Set options.rate_limiter value.");
+DEFINE_int64(rate_limiter_bytes_per_sec_io_sa, -1, "");
 
 DEFINE_int64(rate_limiter_refill_period_us, 100 * 1000,
              "Set refill period on rate limiter.");
@@ -2305,7 +2307,8 @@ class ReporterAgent {
       header << ",num-running-bg-jobs";
     }
     if (options.rate_limiter.get()) {
-      header << ",IO_LOW,IO_FLATTEN,IO_MAIN_LEVEL,IO_HIGH,IO_USER,rate-limit";
+      header << ",IO_LOW,IO_FLATTEN,IO_MAIN_LEVEL,IO_SA,IO_HIGH,IO_USER,rate-"
+                "limit";
     }
     if (options.compaction_policy.has_value()) {
       if (options.compaction_policy.value().index() == 1) {
@@ -2437,6 +2440,7 @@ class ReporterAgent {
 
         report << ',' << bytes_through[Env::IO_LOW] << ','
                << bytes_through[Env::IO_LOW + 1] << ',' << io_main_level << ','
+               << bytes_through[Env::IO_SA] << ','
                << bytes_through[Env::IO_HIGH] << ','
                << bytes_through[Env::IO_USER] << ','
                << rate_limiter->GetBytesPerSecond();
@@ -5271,6 +5275,8 @@ class Benchmark {
     options.entropy_threshold = FLAGS_entropy_threshold;
     options.k_e = FLAGS_k_e;
     options.sliding_window = FLAGS_sliding_window;
+    options.prioritize_last_sorted_run_compaction =
+        FLAGS_prioritize_last_sorted_run_compaction;
     options.preempt_by_entropy = FLAGS_preempt_by_entropy;
     options.preempt_by_num = FLAGS_preempt_by_num;
     if (FLAGS_thread_status_per_interval > 0) {
@@ -5410,14 +5416,16 @@ class Benchmark {
             FLAGS_rate_limit_bg_reads ? RateLimiter::Mode::kReadsOnly
                                       : RateLimiter::Mode::kWritesOnly,
             FLAGS_rate_limiter_auto_tuned,
-            FLAGS_rate_limiter_single_burst_bytes));
+            FLAGS_rate_limiter_single_burst_bytes,
+            FLAGS_rate_limiter_bytes_per_sec_io_sa));
       } else if (!FLAGS_compaction_limit_file.empty()) {
         int64_t initial_limit;
         std::ifstream(FLAGS_compaction_limit_file) >> initial_limit;
         options.rate_limiter.reset(NewGenericRateLimiter(
             initial_limit, FLAGS_rate_limiter_refill_period_us, 10,
             RateLimiter::Mode::kWritesOnly, false,
-            FLAGS_rate_limiter_single_burst_bytes));
+            FLAGS_rate_limiter_single_burst_bytes,
+            FLAGS_rate_limiter_bytes_per_sec_io_sa));
       }
     }
 

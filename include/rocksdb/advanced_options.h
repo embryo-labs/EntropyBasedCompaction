@@ -637,6 +637,7 @@ struct AdvancedColumnFamilyOptions {
   double entropy_threshold = 0;
   double k_e = 1;
   bool sliding_window = true;
+  bool prioritize_last_sorted_run_compaction = false;
   bool preempt_by_entropy = true;
   bool preempt_by_num = true;
 

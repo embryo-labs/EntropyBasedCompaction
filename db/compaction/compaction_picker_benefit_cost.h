@@ -55,6 +55,11 @@ class CompactionPickerBenefitCost : public CompactionPicker {
       std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator>>
   PickCompaction(const MutableCFOptions& mutable_cf_options) const;
 
+  // Return succeed or not
+  bool SetIOPriorityOfLastCompaction(
+      std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator
+          last_sorted_run_picked_for_compaction);
+
   // Ideally this should be in vstorage
   std::list<SortedRunInfo> sorted_runs_;
   const VersionStorageInfo* vstorage_;

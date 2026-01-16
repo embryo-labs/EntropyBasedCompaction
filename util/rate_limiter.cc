@@ -46,7 +46,8 @@ struct GenericRateLimiter::Req {
 GenericRateLimiter::GenericRateLimiter(
     int64_t rate_bytes_per_sec, int64_t refill_period_us, int32_t fairness,
     RateLimiter::Mode mode, const std::shared_ptr<SystemClock>& clock,
-    bool auto_tuned, int64_t single_burst_bytes)
+    bool auto_tuned, int64_t single_burst_bytes,
+    int64_t max_bytes_per_second_io_sa)
     : RateLimiter(mode),
       refill_period_us_(refill_period_us),
       rate_bytes_per_sec_(auto_tuned ? rate_bytes_per_sec / 2
@@ -54,6 +55,10 @@ GenericRateLimiter::GenericRateLimiter(
       refill_bytes_per_period_(
           CalculateRefillBytesPerPeriodLocked(rate_bytes_per_sec_)),
       raw_single_burst_bytes_(single_burst_bytes),
+      refill_bytes_per_period_io_sa_(max_bytes_per_second_io_sa < 0
+                                         ? -1
+                                         : CalculateRefillBytesPerPeriodLocked(
+                                               max_bytes_per_second_io_sa)),
       clock_(clock),
       stop_(false),
       exit_cv_(&request_mutex_),
@@ -246,11 +251,30 @@ void GenericRateLimiter::RefillBytesAndGrantRequestsLocked() {
 
   for (int i = Env::IO_TOTAL - 1; i >= 0 && remain > 0; --i) {
     Env::IOPriority current_pri = static_cast<Env::IOPriority>(i);
-    if (available_bytes_[current_pri] < refill_bytes_per_period) {
-      auto refill = std::min(
-          remain, refill_bytes_per_period - available_bytes_[current_pri]);
+    int64_t refill_target;
+    if (current_pri == Env::IOPriority::IO_SA &&
+        refill_bytes_per_period_io_sa_ >= 0) {
+      refill_target =
+          std::min(refill_bytes_per_period, refill_bytes_per_period_io_sa_);
+    } else {
+      refill_target = refill_bytes_per_period;
+    }
+    if (available_bytes_[current_pri] < refill_target) {
+      auto refill =
+          std::min(remain, refill_target - available_bytes_[current_pri]);
       remain -= refill;
       available_bytes_[current_pri] += refill;
+    }
+  }
+  if (remain > 0 && available_bytes_[Env::IO_SA] < refill_bytes_per_period) {
+    auto refill = std::min(
+        remain, refill_bytes_per_period - available_bytes_[Env::IO_SA]);
+    available_bytes_[Env::IO_SA] += refill;
+  }
+  for (int i = Env::IO_TOTAL - 1; i >= 0; --i) {
+    Env::IOPriority current_pri = static_cast<Env::IOPriority>(i);
+    if (available_bytes_[current_pri] == 0) {
+      break;
     }
     auto* queue = &queue_[current_pri];
     while (!queue->empty()) {
@@ -344,13 +368,15 @@ RateLimiter* NewGenericRateLimiter(
     int64_t rate_bytes_per_sec, int64_t refill_period_us /* = 100 * 1000 */,
     int32_t fairness /* = 10 */,
     RateLimiter::Mode mode /* = RateLimiter::Mode::kWritesOnly */,
-    bool auto_tuned /* = false */, int64_t single_burst_bytes /* = 0 */) {
+    bool auto_tuned /* = false */, int64_t single_burst_bytes /* = 0 */,
+    int64_t max_bytes_per_second_io_sa) {
   assert(rate_bytes_per_sec > 0);
   assert(refill_period_us > 0);
   assert(fairness > 0);
-  std::unique_ptr<RateLimiter> limiter(new GenericRateLimiter(
-      rate_bytes_per_sec, refill_period_us, fairness, mode,
-      SystemClock::Default(), auto_tuned, single_burst_bytes));
+  std::unique_ptr<RateLimiter> limiter(
+      new GenericRateLimiter(rate_bytes_per_sec, refill_period_us, fairness,
+                             mode, SystemClock::Default(), auto_tuned,
+                             single_burst_bytes, max_bytes_per_second_io_sa));
   return limiter.release();
 }
 

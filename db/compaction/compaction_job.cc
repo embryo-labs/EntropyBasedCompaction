@@ -2395,7 +2395,8 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
       bottommost_level_, TableFileCreationReason::kCompaction,
       0 /* oldest_key_time */, current_time, db_id_, db_session_id_,
       sub_compact->compaction->max_output_file_size(), file_number,
-      proximal_after_seqno_ /*last_level_inclusive_max_seqno_threshold*/);
+      proximal_after_seqno_ /*last_level_inclusive_max_seqno_threshold*/,
+      &sub_compact->compaction->io_priority());
 
   outputs.NewBuilder(tboptions);
 

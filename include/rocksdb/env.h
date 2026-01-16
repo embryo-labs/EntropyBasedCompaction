@@ -438,6 +438,7 @@ class Env : public Customizable {
   enum IOPriority : int {
     IO_LOW = 0,
     IO_MID = 20,
+    IO_SA,
     IO_HIGH,
     IO_USER,
     IO_TOTAL,

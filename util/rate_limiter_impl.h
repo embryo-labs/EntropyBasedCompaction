@@ -29,7 +29,8 @@ class GenericRateLimiter : public RateLimiter {
   GenericRateLimiter(int64_t refill_bytes, int64_t refill_period_us,
                      int32_t fairness, RateLimiter::Mode mode,
                      const std::shared_ptr<SystemClock>& clock, bool auto_tuned,
-                     int64_t single_burst_bytes);
+                     int64_t single_burst_bytes,
+                     int64_t max_bytes_per_second_io_sa);
 
   virtual ~GenericRateLimiter();
 
@@ -128,6 +129,7 @@ class GenericRateLimiter : public RateLimiter {
   std::atomic<int64_t> refill_bytes_per_period_;
   // This value is validated but unsanitized (may be zero).
   std::atomic<int64_t> raw_single_burst_bytes_;
+  int64_t refill_bytes_per_period_io_sa_;
   std::shared_ptr<SystemClock> clock_;
 
   bool stop_;

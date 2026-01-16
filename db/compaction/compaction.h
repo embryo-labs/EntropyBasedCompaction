@@ -500,6 +500,7 @@ class Compaction {
       return nullptr;
     }
   }
+  void release_limiter_handle() { limiter_handle_.reset(); }
 
  private:
   Status InitInputTableProperties();

@@ -53,6 +53,11 @@ CompactionPickerBenefitCost::PickCompaction(
   std::vector<
       std::reference_wrapper<const CompactionPickerBenefitCost::SortedRunInfo>>
       existing_compactions;
+  auto last_sorted_run = sorted_runs_.end();
+  if (last_sorted_run == sorted_runs_.begin()) {
+    return std::nullopt;
+  }
+  --last_sorted_run;
   for (auto i = sorted_runs_.begin(); i != sorted_runs_.end();) {
     if (i->is_merging()) {
       existing_compactions.push_back(std::ref(*i));
@@ -78,8 +83,16 @@ CompactionPickerBenefitCost::PickCompaction(
         }
       }
       double r_e = log2(size) - sum_nlog2n / size;
+      if (r_e < entropy_threshold - 1e-6) {
+        continue;
+      }
       bool better;
-      if (best.has_value()) {
+      if (!best.has_value()) {
+        better = true;
+      } else if (j == last_sorted_run &&
+                 mutable_cf_options.prioritize_last_sorted_run_compaction) {
+        better = true;
+      } else {
         bool decided = false;
         if (mutable_cf_options.preempt_by_entropy) {
           if (best->r_e < r_e - 1e-6) {
@@ -97,8 +110,6 @@ CompactionPickerBenefitCost::PickCompaction(
             better = false;
           }
         }
-      } else {
-        better = r_e > entropy_threshold - 1e-6;
       }
       if (better) {
         best = BestInfo{
@@ -117,6 +128,10 @@ CompactionPickerBenefitCost::PickCompaction(
   }
   if (!best.has_value()) {
     return std::nullopt;
+  }
+  if (best->last == last_sorted_run &&
+      mutable_cf_options.prioritize_last_sorted_run_compaction) {
+    return std::make_pair(best->first, best->last);
   }
   // Check preemption conditions
   for (const auto& existing_compaction : existing_compactions) {
@@ -148,6 +163,30 @@ bool CompactionPickerBenefitCost::NeedsCompaction(
   return vstorage->CompactionScore(0) >= 1;
 }
 
+bool CompactionPickerBenefitCost::SetIOPriorityOfLastCompaction(
+    std::list<CompactionPickerBenefitCost::SortedRunInfo>::const_iterator
+        last_sorted_run_picked_for_compaction) {
+  auto it = sorted_runs_.end();
+  if (it == sorted_runs_.begin()) {
+    return false;
+  }
+  --it;
+  while (it != last_sorted_run_picked_for_compaction) {
+    if (it->is_merging()) {
+      if (it->c->io_priority().load(std::memory_order_relaxed) != Env::IO_SA) {
+        it->c->io_priority().store(Env::IO_SA, std::memory_order_relaxed);
+        it->c->release_limiter_handle();
+      }
+      return true;
+    }
+    if (it == sorted_runs_.begin()) {
+      break;
+    }
+    --it;
+  }
+  return false;
+}
+
 Compaction* CompactionPickerBenefitCost::PickCompaction(
     ColumnFamilyData* cfd, const std::string& cf_name,
     const MutableCFOptions& mutable_cf_options,
@@ -157,18 +196,26 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
     LogBuffer* log_buffer, bool require_max_output_level) {
   auto ret = PickCompaction(mutable_cf_options);
   if (!ret.has_value()) {
+    SetIOPriorityOfLastCompaction(sorted_runs_.end());
     return nullptr;
   }
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
-  if (ioptions_.background_job_limiter) {
-    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-    if (!limiter_handle.has_value()) {
-      return nullptr;
-    }
-  }
-
   auto [i, j] = ret.value();
+  Env::IOPriority io_pri;
+  if (SetIOPriorityOfLastCompaction(j)) {
+    io_pri = Env::IO_LOW;
+    if (ioptions_.background_job_limiter) {
+      limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+      if (!limiter_handle.has_value()) {
+        return nullptr;
+      }
+    }
+  } else {
+    // The picked compaction will be the last compaction, which always runs.
+    // Its write I/O is controlled by max_bytes_per_second_io_sa
+    io_pri = Env::IO_SA;
+  }
 
   std::vector<CompactionInputFiles> inputs(1);
   inputs[0].level = 0;
@@ -220,7 +267,7 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
       /* snapshot_checker */ nullptr, std::move(limiter_handle),
       CompactionReason::kPolicyByCount, /* trim_ts */ "", /*score*/ 2333,
       /* l0_files_might_overlap */ true,
-      BlobGarbageCollectionPolicy::kUseDefault, -1, &*it, Env::IO_LOW);
+      BlobGarbageCollectionPolicy::kUseDefault, -1, &*it, io_pri);
   it->c = c;
   print_status();
   return c;

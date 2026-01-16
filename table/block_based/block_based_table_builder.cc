@@ -775,6 +775,7 @@ struct BlockBasedTableBuilder::Rep {
   std::shared_ptr<const SliceTransform> prefix_extractor;
   // END from MutableCFOptions
   const WriteOptions write_options;
+  const std::atomic<Env::IOPriority>* io_priority;
   const BlockBasedTableOptions table_options;
   const InternalKeyComparator& internal_comparator;
   // Size in bytes for the user-defined timestamps.
@@ -1003,6 +1004,7 @@ struct BlockBasedTableBuilder::Rep {
       : ioptions(tbo.ioptions),
         prefix_extractor(tbo.moptions.prefix_extractor),
         write_options(tbo.write_options),
+        io_priority(tbo.io_priority),
         table_options(table_opt),
         internal_comparator(tbo.internal_comparator),
         ts_sz(tbo.internal_comparator.user_comparator()->timestamp_size()),
@@ -1969,6 +1971,10 @@ IOStatus BlockBasedTableBuilder::WriteMaybeCompressedBlockImpl(
   if (UNLIKELY(!io_s.ok())) {
     return io_s;
   }
+  if (r->io_priority) {
+    io_options.rate_limiter_priority =
+        r->io_priority->load(std::memory_order_relaxed);
+  }
   // Old, misleading name of this function: WriteRawBlock
   StopWatch sw(r->ioptions.clock, r->ioptions.stats, WRITE_RAW_BLOCK_MICROS);
 
@@ -2502,6 +2508,10 @@ void BlockBasedTableBuilder::WriteFooter(BlockHandle& metaindex_block_handle,
   if (!ios.ok()) {
     r->SetIOStatus(ios);
     return;
+  }
+  if (r->io_priority) {
+    io_options.rate_limiter_priority =
+        r->io_priority->load(std::memory_order_relaxed);
   }
   ios = r->file->Append(io_options, footer.GetSlice());
   if (ios.ok()) {
