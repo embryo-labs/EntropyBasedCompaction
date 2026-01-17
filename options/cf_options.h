@@ -152,6 +152,7 @@ struct MutableCFOptions {
         sliding_window(options.sliding_window),
         prioritize_last_sorted_run_compaction(
             options.prioritize_last_sorted_run_compaction),
+        last_compaction_io_sa(options.last_compaction_io_sa),
         preempt_by_entropy(options.preempt_by_entropy),
         preempt_by_num(options.preempt_by_num),
         preclude_last_level_data_seconds(
@@ -340,6 +341,7 @@ struct MutableCFOptions {
   double k_e;
   bool sliding_window;
   bool prioritize_last_sorted_run_compaction;
+  bool last_compaction_io_sa;
   bool preempt_by_entropy;
   bool preempt_by_num;
   uint64_t preclude_last_level_data_seconds;

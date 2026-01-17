@@ -196,25 +196,31 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
     LogBuffer* log_buffer, bool require_max_output_level) {
   auto ret = PickCompaction(mutable_cf_options);
   if (!ret.has_value()) {
-    SetIOPriorityOfLastCompaction(sorted_runs_.end());
+    if (mutable_cf_options.last_compaction_io_sa) {
+      SetIOPriorityOfLastCompaction(sorted_runs_.end());
+    }
     return nullptr;
   }
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
   auto [i, j] = ret.value();
   Env::IOPriority io_pri;
-  if (SetIOPriorityOfLastCompaction(j)) {
-    io_pri = Env::IO_LOW;
-    if (ioptions_.background_job_limiter) {
-      limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-      if (!limiter_handle.has_value()) {
-        return nullptr;
+  if (mutable_cf_options.last_compaction_io_sa) {
+    if (SetIOPriorityOfLastCompaction(j)) {
+      io_pri = Env::IO_LOW;
+      if (ioptions_.background_job_limiter) {
+        limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+        if (!limiter_handle.has_value()) {
+          return nullptr;
+        }
       }
+    } else {
+      // The picked compaction will be the last compaction, which always runs.
+      // Its write I/O is controlled by max_bytes_per_second_io_sa
+      io_pri = Env::IO_SA;
     }
   } else {
-    // The picked compaction will be the last compaction, which always runs.
-    // Its write I/O is controlled by max_bytes_per_second_io_sa
-    io_pri = Env::IO_SA;
+    io_pri = Env::IO_LOW;
   }
 
   std::vector<CompactionInputFiles> inputs(1);
