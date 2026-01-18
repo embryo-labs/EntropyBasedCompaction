@@ -208,12 +208,6 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
   if (mutable_cf_options.last_compaction_io_sa) {
     if (SetIOPriorityOfLastCompaction(j)) {
       io_pri = Env::IO_LOW;
-      if (ioptions_.background_job_limiter) {
-        limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-        if (!limiter_handle.has_value()) {
-          return nullptr;
-        }
-      }
     } else {
       // The picked compaction will be the last compaction, which always runs.
       // Its write I/O is controlled by max_bytes_per_second_io_sa
@@ -221,6 +215,14 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
     }
   } else {
     io_pri = Env::IO_LOW;
+  }
+  if (io_pri == Env::IO_LOW) {
+    if (ioptions_.background_job_limiter) {
+      limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+      if (!limiter_handle.has_value()) {
+        return nullptr;
+      }
+    }
   }
 
   std::vector<CompactionInputFiles> inputs(1);
