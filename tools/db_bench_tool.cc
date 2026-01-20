@@ -2275,6 +2275,26 @@ class ReporterAgent {
         }
       }
     }
+    if (dbstats) {
+      std::string fname = output_dir_ / "compaction-sorted-run-sizes-cv.json";
+      std::unique_ptr<WritableFile> file;
+      Status s = env_->NewWritableFile(fname, &file, EnvOptions());
+      if (!s.ok()) {
+        printf("Can't open %s: %s\n", fname.c_str(), s.ToString().c_str());
+      }
+      if (s.ok()) {
+        HistogramData hist_data;
+        dbstats->histogramData(COMPACTION_SORTED_RUN_SIZES_CV, &hist_data);
+        file->Append("{\n");
+        file->Append("\t\"95%\": " + std::to_string(hist_data.percentile95) +
+                     ",\n\t\"99%\": " + std::to_string(hist_data.percentile99) +
+                     ",\n\t\"Min\": " + std::to_string(hist_data.min) +
+                     ",\n\t\"Median\": " + std::to_string(hist_data.median) +
+                     ",\n\t\"Average\": " + std::to_string(hist_data.average) +
+                     ",\n\t\"Max\": " + std::to_string(hist_data.max) +
+                     "\n}\n");
+      }
+    }
   }
 
   // thread safe

@@ -694,6 +694,8 @@ enum Histograms : uint32_t {
   // Number of operations per transaction.
   NUM_OP_PER_TRANSACTION,
 
+  COMPACTION_SORTED_RUN_SIZES_CV,
+
   HISTOGRAM_ENUM_MAX
 };
 

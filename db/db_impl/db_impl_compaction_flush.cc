@@ -3752,6 +3752,46 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
           }
           RecordInHistogram(stats_, NUM_FILES_IN_SINGLE_COMPACTION, num_files);
 
+          class Welford {
+           public:
+            void Add(double x) {
+              n_ += 1;
+              double avg_new = avg_ + (x - avg_) / n_;
+              s_ += (x - avg_) * (x - avg_new);
+              avg_ = avg_new;
+            }
+            uint64_t count() const { return n_; }
+            double average() const { return avg_; }
+            double SampleVariance() const { return s_ / (n_ - 1); }
+            double SampleCV() const {
+              return std::sqrt(SampleVariance()) / avg_;
+            }
+
+           private:
+            uint64_t n_ = 0;
+            double avg_ = 0;
+            double s_ = 0;
+          };
+          const auto& inputs = *c->inputs();
+          assert(inputs.size() > 0);
+          Welford welford;
+          size_t i = 0;
+          if (inputs[i].level == 0) {
+            for (const auto file : inputs[0].files) {
+              welford.Add(file->fd.file_size);
+            }
+            i += 1;
+          }
+          for (; i < inputs.size(); ++i) {
+            uint64_t size = 0;
+            for (const auto file : inputs[i].files) {
+              size += file->fd.file_size;
+            }
+            welford.Add(size);
+          }
+          RecordInHistogram(stats_, COMPACTION_SORTED_RUN_SIZES_CV,
+                            welford.SampleCV());
+
           // There are three things that can change compaction score:
           // 1) When flush or compaction finish. This case is covered by
           // InstallSuperVersionAndScheduleWork
