@@ -2547,6 +2547,7 @@ class ReporterAgent {
   const uint64_t report_interval_secs_;
 
   const std::vector<Tickers> tickers_to_report_{
+      COMPACT_WRITE_BYTES,
       WAIT_FOR_LAST_LEVEL_COMPACTION,
   };
   std::unordered_map<Tickers, uint64_t> last_ticker_;
