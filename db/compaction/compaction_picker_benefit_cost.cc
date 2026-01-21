@@ -89,9 +89,6 @@ CompactionPickerBenefitCost::PickCompaction(
       bool better;
       if (!best.has_value()) {
         better = true;
-      } else if (j == last_sorted_run &&
-                 mutable_cf_options.prioritize_last_sorted_run_compaction) {
-        better = true;
       } else {
         bool decided = false;
         if (mutable_cf_options.preempt_by_entropy) {
