@@ -42,7 +42,7 @@ std::optional<std::pair<
 CompactionPickerBenefitCost::PickCompaction(
     const MutableCFOptions& mutable_cf_options) const {
   const double entropy_threshold = mutable_cf_options.entropy_threshold;
-  constexpr double k_n = 1.7;
+  const double k_n = mutable_cf_options.k_n;
   struct BestInfo {
     double r_e;
     double r_n;

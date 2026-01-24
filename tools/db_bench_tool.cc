@@ -548,6 +548,7 @@ DEFINE_bool(allow_intra_l0_compactions,
 DEFINE_string(compaction_policy, "", "steady/lazy-leveling/dynamic-tiering");
 DEFINE_bool(autotune_size_ratio, false, "");
 DEFINE_double(entropy_threshold, 0.78, "");
+DEFINE_double(k_n, 1.7, "");
 DEFINE_double(k_e, 1, "");
 DEFINE_bool(sliding_window, true, "");
 DEFINE_bool(prioritize_last_sorted_run_compaction, false, "");
@@ -5295,6 +5296,7 @@ class Benchmark {
     };
     options.autotune_size_ratio = FLAGS_autotune_size_ratio;
     options.entropy_threshold = FLAGS_entropy_threshold;
+    options.k_n = FLAGS_k_n;
     options.k_e = FLAGS_k_e;
     options.sliding_window = FLAGS_sliding_window;
     options.prioritize_last_sorted_run_compaction =

@@ -148,6 +148,7 @@ struct MutableCFOptions {
         compaction_policy(options.compaction_policy),
         autotune_size_ratio(options.autotune_size_ratio),
         entropy_threshold(options.entropy_threshold),
+        k_n(options.k_n),
         k_e(options.k_e),
         sliding_window(options.sliding_window),
         prioritize_last_sorted_run_compaction(
@@ -338,6 +339,7 @@ struct MutableCFOptions {
   bool autotune_size_ratio;
 
   double entropy_threshold;
+  double k_n;
   double k_e;
   bool sliding_window;
   bool prioritize_last_sorted_run_compaction;
