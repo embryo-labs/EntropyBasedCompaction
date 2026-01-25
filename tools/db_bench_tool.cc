@@ -6787,7 +6787,6 @@ class Benchmark {
     Duration duration(duration_, reads_);
     char value_buffer[256];
     ReadOptions prefix_scan_options = read_options_;
-    auto last_op_finish = std::chrono::steady_clock::now();
     for (;;) {
       if (FLAGS_finish_after_writes) {
         MutexLock l(&thread->shared->mu);
@@ -6838,6 +6837,7 @@ class Benchmark {
       }
 
       int query_type = query.GetType(GetRandomKey(&thread->rand, 0));
+      auto start = std::chrono::steady_clock::now();
 
       // Start the query
       OperationType op_type;
@@ -6958,10 +6958,9 @@ class Benchmark {
       }
 
       auto now = std::chrono::steady_clock::now();
-      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(
-                        now - last_op_finish)
-                        .count();
-      last_op_finish = now;
+      auto micros =
+          std::chrono::duration_cast<std::chrono::microseconds>(now - start)
+              .count();
       thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, op_type,
                                 micros);
       thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1,
