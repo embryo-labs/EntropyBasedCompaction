@@ -90,22 +90,12 @@ CompactionPickerBenefitCost::PickCompaction(
       if (!best.has_value()) {
         better = true;
       } else {
-        bool decided = false;
-        if (mutable_cf_options.preempt_by_entropy) {
-          if (best->r_e < r_e - 1e-6) {
-            decided = true;
-            better = true;
-          } else if (best->r_e > r_e + 1e-6) {
-            decided = true;
-            better = false;
-          }
-        }
-        if (!decided) {
-          if (mutable_cf_options.preempt_by_num) {
-            better = best->r_n < (double)(num - 1) / size;
-          } else {
-            better = false;
-          }
+        if (best->r_e < r_e - 1e-6) {
+          better = true;
+        } else if (best->r_e > r_e + 1e-6) {
+          better = false;
+        } else {
+          better = best->r_n < (double)(num - 1) / size;
         }
       }
       if (better) {
