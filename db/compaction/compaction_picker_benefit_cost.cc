@@ -135,7 +135,7 @@ CompactionPickerBenefitCost::PickCompaction(
     // In some cases like [1GB, 10GB, 1MB], "1GB" will be evicted by the sliding
     // window. But if [1GB, 10GB] is picked at last, we always want to also
     // compact "1MB". Therefore, we check the next sorted run after the last
-    // picked sorted run, and it if it's smaller than the last picked sorted
+    // picked sorted run, and if it's smaller than the last picked sorted
     // run, we include it in the compaction.
     uint64_t last_picked_size = best->last->size;
     auto next = best->last;
