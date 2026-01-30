@@ -493,6 +493,24 @@ class Compaction {
   // mark (or clear) all files that are being compacted
   void MarkFilesBeingCompacted(bool being_compacted) const;
 
+  bool IsPermittedToRun() const {
+    std::unique_lock<std::mutex> lock(limiter_handle_lock_);
+    if (!limiter_handle_.has_value()) {
+      return true;
+    }
+    return limiter_handle_->Status()->IsPermittedToRun();
+  }
+  void WaitForPermissionToRun() const {
+    std::shared_ptr<BackgroundJobLimiter::CompactionStatus> status;
+    {
+      std::unique_lock<std::mutex> lock(limiter_handle_lock_);
+      if (!limiter_handle_.has_value()) {
+        return;
+      }
+      status = limiter_handle_->Status();
+    }
+    status->WaitForPermissionToRun();
+  }
   const BackgroundJobLimiter::CompactionHandle* limiter_handle() const {
     if (limiter_handle_.has_value()) {
       return &limiter_handle_.value();
@@ -500,7 +518,10 @@ class Compaction {
       return nullptr;
     }
   }
-  void release_limiter_handle() { limiter_handle_.reset(); }
+  void release_limiter_handle() {
+    std::unique_lock<std::mutex> lock(limiter_handle_lock_);
+    limiter_handle_.reset();
+  }
 
  private:
   Status InitInputTableProperties();
@@ -595,6 +616,7 @@ class Compaction {
   std::optional<SequenceNumber> earliest_snapshot_;
   const SnapshotChecker* snapshot_checker_;
 
+  mutable std::mutex limiter_handle_lock_;
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle_;
 
   // Markers for which non start level input files are filtered out if

@@ -28,6 +28,9 @@ class BackgroundJobLimiter
   class CompactionHandle;
   class CompactionStatus {
    public:
+    bool IsPermittedToRun() const {
+      return permit_to_run_.load(std::memory_order_relaxed);
+    }
     void PermitToRun() const {
       bool ori_permit_to_run;
       {
@@ -45,7 +48,7 @@ class BackgroundJobLimiter
     }
     void WaitForPermissionToRun() const {
       // Most of time we don't need to request a lock.
-      if (permit_to_run_.load(std::memory_order_relaxed)) {
+      if (IsPermittedToRun()) {
         return;
       }
       {
@@ -124,7 +127,7 @@ class BackgroundJobLimiter
       limiter_->MaybeResumeCompactionLocked(std::move(lock));
     }
 
-    std::shared_ptr<CompactionStatus> Status() const { return status_; }
+    const std::shared_ptr<CompactionStatus>& Status() const { return status_; }
 
    private:
     CompactionHandle(std::shared_ptr<BackgroundJobLimiter> limiter,
