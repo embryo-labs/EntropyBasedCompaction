@@ -396,6 +396,13 @@ class StackableDB : public DB {
     return db_->Level0StopWriteTrigger(column_family);
   }
 
+  using DB::CompactionsInfo;
+  void CompactionsInfo(
+      ColumnFamilyHandle* column_family,
+      std::vector<std::vector<uint64_t>>* compactions_info) override {
+    db_->CompactionsInfo(column_family, compactions_info);
+  }
+
   const std::string& GetName() const override { return db_->GetName(); }
 
   Env* GetEnv() const override { return db_->GetEnv(); }

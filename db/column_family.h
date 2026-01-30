@@ -605,6 +605,9 @@ class ColumnFamilyData {
     return ioptions_.cf_allow_ingest_behind || ioptions_.allow_ingest_behind;
   }
 
+  // REQUIRES: DB mutex held.
+  void CompactionsInfo(std::vector<std::vector<uint64_t>>* compactions_info);
+
  private:
   friend class ColumnFamilySet;
   ColumnFamilyData(

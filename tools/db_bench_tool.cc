@@ -2324,7 +2324,7 @@ class ReporterAgent {
     header << ",num-sorted-runs," << DB::Properties::kNumTopLevelSortedRuns
            << ',' << DB::Properties::kNumMergingMainLevelSortedRuns << ','
            << DB::Properties::kBufferLevelSize;
-    header << ",num-flushes,num-compactions,size";
+    header << ",num-flushes,num-compactions,size,Re";
     if (options.background_job_limiter) {
       header << ",num-running-bg-jobs";
     }
@@ -2428,18 +2428,42 @@ class ReporterAgent {
       assert(good);
       report << ',' << value;
 
+      // num-flushes
       good = db_->GetIntProperty(DB::Properties::kNumRunningFlushes, &value);
       assert(good);
       report << ',' << value;
 
+      // num-compactions
       good =
           db_->GetIntProperty(DB::Properties::kNumRunningCompactions, &value);
       assert(good);
       report << ',' << value;
 
+      // size
       ColumnFamilyMetaData cf_meta;
       db_->GetColumnFamilyMetaData(&cf_meta);
       report << ',' << cf_meta.size;
+
+      // Re
+      std::vector<std::vector<uint64_t>> compactions_info;
+      db_->CompactionsInfo(&compactions_info);
+      double re = 0;
+      if (compactions_info.empty()) {
+        re = 0;
+      } else {
+        double sum_re = 0;
+        for (const auto& sorted_run_sizes : compactions_info) {
+          double sum_nlogn = 0;
+          uint64_t sum = 0;
+          for (uint64_t size : sorted_run_sizes) {
+            sum_nlogn += size * std::log2((double)size);
+            sum += size;
+          }
+          sum_re += std::log2((double)sum) - sum_nlogn / sum;
+        }
+        re = sum_re / compactions_info.size();
+      }
+      report << ',' << re;
 
       if (background_job_limiter) {
         report << ',' << background_job_limiter->num_running_bg_jobs();

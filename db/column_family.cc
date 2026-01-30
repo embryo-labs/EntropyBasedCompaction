@@ -1772,6 +1772,34 @@ void ColumnFamilyData::RecoverEpochNumbers() {
   vstorage->RecoverEpochNumbers(this);
 }
 
+void ColumnFamilyData::CompactionsInfo(
+    std::vector<std::vector<uint64_t>>* compactions_info) {
+  if (compaction_picker_ == nullptr) {
+    return;
+  }
+  for (auto* c : *compaction_picker_->compactions_in_progress()) {
+    if (!c->IsPermittedToRun()) {
+      continue;
+    }
+    std::vector<uint64_t> compaction_info;
+    for (const auto& files : *c->inputs()) {
+      if (files.level == 0) {
+        for (const auto file : files.files) {
+          compaction_info.push_back(file->fd.GetFileSize());
+        }
+      } else {
+        assert(files.level > 0);
+        uint64_t sorted_run_size = 0;
+        for (const auto file : files.files) {
+          sorted_run_size += file->fd.GetFileSize();
+        }
+        compaction_info.push_back(sorted_run_size);
+      }
+    }
+    compactions_info->push_back(std::move(compaction_info));
+  }
+}
+
 ColumnFamilySet::ColumnFamilySet(const std::string& dbname,
                                  const ImmutableDBOptions* db_options,
                                  const FileOptions& file_options,

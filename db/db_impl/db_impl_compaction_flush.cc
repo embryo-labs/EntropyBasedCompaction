@@ -1923,6 +1923,14 @@ int DBImpl::Level0StopWriteTrigger(ColumnFamilyHandle* column_family) {
       ->mutable_cf_options.level0_stop_writes_trigger;
 }
 
+void DBImpl::CompactionsInfo(
+    ColumnFamilyHandle* column_family,
+    std::vector<std::vector<uint64_t>>* compaction_info) {
+  auto cfh = static_cast_with_check<ColumnFamilyHandleImpl>(column_family);
+  InstrumentedMutexLock l(&mutex_);
+  cfh->cfd()->CompactionsInfo(compaction_info);
+}
+
 Status DBImpl::FlushAllColumnFamilies(const FlushOptions& flush_options,
                                       FlushReason flush_reason) {
   mutex_.AssertHeld();

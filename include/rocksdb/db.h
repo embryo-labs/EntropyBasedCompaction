@@ -1746,6 +1746,14 @@ class DB {
     return Level0StopWriteTrigger(DefaultColumnFamily());
   }
 
+  virtual void CompactionsInfo(
+      ColumnFamilyHandle* column_family,
+      std::vector<std::vector<uint64_t>>* compaction_info) = 0;
+  virtual void CompactionsInfo(
+      std::vector<std::vector<uint64_t>>* compaction_info) {
+    return CompactionsInfo(DefaultColumnFamily(), compaction_info);
+  }
+
   // Get DB name -- the exact same name that was provided as an argument to
   // DB::Open()
   virtual const std::string& GetName() const = 0;

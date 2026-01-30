@@ -281,6 +281,7 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
       BlobGarbageCollectionPolicy::kUseDefault, -1, &*it, io_pri);
   it->c = c;
   print_status();
+  RegisterCompaction(c);
   return c;
 }
 

@@ -470,6 +470,10 @@ class DBImpl : public DB {
   int MaxMemCompactionLevel(ColumnFamilyHandle* column_family) override;
   using DB::Level0StopWriteTrigger;
   int Level0StopWriteTrigger(ColumnFamilyHandle* column_family) override;
+  using DB::CompactionsInfo;
+  void CompactionsInfo(
+      ColumnFamilyHandle* column_family,
+      std::vector<std::vector<uint64_t>>* compactions_info) override;
   const std::string& GetName() const override;
   Env* GetEnv() const override;
   FileSystem* GetFileSystem() const override;
