@@ -47,14 +47,6 @@ Compaction* CompactionPickerBySize::PickCompaction(
       vstorage->NumLevelBytes(vstorage->num_non_empty_levels() - 1));
   if (!ret.has_value()) return nullptr;
 
-  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
-  if (ioptions_.background_job_limiter) {
-    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-    if (!limiter_handle.has_value()) {
-      return nullptr;
-    }
-  }
-
   auto [a, b, io_priority] = ret.value();
   std::vector<CompactionInputFiles> inputs(1);
   int output_level;
@@ -78,6 +70,16 @@ Compaction* CompactionPickerBySize::PickCompaction(
     assert(!file->being_compacted);
     inputs[0].files.push_back(file);
   }
+
+  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
+  if (ioptions_.background_job_limiter) {
+    limiter_handle =
+        ioptions_.background_job_limiter->RegisterCompaction(Reff(inputs));
+    if (!limiter_handle.has_value()) {
+      return nullptr;
+    }
+  }
+
   return new Compaction(
       vstorage, ioptions_, mutable_cf_options, mutable_db_options,
       std::move(inputs), output_level,

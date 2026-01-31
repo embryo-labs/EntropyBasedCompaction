@@ -123,7 +123,8 @@ Compaction* FIFOCompactionPicker::PickTTLCompaction(
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
   if (ioptions_.background_job_limiter) {
-    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    limiter_handle =
+        ioptions_.background_job_limiter->RegisterCompaction(Reff(inputs));
     if (!limiter_handle.has_value()) {
       return nullptr;
     }
@@ -198,8 +199,8 @@ Compaction* FIFOCompactionPicker::PickSizeCompaction(
               mutable_cf_options.max_compaction_bytes, &comp_inputs)) {
         std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
         if (ioptions_.background_job_limiter) {
-          limiter_handle =
-              ioptions_.background_job_limiter->RegisterCompaction();
+          limiter_handle = ioptions_.background_job_limiter->RegisterCompaction(
+              Reff({comp_inputs}));
           if (!limiter_handle.has_value()) {
             return nullptr;
           }
@@ -305,7 +306,8 @@ Compaction* FIFOCompactionPicker::PickSizeCompaction(
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
   if (ioptions_.background_job_limiter) {
-    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    limiter_handle =
+        ioptions_.background_job_limiter->RegisterCompaction(Reff(inputs));
     if (!limiter_handle.has_value()) {
       return nullptr;
     }
@@ -434,7 +436,8 @@ Compaction* FIFOCompactionPicker::PickTemperatureChangeCompaction(
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
   if (ioptions_.background_job_limiter) {
-    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    limiter_handle =
+        ioptions_.background_job_limiter->RegisterCompaction(Reff(inputs));
     if (!limiter_handle.has_value()) {
       return nullptr;
     }

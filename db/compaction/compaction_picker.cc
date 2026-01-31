@@ -24,8 +24,27 @@
 #include "test_util/sync_point.h"
 #include "util/random.h"
 #include "util/string_util.h"
+#include "utilities/entropy.h"
 
 namespace ROCKSDB_NAMESPACE {
+
+double Reff(const std::vector<CompactionInputFiles>& input_files) {
+  ReffCalculator calculator;
+  for (const auto& files : input_files) {
+    if (files.level == 0) {
+      for (const auto& file : files.files) {
+        calculator.add_sorted_run(file->fd.file_size);
+      }
+    } else {
+      uint64_t size = 0;
+      for (const auto& file : files.files) {
+        size += file->fd.file_size;
+      }
+      calculator.add_sorted_run(size);
+    }
+  }
+  return calculator.calc();
+}
 
 bool FindIntraL0Compaction(const std::vector<FileMetaData*>& level_files,
                            size_t min_files_to_compact,
@@ -378,7 +397,8 @@ Compaction* CompactionPicker::PickCompactionForCompactFiles(
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
   if (ioptions_.background_job_limiter) {
-    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    limiter_handle =
+        ioptions_.background_job_limiter->RegisterCompaction(Reff(input_files));
     if (!limiter_handle.has_value()) {
       return nullptr;
     }
@@ -684,7 +704,8 @@ Compaction* CompactionPicker::PickCompactionForCompactRange(
 
     std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
     if (ioptions_.background_job_limiter) {
-      limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+      limiter_handle =
+          ioptions_.background_job_limiter->RegisterCompaction(Reff(inputs));
       if (!limiter_handle.has_value()) {
         return nullptr;
       }
@@ -882,7 +903,8 @@ Compaction* CompactionPicker::PickCompactionForCompactRange(
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
   if (ioptions_.background_job_limiter) {
-    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction(
+        Reff(compaction_inputs));
     if (!limiter_handle.has_value()) {
       return nullptr;
     }
@@ -1191,6 +1213,16 @@ void CompactionPicker::RegisterCompaction(Compaction* c) {
        c->compaction_reason() != CompactionReason::kExternalSstIngestion) ||
       ioptions_.compaction_style == kCompactionStyleUniversal) {
     level0_compactions_in_progress_.insert(c);
+  }
+  if (ioptions_.json_log) {
+    std::unique_lock<std::mutex> lock(ioptions_.json_log->mutex);
+    ioptions_.json_log->out
+        << "{\"timestamp(ns)\": "
+        << std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+               .count()
+        << ", \"event\": \"new-compaction\", \"R_eff\": " << Reff(*c->inputs())
+        << "}" << std::endl;
   }
   compactions_in_progress_.insert(c);
   TEST_SYNC_POINT_CALLBACK("CompactionPicker::RegisterCompaction:Registered",

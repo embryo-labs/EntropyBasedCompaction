@@ -32,6 +32,7 @@
 #include "rocksdb/universal_compaction.h"
 #include "rocksdb/version.h"
 #include "rocksdb/write_buffer_manager.h"
+#include "util/json_logger.h"
 
 #ifdef max
 #undef max
@@ -818,6 +819,7 @@ struct DBOptions {
 
   // If non-null, then we should collect metrics about database operations
   std::shared_ptr<Statistics> statistics = nullptr;
+  std::shared_ptr<JsonLogger> json_log;
 
   // By default, writes to stable storage use fdatasync (on platforms
   // where this function is available). If this option is true,

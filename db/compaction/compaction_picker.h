@@ -34,6 +34,8 @@ class Compaction;
 class VersionStorageInfo;
 struct CompactionInputFiles;
 
+double Reff(const std::vector<CompactionInputFiles>& input_files);
+
 // An abstract class to pick compactions from an existing LSM-tree.
 //
 // Each compaction style inherits the class and implement the

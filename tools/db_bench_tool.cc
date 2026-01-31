@@ -95,6 +95,7 @@
 #include "util/xxhash.h"
 #include "utilities/blob_db/blob_db.h"
 #include "utilities/counted_fs.h"
+#include "utilities/entropy.h"
 #include "utilities/merge_operators.h"
 #include "utilities/merge_operators/bytesxor.h"
 #include "utilities/merge_operators/sortlist.h"
@@ -545,6 +546,7 @@ DEFINE_int32(compaction_pri,
 DEFINE_bool(allow_intra_l0_compactions,
             ROCKSDB_NAMESPACE::Options().allow_intra_l0_compactions, "");
 
+DEFINE_string(json_log_file, "", "");
 DEFINE_string(compaction_policy, "", "steady/lazy-leveling/dynamic-tiering");
 DEFINE_bool(autotune_size_ratio, false, "");
 DEFINE_double(entropy_threshold, 0.78, "");
@@ -2453,13 +2455,11 @@ class ReporterAgent {
       } else {
         double sum_re = 0;
         for (const auto& sorted_run_sizes : compactions_info) {
-          double sum_nlogn = 0;
-          uint64_t sum = 0;
+          ReffCalculator reff;
           for (uint64_t size : sorted_run_sizes) {
-            sum_nlogn += size * std::log2((double)size);
-            sum += size;
+            reff.add_sorted_run(size);
           }
-          sum_re += std::log2((double)sum) - sum_nlogn / sum;
+          sum_re += reff.calc();
         }
         re = sum_re / compactions_info.size();
       }
@@ -3971,6 +3971,16 @@ class Benchmark {
         writes_ = (FLAGS_writes < 0 ? FLAGS_num : FLAGS_writes);
         benchmark_write_rate_limit_ = FLAGS_benchmark_write_rate_limit;
       }
+      if (open_options_.json_log) {
+        auto& json_log = *open_options_.json_log;
+        std::unique_lock<std::mutex> lock(json_log.mutex);
+        json_log.out << "{\"timestamp(ns)\": "
+                     << std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch())
+                            .count()
+                     << ", \"event\": \"new-benchmark\", \"name\": \"" << name
+                     << "\"}" << std::endl;
+      }
       first_benchmark = false;
       // Sanitize parameters
       num_ = FLAGS_num;
@@ -5270,6 +5280,9 @@ class Benchmark {
         FLAGS_universal_incremental;
     options.compaction_options_universal.stop_style =
         static_cast<CompactionStopStyle>(FLAGS_universal_stop_style);
+    if (!FLAGS_json_log_file.empty() && !options.json_log) {
+      options.json_log = std::make_shared<JsonLogger>(FLAGS_json_log_file);
+    }
     switch (FLAGS_compaction_style_e) {
       case CompactionStyle::kCompactionStyleByCount: {
         assert(FLAGS_compaction_policy == "steady");
@@ -5480,8 +5493,8 @@ class Benchmark {
 
     if (options.background_job_limiter == nullptr &&
         FLAGS_max_running_background_jobs != 0) {
-      options.background_job_limiter =
-          NewGenericBackgroundJobLimiter(FLAGS_max_running_background_jobs);
+      options.background_job_limiter = NewGenericBackgroundJobLimiter(
+          FLAGS_max_running_background_jobs, options.json_log);
     }
 
     options.listeners.emplace_back(listener_);

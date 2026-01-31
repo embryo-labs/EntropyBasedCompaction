@@ -46,14 +46,6 @@ Compaction* CompactionPickerTiering::PickCompaction(
   if (!ret.has_value()) {
     return nullptr;
   }
-  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
-  if (ioptions_.background_job_limiter) {
-    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-    if (!limiter_handle.has_value()) {
-      return nullptr;
-    }
-  }
-
   auto [i, j] = ret.value();
 
   std::vector<CompactionInputFiles> inputs(1);
@@ -83,6 +75,16 @@ Compaction* CompactionPickerTiering::PickCompaction(
     ++i;
     ++file_i;
   }
+
+  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
+  if (ioptions_.background_job_limiter) {
+    limiter_handle =
+        ioptions_.background_job_limiter->RegisterCompaction(Reff(inputs));
+    if (!limiter_handle.has_value()) {
+      return nullptr;
+    }
+  }
+
   auto input_compaction_times = first_to_erase->compaction_times;
   it = sorted_runs_.erase(first_to_erase, j);
   assert(it == j);

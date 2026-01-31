@@ -552,7 +552,8 @@ Compaction* LevelCompactionBuilder::GetCompaction() {
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
   if (ioptions_.background_job_limiter) {
-    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction(
+        Reff(compaction_inputs_));
     if (!limiter_handle.has_value()) {
       return nullptr;
     }

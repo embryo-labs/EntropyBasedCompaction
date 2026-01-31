@@ -3,18 +3,14 @@
 #include <atomic>
 #include <cassert>
 #include <condition_variable>
-#include <deque>
-#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <queue>
-#include <stack>
-#include <variant>
+#include <vector>
 
-#include "rocksdb/rate_limiter.h"
 #include "rocksdb/rocksdb_namespace.h"
+#include "util/json_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -28,6 +24,10 @@ class BackgroundJobLimiter
   class CompactionHandle;
   class CompactionStatus {
    public:
+    CompactionStatus(double reff) : reff_(reff) {}
+
+    double reff() const { return reff_; }
+
     bool IsPermittedToRun() const {
       return permit_to_run_.load(std::memory_order_relaxed);
     }
@@ -60,6 +60,8 @@ class BackgroundJobLimiter
     }
 
    private:
+    const double reff_;
+
     mutable std::mutex lock_;
     mutable std::condition_variable cv_;
     mutable std::atomic<bool> permit_to_run_ = true;
@@ -110,7 +112,6 @@ class BackgroundJobLimiter
         return;
       }
       assert(status_ != nullptr);
-      std::shared_ptr<CompactionStatus> compaction_to_wake_up;
       std::unique_lock<std::mutex> lock(limiter_->lock_);
       auto it = limiter_->compactions_.end();
       do {
@@ -124,7 +125,7 @@ class BackgroundJobLimiter
       } else {
         status_->PermitToRun();
       }
-      limiter_->MaybeResumeCompactionLocked(std::move(lock));
+      limiter_->MaybeResumeCompactionLocked(std::move(lock), true);
     }
 
     const std::shared_ptr<CompactionStatus>& Status() const { return status_; }
@@ -147,13 +148,13 @@ class BackgroundJobLimiter
 
   // Return std::nullopt means that the LSM-tree is busy with flushing and
   // shouldn't start any new background jobs.
-  std::optional<CompactionHandle> RegisterCompaction() {
+  std::optional<CompactionHandle> RegisterCompaction(double reff) {
     if (num_running_flushes_.load(std::memory_order_relaxed) >=
         max_running_background_jobs_.load(std::memory_order_relaxed)) {
       printf("RegisterCompaction: Reject due to too many background jobs\n");
       return std::nullopt;
     }
-    auto compaction_status = std::make_shared<CompactionStatus>();
+    auto compaction_status = std::make_shared<CompactionStatus>(reff);
 
     std::unique_lock<std::mutex> lock(lock_);
     compactions_.emplace_back(compaction_status);
@@ -168,8 +169,10 @@ class BackgroundJobLimiter
   }
 
  private:
-  explicit BackgroundJobLimiter(size_t max_running_background_jobs)
-      : max_running_background_jobs_(max_running_background_jobs) {}
+  explicit BackgroundJobLimiter(std::shared_ptr<JsonLogger> json_log,
+                                size_t max_running_background_jobs)
+      : json_log_(std::move(json_log)),
+        max_running_background_jobs_(max_running_background_jobs) {}
 
   void MaybeStopEarliestRunningCompactionsLocked() {
     assert(lock_.try_lock() == false);
@@ -194,7 +197,8 @@ class BackgroundJobLimiter
     }
   }
 
-  void MaybeResumeCompactionLocked(std::unique_lock<std::mutex> lock) {
+  void MaybeResumeCompactionLocked(std::unique_lock<std::mutex> lock,
+                                   bool log_event) {
     assert(lock_.try_lock() == false);
     auto num_running_compactions =
         num_running_compactions_.load(std::memory_order_relaxed);
@@ -216,13 +220,24 @@ class BackgroundJobLimiter
     num_running_compactions_.fetch_add(1, std::memory_order_relaxed);
     lock.unlock();
     compaction_to_wake_up->PermitToRun();
+    if (log_event && json_log_) {
+      std::unique_lock<std::mutex> json_log_lock(json_log_->mutex);
+      json_log_->out << "{\"timestamp(ns)\": "
+                     << std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch())
+                            .count()
+                     << ", \"event\": \"resume-compaction\", \"R_eff\": "
+                     << compaction_to_wake_up->reff() << "}" << std::endl;
+    }
   }
 
   void FlushFinishes() {
     std::unique_lock<std::mutex> lock(lock_);
     num_running_flushes_.fetch_sub(1, std::memory_order_relaxed);
-    MaybeResumeCompactionLocked(std::move(lock));
+    MaybeResumeCompactionLocked(std::move(lock), false);
   }
+
+  std::shared_ptr<JsonLogger> json_log_;
 
   mutable std::mutex lock_;
   // atomic to suppress data race warnning
@@ -232,13 +247,14 @@ class BackgroundJobLimiter
   std::vector<std::shared_ptr<CompactionStatus>> compactions_;
   friend class CompactionHandle;
   friend std::shared_ptr<BackgroundJobLimiter> NewGenericBackgroundJobLimiter(
-      size_t max_running_background_jobs);
+      size_t max_running_background_jobs, std::shared_ptr<JsonLogger> json_log);
 };
 
 inline std::shared_ptr<BackgroundJobLimiter> NewGenericBackgroundJobLimiter(
-    size_t max_running_background_jobs) {
-  return std::shared_ptr<BackgroundJobLimiter>(
-      new BackgroundJobLimiter(max_running_background_jobs));
+    size_t max_running_background_jobs,
+    std::shared_ptr<JsonLogger> json_log = nullptr) {
+  return std::shared_ptr<BackgroundJobLimiter>(new BackgroundJobLimiter(
+      std::move(json_log), max_running_background_jobs));
 }
 
 }  // namespace ROCKSDB_NAMESPACE

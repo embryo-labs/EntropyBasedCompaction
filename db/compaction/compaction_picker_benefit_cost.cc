@@ -224,14 +224,6 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
   } else {
     io_pri = Env::IO_LOW;
   }
-  if (io_pri == Env::IO_LOW) {
-    if (ioptions_.background_job_limiter) {
-      limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-      if (!limiter_handle.has_value()) {
-        return nullptr;
-      }
-    }
-  }
 
   std::vector<CompactionInputFiles> inputs(1);
   inputs[0].level = 0;
@@ -260,6 +252,16 @@ Compaction* CompactionPickerBenefitCost::PickCompaction(
     }
     ++i;
     ++file_i;
+  }
+
+  if (io_pri == Env::IO_LOW) {
+    if (ioptions_.background_job_limiter) {
+      limiter_handle =
+          ioptions_.background_job_limiter->RegisterCompaction(Reff(inputs));
+      if (!limiter_handle.has_value()) {
+        return nullptr;
+      }
+    }
   }
 
   it = sorted_runs_.erase(first_to_erase, j);

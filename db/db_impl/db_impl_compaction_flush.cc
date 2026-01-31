@@ -1836,7 +1836,8 @@ Status DBImpl::ReFitLevel(ColumnFamilyData* cfd, int level, int target_level) {
     std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
     if (immutable_db_options_.background_job_limiter) {
       limiter_handle =
-          immutable_db_options_.background_job_limiter->RegisterCompaction();
+          immutable_db_options_.background_job_limiter->RegisterCompaction(
+              Reff({input}));
       if (!limiter_handle.has_value()) {
         return Status::Aborted();
       }
@@ -4477,7 +4478,8 @@ Compaction* DBImpl::CreateIntendedCompactionForwardedToBottomPriorityPool(
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
   if (cfd->ioptions().background_job_limiter) {
-    limiter_handle = cfd->ioptions().background_job_limiter->RegisterCompaction();
+    limiter_handle = cfd->ioptions().background_job_limiter->RegisterCompaction(
+        Reff(inputs));
   }
 
   Compaction* intended_compaction =

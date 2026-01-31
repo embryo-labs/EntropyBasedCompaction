@@ -1091,7 +1091,8 @@ Compaction* UniversalCompactionBuilder::PickCompactionToReduceSortedRuns(
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
   if (ioptions_.background_job_limiter) {
-    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    limiter_handle =
+        ioptions_.background_job_limiter->RegisterCompaction(Reff(inputs));
     if (!limiter_handle.has_value()) {
       return nullptr;
     }
@@ -1447,7 +1448,8 @@ Compaction* UniversalCompactionBuilder::PickIncrementalForReduceSizeAmp(
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
   if (ioptions_.background_job_limiter) {
-    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    limiter_handle =
+        ioptions_.background_job_limiter->RegisterCompaction(Reff(inputs));
     if (!limiter_handle.has_value()) {
       return nullptr;
     }
@@ -1611,7 +1613,8 @@ Compaction* UniversalCompactionBuilder::PickDeleteTriggeredCompaction() {
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
   if (ioptions_.background_job_limiter) {
-    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    limiter_handle =
+        ioptions_.background_job_limiter->RegisterCompaction(Reff(inputs));
     if (!limiter_handle.has_value()) {
       return nullptr;
     }
@@ -1710,7 +1713,8 @@ Compaction* UniversalCompactionBuilder::PickCompactionWithSortedRunRange(
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
   if (ioptions_.background_job_limiter) {
-    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
+    limiter_handle =
+        ioptions_.background_job_limiter->RegisterCompaction(Reff(inputs));
     if (!limiter_handle.has_value()) {
       return nullptr;
     }

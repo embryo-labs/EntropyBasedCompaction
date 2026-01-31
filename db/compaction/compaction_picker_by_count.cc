@@ -36,14 +36,6 @@ Compaction* CompactionPickerByCount::PickCompaction(
   auto ret = policy->PickCompaction(sorted_runs_);
   if (!ret.has_value()) return nullptr;
 
-  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
-  if (ioptions_.background_job_limiter) {
-    limiter_handle = ioptions_.background_job_limiter->RegisterCompaction();
-    if (!limiter_handle.has_value()) {
-      return nullptr;
-    }
-  }
-
   auto [a, b, io_priority] = ret.value();
   std::vector<CompactionInputFiles> inputs(1);
   int output_level;
@@ -79,6 +71,16 @@ Compaction* CompactionPickerByCount::PickCompaction(
     ++i;
     ++it;
   }
+
+  std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
+  if (ioptions_.background_job_limiter) {
+    limiter_handle =
+        ioptions_.background_job_limiter->RegisterCompaction(Reff(inputs));
+    if (!limiter_handle.has_value()) {
+      return nullptr;
+    }
+  }
+
   CompactionPolicyByCount::SortedRunInfo* merging_info;
   if (output_level == 0) {
     // Erase [a, b)
