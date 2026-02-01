@@ -150,6 +150,7 @@ struct MutableCFOptions {
         entropy_threshold(options.entropy_threshold),
         k_n(options.k_n),
         k_e(options.k_e),
+        b_e(options.b_e),
         sliding_window(options.sliding_window),
         prioritize_last_sorted_run_compaction(
             options.prioritize_last_sorted_run_compaction),
@@ -341,6 +342,7 @@ struct MutableCFOptions {
   double entropy_threshold;
   double k_n;
   double k_e;
+  double b_e;
   bool sliding_window;
   bool prioritize_last_sorted_run_compaction;
   bool last_compaction_io_sa;

@@ -127,7 +127,7 @@ CompactionPickerBenefitCost::PickCompaction(
     for (const auto& existing_compaction : existing_compactions) {
       const auto& c = existing_compaction.get();
       if (mutable_cf_options.preempt_by_entropy &&
-          best->r_e < c.r_e * mutable_cf_options.k_e) {
+          best->r_e < c.r_e * mutable_cf_options.k_e + mutable_cf_options.b_e) {
         return std::nullopt;
       }
       if (mutable_cf_options.preempt_by_num &&

@@ -552,6 +552,7 @@ DEFINE_bool(autotune_size_ratio, false, "");
 DEFINE_double(entropy_threshold, 0.78, "");
 DEFINE_double(k_n, 1.7, "");
 DEFINE_double(k_e, 1, "");
+DEFINE_double(b_e, 0, "");
 DEFINE_bool(sliding_window, true, "");
 DEFINE_bool(prioritize_last_sorted_run_compaction, false, "");
 DEFINE_bool(last_compaction_io_sa, false, "");
@@ -5335,6 +5336,7 @@ class Benchmark {
     options.entropy_threshold = FLAGS_entropy_threshold;
     options.k_n = FLAGS_k_n;
     options.k_e = FLAGS_k_e;
+    options.b_e = FLAGS_b_e;
     options.sliding_window = FLAGS_sliding_window;
     options.prioritize_last_sorted_run_compaction =
         FLAGS_prioritize_last_sorted_run_compaction;
