@@ -18,7 +18,7 @@ void CompactionPickerBenefitCost::print_status() const {
     }
     for (;;) {
       if (it->is_merging()) {
-        printf("merging %zu ", it->num_sorted_runs);
+        printf("merging %zu Re %.2f ", it->num_sorted_runs, it->r_e);
         if (it->c) {
           printf("pri %d ",
                  it->c->io_priority().load(std::memory_order_relaxed));
