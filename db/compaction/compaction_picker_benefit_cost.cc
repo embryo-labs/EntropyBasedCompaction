@@ -118,11 +118,6 @@ CompactionPickerBenefitCost::PickCompaction(
   }
   if (!mutable_cf_options.prioritize_last_sorted_run_compaction ||
       best->last != last_sorted_run) {
-    if (!mutable_cf_options.preempt_by_entropy &&
-        !mutable_cf_options.preempt_by_num && !existing_compactions.empty()) {
-      // Preemption is disabled.
-      return std::nullopt;
-    }
     // Check preemption conditions
     for (const auto& existing_compaction : existing_compactions) {
       const auto& c = existing_compaction.get();
