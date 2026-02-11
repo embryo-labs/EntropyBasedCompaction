@@ -511,6 +511,14 @@ static std::unordered_map<std::string, OptionTypeInfo>
                       max_bytes_for_level_multiplier_additional),
              OptionVerificationType::kNormal, OptionTypeFlags::kMutable,
              {0, OptionType::kInt})},
+        {"entropy_threshold",
+         {offsetof(struct MutableCFOptions, entropy_threshold),
+          OptionType::kDouble, OptionVerificationType::kNormal,
+          OptionTypeFlags::kMutable}},
+        {"sliding_window",
+         {offsetof(struct MutableCFOptions, sliding_window),
+          OptionType::kBoolean, OptionVerificationType::kNormal,
+          OptionTypeFlags::kMutable}},
         {"max_sequential_skip_in_iterations",
          {offsetof(struct MutableCFOptions, max_sequential_skip_in_iterations),
           OptionType::kUInt64T, OptionVerificationType::kNormal,
@@ -1213,6 +1221,8 @@ void MutableCFOptions::Dump(Logger* log) const {
 
   ROCKS_LOG_INFO(log, "max_bytes_for_level_multiplier_additional: %s",
                  result.c_str());
+  ROCKS_LOG_INFO(log, "entropy_threshold: %f", entropy_threshold);
+  ROCKS_LOG_INFO(log, "sliding_window: %d", sliding_window);
   ROCKS_LOG_INFO(log, "        max_sequential_skip_in_iterations: %" PRIu64,
                  max_sequential_skip_in_iterations);
   ROCKS_LOG_INFO(log, "                     paranoid_file_checks: %d",

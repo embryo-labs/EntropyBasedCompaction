@@ -4227,7 +4227,16 @@ class Benchmark {
       } else if (name == "compact1") {
         CompactLevel(1);
       } else if (name == "waitforcompaction") {
+        // Compact all sorted runs into one
+        db_.db
+            ->SetOptions({{"entropy_threshold", "0"}, {"sliding_window", "0"}})
+            .AssertOK();
         WaitForCompaction();
+        db_.db
+            ->SetOptions(
+                {{"entropy_threshold", std::to_string(FLAGS_entropy_threshold)},
+                 {"sliding_window", std::to_string(FLAGS_sliding_window)}})
+            .AssertOK();
       } else if (name == "flush") {
         Flush();
       } else if (name == "crc32c") {

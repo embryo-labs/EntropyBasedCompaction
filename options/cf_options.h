@@ -231,6 +231,8 @@ struct MutableCFOptions {
         ttl(0),
         periodic_compaction_seconds(0),
         compaction_options_fifo(),
+        entropy_threshold(0),
+        sliding_window(true),
         preclude_last_level_data_seconds(0),
         preserve_internal_time_seconds(0),
         enable_blob_files(false),

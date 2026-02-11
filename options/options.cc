@@ -79,6 +79,8 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
       compaction_options_universal(options.compaction_options_universal),
       compaction_options_fifo(options.compaction_options_fifo),
       compaction_policy(options.compaction_policy),
+      entropy_threshold(options.entropy_threshold),
+      sliding_window(options.sliding_window),
       max_sequential_skip_in_iterations(
           options.max_sequential_skip_in_iterations),
       memtable_factory(options.memtable_factory),
