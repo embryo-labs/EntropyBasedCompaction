@@ -364,6 +364,8 @@ std::map<CompactionStyle, std::string>
         {kCompactionStyleBySize, "kCompactionStyleBySize"},
         {kCompactionStyleBenefitCost, "kCompactionStyleBenefitCost"},
         {kCompactionStyleByCount, "kCompactionStyleByCount"},
+        {kCompactionStyleUniversalSimplified,
+         "kCompactionStyleUniversalSimplified"},
         {kCompactionStyleNone, "kCompactionStyleNone"},
 };
 
@@ -964,6 +966,8 @@ std::unordered_map<std::string, CompactionStyle>
         {"kCompactionStyleBySize", kCompactionStyleBySize},
         {"kCompactionStyleBenefitCost", kCompactionStyleBenefitCost},
         {"kCompactionStyleByCount", kCompactionStyleByCount},
+        {"kCompactionStyleUniversalSimplified",
+         kCompactionStyleUniversalSimplified},
         {"kCompactionStyleNone", kCompactionStyleNone},
 };
 

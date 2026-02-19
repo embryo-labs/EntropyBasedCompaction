@@ -38,9 +38,10 @@ enum CompactionStyle : char {
   kCompactionStyleBenefitCost = 0x5,
   // Trigger compactions based on the count of merged flushed SSTables
   kCompactionStyleByCount = 0x6,
+  kCompactionStyleUniversalSimplified = 0x7,
   // Disable background compaction. Compaction jobs are submitted
   // via CompactFiles().
-  kCompactionStyleNone = 0x7,
+  kCompactionStyleNone = 0x8,
 };
 
 // In Level-based compaction, it Determines which file from a level to be

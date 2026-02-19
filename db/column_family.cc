@@ -26,6 +26,7 @@
 #include "db/compaction/compaction_picker_level.h"
 #include "db/compaction/compaction_picker_tiering.h"
 #include "db/compaction/compaction_picker_universal.h"
+#include "db/compaction/compaction_picker_universal_simplified.h"
 #include "db/db_impl/db_impl.h"
 #include "db/internal_stats.h"
 #include "db/job_context.h"
@@ -687,6 +688,10 @@ ColumnFamilyData::ColumnFamilyData(
     } else if (ioptions_.compaction_style == kCompactionStyleByCount) {
       compaction_picker_.reset(
           new CompactionPickerByCount(ioptions_, &internal_comparator_));
+    } else if (ioptions_.compaction_style ==
+               kCompactionStyleUniversalSimplified) {
+      compaction_picker_.reset(new CompactionPickerUniversalSimplified(
+          ioptions_, &internal_comparator_));
     } else if (ioptions_.compaction_style == kCompactionStyleNone) {
       compaction_picker_.reset(
           new NullCompactionPicker(ioptions_, &internal_comparator_));
