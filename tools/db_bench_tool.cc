@@ -2229,7 +2229,7 @@ class ReporterAgent {
         stop_(false) {
     auto report_file_path = output_dir_ / FLAGS_report_file;
     auto s =
-        env_->NewWritableFile(report_file_path, &report_file_, EnvOptions());
+        env_->ReopenWritableFile(report_file_path, &report_file_, EnvOptions());
     if (s.ok()) {
       s = report_file_->Append(Header() + "\n");
     }
