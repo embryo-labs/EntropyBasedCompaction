@@ -2205,13 +2205,11 @@ Status CompactionJob::InstallCompactionResults(bool* compaction_released) {
     *compaction_released = true;
 
     auto cfd = compaction->column_family_data();
-    if (compaction->merging_info()) {
-      assert(edit->GetNewFiles().size() == 1);
-      const auto& file = edit->GetNewFiles()[0].second;
-      cfd->compaction_picker()->CompactionFinished(
-          cfd->current()->storage_info(), compaction->merging_info(),
-          file.fd.file_size);
-    }
+    assert(edit->GetNewFiles().size() == 1);
+    const auto& file = edit->GetNewFiles()[0].second;
+    cfd->compaction_picker()->CompactionFinished(cfd->current()->storage_info(),
+                                                 compaction->merging_info(),
+                                                 file.fd.file_size);
     cfd->current()->storage_info()->ComputeCompactionScore(
         cfd, cfd->ioptions(), cfd->GetLatestMutableCFOptions());
   };

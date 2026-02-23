@@ -22,5 +22,21 @@ class CompactionPickerUniversalSimplified : public CompactionPicker {
       const std::vector<SequenceNumber>& existing_snapshots,
       const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
       LogBuffer* log_buffer, bool require_max_output_level = false) override;
+
+  void CompactionFinished(const VersionStorageInfo* vstorage, void* info,
+                          uint64_t size) override;
+  void Flushed(const VersionStorageInfo* vstorage,
+               const FileMetaData& file) override;
+
+ private:
+  struct SortedRunInfo {
+    std::vector<uint64_t> sizes;
+    SortedRunInfo(std::vector<uint64_t>&& _sizes) : sizes(std::move(_sizes)) {}
+    bool is_merging() const { return sizes.size() > 1; }
+  };
+
+  void print_status() const;
+  std::list<SortedRunInfo> sorted_runs_;
+  const VersionStorageInfo* vstorage_;
 };
 }  // namespace ROCKSDB_NAMESPACE

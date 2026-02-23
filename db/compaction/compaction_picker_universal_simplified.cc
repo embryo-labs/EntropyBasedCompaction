@@ -2,6 +2,41 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+void CompactionPickerUniversalSimplified::print_status() const {
+  {
+    size_t num_sorted_runs = 0;
+    for (const auto& sr : sorted_runs_) {
+      num_sorted_runs += sr.sizes.size();
+    }
+    printf("%zu sorted runs: [", num_sorted_runs);
+    for (auto it = sorted_runs_.begin();; ++it) {
+      if (it == sorted_runs_.end()) {
+        printf("]\n");
+        fflush(stdout);
+        break;
+      }
+      if (it != sorted_runs_.begin()) {
+        printf(", ");
+      }
+      if (it->is_merging()) {
+        printf("merging [");
+        for (auto it_sizes = it->sizes.begin();; ++it_sizes) {
+          if (it_sizes == it->sizes.end()) {
+            printf("]");
+            break;
+          }
+          if (it_sizes != it->sizes.begin()) {
+            printf(", ");
+          }
+          printf("%" PRIu64, *it_sizes);
+        }
+      } else {
+        printf("%" PRIu64, it->sizes[0]);
+      }
+    }
+  }
+}
+
 bool CompactionPickerUniversalSimplified::CalcNeedsCompaction(
     const ColumnFamilyData* cfd, const MutableCFOptions& mutable_cf_options,
     const VersionStorageInfo* vstorage) const {
@@ -30,7 +65,8 @@ Compaction* CompactionPickerUniversalSimplified::PickCompaction(
   assert(vstorage->num_levels() == 1);
   const auto& l0_files = vstorage->LevelFiles(0);
   std::vector<FileMetaData*> files;
-  for (size_t i = 0; i < l0_files.size(); ++i) {
+  size_t i = 0;
+  for (; i < l0_files.size(); ++i) {
     auto file = l0_files[i];
     if (file->being_compacted) {
       continue;
@@ -40,13 +76,11 @@ Compaction* CompactionPickerUniversalSimplified::PickCompaction(
     uint64_t size_sum = file->fd.file_size;
     for (size_t j = i + 1; j < l0_files.size(); ++j) {
       file = l0_files[j];
-      if (file->being_compacted) {
+      if (file->being_compacted || file->fd.file_size > size_sum) {
         break;
       }
-      if (file->fd.file_size <= size_sum) {
-        files.push_back(file);
-        size_sum += file->fd.file_size;
-      }
+      files.push_back(file);
+      size_sum += file->fd.file_size;
     }
     if (files.size() >= 2) {
       break;
@@ -68,6 +102,26 @@ Compaction* CompactionPickerUniversalSimplified::PickCompaction(
     }
   }
 
+  auto first = sorted_runs_.begin();
+  while (i > 0) {
+    assert(i >= first->sizes.size());
+    i -= first->sizes.size();
+    ++first;
+  }
+  auto last = first;
+  for (const auto file : inputs[0].files) {
+    assert(!last->is_merging());
+    assert(last->sizes[0] == file->fd.file_size);
+    ++last;
+  }
+  --last;
+  auto it = sorted_runs_.erase(first, last);
+  it->sizes.clear();
+  for (const auto file : inputs[0].files) {
+    it->sizes.push_back(file->fd.file_size);
+  }
+  print_status();
+
   return new Compaction(
       vstorage, ioptions_, mutable_cf_options, mutable_db_options,
       std::move(inputs), 0,
@@ -84,8 +138,25 @@ Compaction* CompactionPickerUniversalSimplified::PickCompaction(
       /* snapshot_checker */ nullptr, std::move(limiter_handle),
       CompactionReason::kPolicyByCount, /* trim_ts */ "", /*score*/ 2333,
       /* l0_files_might_overlap */ true,
-      BlobGarbageCollectionPolicy::kUseDefault, -1, nullptr,
+      BlobGarbageCollectionPolicy::kUseDefault, -1, &*it,
       Env::IOPriority::IO_LOW);
+}
+
+void CompactionPickerUniversalSimplified::CompactionFinished(
+    const VersionStorageInfo* vstorage, void* info, uint64_t size) {
+  vstorage_ = vstorage;
+  auto sr = static_cast<SortedRunInfo*>(info);
+  sr->sizes.clear();
+  sr->sizes.push_back(size);
+  sr->sizes.shrink_to_fit();
+  print_status();
+}
+void CompactionPickerUniversalSimplified::Flushed(
+    const VersionStorageInfo* vstorage, const FileMetaData& file) {
+  vstorage_ = vstorage;
+  // raw_key_size and raw_value_size seem to be zero
+  sorted_runs_.emplace_front(std::vector<uint64_t>({file.fd.GetFileSize()}));
+  print_status();
 }
 
 }  // namespace ROCKSDB_NAMESPACE
