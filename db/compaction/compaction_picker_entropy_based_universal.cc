@@ -59,8 +59,11 @@ bool CompactionPickerEntropyBasedUniversal::NeedsCompaction(
 
 class CandidatePicker {
  public:
-  CandidatePicker(VersionStorageInfo* vstorage)
-      : l0_files_(vstorage->LevelFiles(0)), i_(0) {}
+  CandidatePicker(const MutableCFOptions& mutable_cf_options,
+                  VersionStorageInfo* vstorage)
+      : mutable_cf_options_(mutable_cf_options),
+        l0_files_(vstorage->LevelFiles(0)),
+        i_(0) {}
 
   std::optional<std::pair<size_t, size_t>> Pick() {
     while (i_ < l0_files_.size()) {
@@ -73,7 +76,12 @@ class CandidatePicker {
       size_t j = i_ + 1;
       for (; j < l0_files_.size(); ++j) {
         file = l0_files_[j];
-        if (file->being_compacted || file->fd.file_size > size_sum) {
+        if (file->being_compacted ||
+            file->fd.file_size >
+                size_sum *
+                    (100 + mutable_cf_options_.compaction_options_universal
+                               .size_ratio) /
+                    100) {
           break;
         }
         size_sum += file->fd.file_size;
@@ -89,6 +97,7 @@ class CandidatePicker {
   }
 
  private:
+  const MutableCFOptions& mutable_cf_options_;
   const std::vector<FileMetaData*>& l0_files_;
   size_t i_;
 };
@@ -104,7 +113,7 @@ Compaction* CompactionPickerEntropyBasedUniversal::PickCompaction(
 
   std::optional<std::pair<size_t, size_t>> best;
   double best_reff = 0;
-  CandidatePicker picker(vstorage);
+  CandidatePicker picker(mutable_cf_options, vstorage);
   for (;;) {
     auto picked = picker.Pick();
     if (!picked.has_value()) {
