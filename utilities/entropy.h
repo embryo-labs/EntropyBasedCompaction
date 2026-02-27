@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <vector>
 
 #include "rocksdb/rocksdb_namespace.h"
 
@@ -20,5 +21,13 @@ class ReffCalculator {
   double sum_nlog2n_;
   uint64_t sum_;
 };
+
+static inline double Reff(std::vector<uint64_t> sizes) {
+  ReffCalculator calculator;
+  for (uint64_t size : sizes) {
+    calculator.add_sorted_run(size);
+  }
+  return calculator.calc();
+}
 
 }  // namespace ROCKSDB_NAMESPACE

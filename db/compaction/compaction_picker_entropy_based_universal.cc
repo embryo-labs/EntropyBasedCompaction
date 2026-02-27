@@ -21,7 +21,7 @@ void CompactionPickerEntropyBasedUniversal::print_status() const {
         printf(", ");
       }
       if (it->is_merging()) {
-        printf("merging %zu [", it->sizes.size());
+        printf("merging %zu Re %f [", it->sizes.size(), Reff(it->sizes));
         for (auto it_sizes = it->sizes.begin();; ++it_sizes) {
           if (it_sizes == it->sizes.end()) {
             printf("]");
