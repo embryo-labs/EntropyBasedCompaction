@@ -3617,7 +3617,7 @@ void VersionStorageInfo::ComputeCompactionScore(
       compaction_style_ == kCompactionStyleBySize ||
       compaction_style_ == kCompactionStyleBenefitCost ||
       compaction_style_ == kCompactionStyleByCount ||
-      compaction_style_ == kCompactionStyleUniversalSimplified) {
+      compaction_style_ == kCompactionStyleEntropyBasedUniversal) {
     assert(compaction_level_.size() == compaction_score_.size());
     assert(compaction_level_.size() == (size_t)num_levels());
     compaction_level_[0] = 0;
@@ -4279,7 +4279,7 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
       compaction_style_ == kCompactionStyleBySize ||
       compaction_style_ == kCompactionStyleBenefitCost ||
       compaction_style_ == kCompactionStyleByCount ||
-      compaction_style_ == kCompactionStyleUniversalSimplified) {
+      compaction_style_ == kCompactionStyleEntropyBasedUniversal) {
     // don't need this
     return;
   }

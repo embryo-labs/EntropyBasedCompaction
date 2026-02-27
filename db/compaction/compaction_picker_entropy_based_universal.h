@@ -3,10 +3,10 @@
 #include "db/compaction/compaction_picker.h"
 
 namespace ROCKSDB_NAMESPACE {
-class CompactionPickerUniversalSimplified : public CompactionPicker {
+class CompactionPickerEntropyBasedUniversal : public CompactionPicker {
  public:
-  CompactionPickerUniversalSimplified(const ImmutableOptions& ioptions,
-                                      const InternalKeyComparator* icmp)
+  CompactionPickerEntropyBasedUniversal(const ImmutableOptions& ioptions,
+                                        const InternalKeyComparator* icmp)
       : CompactionPicker(ioptions, icmp) {}
 
   bool CalcNeedsCompaction(const ColumnFamilyData* cfd,

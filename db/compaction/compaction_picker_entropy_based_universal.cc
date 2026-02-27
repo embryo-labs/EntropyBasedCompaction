@@ -1,8 +1,10 @@
-#include "db/compaction/compaction_picker_universal_simplified.h"
+#include "db/compaction/compaction_picker_entropy_based_universal.h"
+
+#include "utilities/entropy.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-void CompactionPickerUniversalSimplified::print_status() const {
+void CompactionPickerEntropyBasedUniversal::print_status() const {
   {
     size_t num_sorted_runs = 0;
     for (const auto& sr : sorted_runs_) {
@@ -19,7 +21,7 @@ void CompactionPickerUniversalSimplified::print_status() const {
         printf(", ");
       }
       if (it->is_merging()) {
-        printf("merging [");
+        printf("merging %zu [", it->sizes.size());
         for (auto it_sizes = it->sizes.begin();; ++it_sizes) {
           if (it_sizes == it->sizes.end()) {
             printf("]");
@@ -37,7 +39,7 @@ void CompactionPickerUniversalSimplified::print_status() const {
   }
 }
 
-bool CompactionPickerUniversalSimplified::CalcNeedsCompaction(
+bool CompactionPickerEntropyBasedUniversal::CalcNeedsCompaction(
     const ColumnFamilyData* cfd, const MutableCFOptions& mutable_cf_options,
     const VersionStorageInfo* vstorage) const {
   assert(vstorage->num_levels() == 1);
@@ -50,12 +52,48 @@ bool CompactionPickerUniversalSimplified::CalcNeedsCompaction(
   return (int)num_sr_not_compacted >=
          mutable_cf_options.level0_file_num_compaction_trigger;
 }
-bool CompactionPickerUniversalSimplified::NeedsCompaction(
+bool CompactionPickerEntropyBasedUniversal::NeedsCompaction(
     const ColumnFamilyData* cfd, const VersionStorageInfo* vstorage) const {
   return vstorage->CompactionScore(0) >= 1;
 }
 
-Compaction* CompactionPickerUniversalSimplified::PickCompaction(
+class CandidatePicker {
+ public:
+  CandidatePicker(VersionStorageInfo* vstorage)
+      : l0_files_(vstorage->LevelFiles(0)), i_(0) {}
+
+  std::optional<std::pair<size_t, size_t>> Pick() {
+    while (i_ < l0_files_.size()) {
+      auto file = l0_files_[i_];
+      if (file->being_compacted) {
+        i_ += 1;
+        continue;
+      }
+      uint64_t size_sum = file->fd.file_size;
+      size_t j = i_ + 1;
+      for (; j < l0_files_.size(); ++j) {
+        file = l0_files_[j];
+        if (file->being_compacted || file->fd.file_size > size_sum) {
+          break;
+        }
+        size_sum += file->fd.file_size;
+      }
+      j -= 1;
+      auto i = i_;
+      i_ += 1;
+      if (j < l0_files_.size() && (j - i + 1) >= 2) {
+        return std::make_pair(i, j);
+      }
+    }
+    return std::nullopt;
+  }
+
+ private:
+  const std::vector<FileMetaData*>& l0_files_;
+  size_t i_;
+};
+
+Compaction* CompactionPickerEntropyBasedUniversal::PickCompaction(
     ColumnFamilyData* cfd, const std::string& cf_name,
     const MutableCFOptions& mutable_cf_options,
     const MutableDBOptions& mutable_db_options,
@@ -63,35 +101,37 @@ Compaction* CompactionPickerUniversalSimplified::PickCompaction(
     const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
     LogBuffer* log_buffer, bool require_max_output_level) {
   assert(vstorage->num_levels() == 1);
-  const auto& l0_files = vstorage->LevelFiles(0);
-  std::vector<FileMetaData*> files;
-  size_t i = 0;
-  for (; i < l0_files.size(); ++i) {
-    auto file = l0_files[i];
-    if (file->being_compacted) {
-      continue;
-    }
-    files.clear();
-    files.push_back(file);
-    uint64_t size_sum = file->fd.file_size;
-    for (size_t j = i + 1; j < l0_files.size(); ++j) {
-      file = l0_files[j];
-      if (file->being_compacted || file->fd.file_size > size_sum) {
-        break;
-      }
-      files.push_back(file);
-      size_sum += file->fd.file_size;
-    }
-    if (files.size() >= 2) {
+
+  std::optional<std::pair<size_t, size_t>> best;
+  double best_reff = 0;
+  CandidatePicker picker(vstorage);
+  for (;;) {
+    auto picked = picker.Pick();
+    if (!picked.has_value()) {
       break;
     }
+    ReffCalculator calculator;
+    auto [i, j] = picked.value();
+    for (; i <= j; ++i) {
+      calculator.add_sorted_run(vstorage->LevelFiles(0)[i]->fd.file_size);
+    }
+    double reff = calculator.calc();
+    if (reff <= best_reff) {
+      continue;
+    }
+    best_reff = reff;
+    best = picked.value();
   }
-  if (files.size() < 2) {
+  if (!best.has_value()) {
     return nullptr;
   }
+  auto [i, j] = best.value();
+
   std::vector<CompactionInputFiles> inputs(1);
   inputs[0].level = 0;
-  inputs[0].files = std::move(files);
+  for (size_t k = i; k <= j; ++k) {
+    inputs[0].files.push_back(vstorage->LevelFiles(0)[k]);
+  }
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
   if (ioptions_.background_job_limiter) {
@@ -142,7 +182,7 @@ Compaction* CompactionPickerUniversalSimplified::PickCompaction(
       Env::IOPriority::IO_LOW);
 }
 
-void CompactionPickerUniversalSimplified::CompactionFinished(
+void CompactionPickerEntropyBasedUniversal::CompactionFinished(
     const VersionStorageInfo* vstorage, void* info, uint64_t size) {
   vstorage_ = vstorage;
   auto sr = static_cast<SortedRunInfo*>(info);
@@ -151,7 +191,7 @@ void CompactionPickerUniversalSimplified::CompactionFinished(
   sr->sizes.shrink_to_fit();
   print_status();
 }
-void CompactionPickerUniversalSimplified::Flushed(
+void CompactionPickerEntropyBasedUniversal::Flushed(
     const VersionStorageInfo* vstorage, const FileMetaData& file) {
   vstorage_ = vstorage;
   // raw_key_size and raw_value_size seem to be zero

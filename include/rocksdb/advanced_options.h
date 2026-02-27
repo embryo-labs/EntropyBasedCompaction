@@ -38,7 +38,7 @@ enum CompactionStyle : char {
   kCompactionStyleBenefitCost = 0x5,
   // Trigger compactions based on the count of merged flushed SSTables
   kCompactionStyleByCount = 0x6,
-  kCompactionStyleUniversalSimplified = 0x7,
+  kCompactionStyleEntropyBasedUniversal = 0x7,
   // Disable background compaction. Compaction jobs are submitted
   // via CompactFiles().
   kCompactionStyleNone = 0x8,
