@@ -111,8 +111,12 @@ Compaction* CompactionPickerEntropyBasedUniversal::PickCompaction(
     LogBuffer* log_buffer, bool require_max_output_level) {
   assert(vstorage->num_levels() == 1);
 
-  std::optional<std::pair<size_t, size_t>> best;
-  double best_reff = 0;
+  struct BestInfo {
+    size_t first;
+    size_t last;
+    double reff;
+  };
+  std::optional<BestInfo> best;
   CandidatePicker picker(mutable_cf_options, vstorage);
   for (;;) {
     auto picked = picker.Pick();
@@ -125,21 +129,39 @@ Compaction* CompactionPickerEntropyBasedUniversal::PickCompaction(
       calculator.add_sorted_run(vstorage->LevelFiles(0)[i]->fd.file_size);
     }
     double reff = calculator.calc();
-    if (reff <= best_reff) {
+    if (best.has_value() && best->reff >= reff) {
       continue;
     }
-    best_reff = reff;
-    best = picked.value();
+    best = BestInfo{
+        .first = picked->first,
+        .last = picked->second,
+        .reff = reff,
+    };
   }
   if (!best.has_value()) {
     return nullptr;
   }
-  auto [i, j] = best.value();
+  // Check preemption conditions
+  for (const auto& sr : sorted_runs_) {
+    if (sr.is_merging()) {
+      if (mutable_cf_options.preempt_by_entropy) {
+        ReffCalculator calculator;
+        for (uint64_t size : sr.sizes) {
+          calculator.add_sorted_run(size);
+        }
+        double reff = calculator.calc();
+        if (best->reff <
+            reff * mutable_cf_options.k_e + mutable_cf_options.b_e - 1e-6) {
+          return nullptr;
+        }
+      }
+    }
+  }
 
   std::vector<CompactionInputFiles> inputs(1);
   inputs[0].level = 0;
-  for (size_t k = i; k <= j; ++k) {
-    inputs[0].files.push_back(vstorage->LevelFiles(0)[k]);
+  for (size_t i = best->first; i <= best->last; ++i) {
+    inputs[0].files.push_back(vstorage->LevelFiles(0)[i]);
   }
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
@@ -152,6 +174,7 @@ Compaction* CompactionPickerEntropyBasedUniversal::PickCompaction(
   }
 
   auto first = sorted_runs_.begin();
+  auto i = best->first;
   while (i > 0) {
     assert(i >= first->sizes.size());
     i -= first->sizes.size();
