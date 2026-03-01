@@ -72,7 +72,8 @@ class CandidatePicker {
         i_ += 1;
         continue;
       }
-      uint64_t size_sum = file->fd.file_size;
+      uint64_t first_file_size = file->fd.file_size;
+      uint64_t size_sum = first_file_size;
       size_t j = i_ + 1;
       for (; j < l0_files_.size(); ++j) {
         file = l0_files_[j];
@@ -82,6 +83,12 @@ class CandidatePicker {
                     (100 + mutable_cf_options_.compaction_options_universal
                                .size_ratio) /
                     100) {
+          break;
+        }
+        if (mutable_cf_options_.exclude_small_sorted_runs &&
+            first_file_size <=
+                (double)(size_sum - first_file_size + file->fd.file_size) /
+                    (j - i_) / mutable_cf_options_.k_n) {
           break;
         }
         size_sum += file->fd.file_size;

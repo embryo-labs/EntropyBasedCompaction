@@ -80,6 +80,7 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
       compaction_options_fifo(options.compaction_options_fifo),
       compaction_policy(options.compaction_policy),
       entropy_threshold(options.entropy_threshold),
+      exclude_small_sorted_runs(options.exclude_small_sorted_runs),
       sliding_window(options.sliding_window),
       max_sequential_skip_in_iterations(
           options.max_sequential_skip_in_iterations),

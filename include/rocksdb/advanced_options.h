@@ -639,6 +639,7 @@ struct AdvancedColumnFamilyOptions {
   double k_n = 1.7;
   double k_e = 1;
   double b_e = 0;
+  bool exclude_small_sorted_runs = true;
   bool sliding_window = true;
   bool prioritize_last_sorted_run_compaction = false;
   bool last_compaction_io_sa = false;
