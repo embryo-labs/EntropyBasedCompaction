@@ -2461,7 +2461,7 @@ class ReporterAgent {
           for (uint64_t size : sorted_run_sizes) {
             reff.add_sorted_run(size);
           }
-          sum_re += reff.calc();
+          sum_re += reff.reff();
         }
         re = sum_re / compactions_info.size();
       }

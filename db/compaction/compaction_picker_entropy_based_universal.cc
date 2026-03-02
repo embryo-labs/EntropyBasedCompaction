@@ -57,15 +57,17 @@ bool CompactionPickerEntropyBasedUniversal::NeedsCompaction(
   return vstorage->CompactionScore(0) >= 1;
 }
 
+struct CandidateInfo {
+  size_t first, last;
+  double reff;
+};
 class CandidatePicker {
  public:
   CandidatePicker(const MutableCFOptions& mutable_cf_options,
-                  VersionStorageInfo* vstorage)
-      : mutable_cf_options_(mutable_cf_options),
-        l0_files_(vstorage->LevelFiles(0)),
-        i_(0) {}
+                  const std::vector<FileMetaData*>& l0_files)
+      : mutable_cf_options_(mutable_cf_options), l0_files_(l0_files), i_(0) {}
 
-  std::optional<std::pair<size_t, size_t>> Pick() {
+  std::optional<CandidateInfo> Pick() {
     while (i_ < l0_files_.size()) {
       auto file = l0_files_[i_];
       if (file->being_compacted) {
@@ -73,31 +75,36 @@ class CandidatePicker {
         continue;
       }
       uint64_t first_file_size = file->fd.file_size;
-      uint64_t size_sum = first_file_size;
+      ReffCalculator calculator;
+      calculator.add_sorted_run(first_file_size);
       size_t j = i_ + 1;
       for (; j < l0_files_.size(); ++j) {
         file = l0_files_[j];
         if (file->being_compacted ||
             file->fd.file_size >
-                size_sum *
+                calculator.size_sum() *
                     (100 + mutable_cf_options_.compaction_options_universal
                                .size_ratio) /
                     100) {
           break;
         }
         if (mutable_cf_options_.exclude_small_sorted_runs &&
-            first_file_size <=
-                (double)(size_sum - first_file_size + file->fd.file_size) /
-                    (j - i_) / mutable_cf_options_.k_n) {
+            first_file_size <= (double)(calculator.size_sum() -
+                                        first_file_size + file->fd.file_size) /
+                                   (j - i_) / mutable_cf_options_.k_n) {
           break;
         }
-        size_sum += file->fd.file_size;
+        calculator.add_sorted_run(file->fd.file_size);
       }
       j -= 1;
       auto i = i_;
       i_ += 1;
       if (j < l0_files_.size() && (j - i + 1) >= 2) {
-        return std::make_pair(i, j);
+        return CandidateInfo{
+            .first = i,
+            .last = j,
+            .reff = calculator.reff(),
+        };
       }
     }
     return std::nullopt;
@@ -118,32 +125,19 @@ Compaction* CompactionPickerEntropyBasedUniversal::PickCompaction(
     LogBuffer* log_buffer, bool require_max_output_level) {
   assert(vstorage->num_levels() == 1);
 
-  struct BestInfo {
-    size_t first;
-    size_t last;
-    double reff;
-  };
-  std::optional<BestInfo> best;
-  CandidatePicker picker(mutable_cf_options, vstorage);
+  std::optional<CandidateInfo> best;
+  const auto& l0_files = vstorage->LevelFiles(0);
+  CandidatePicker picker(mutable_cf_options, l0_files);
   for (;;) {
     auto picked = picker.Pick();
     if (!picked.has_value()) {
       break;
     }
-    ReffCalculator calculator;
-    auto [i, j] = picked.value();
-    for (; i <= j; ++i) {
-      calculator.add_sorted_run(vstorage->LevelFiles(0)[i]->fd.file_size);
-    }
-    double reff = calculator.calc();
-    if (best.has_value() && best->reff >= reff) {
+    auto candidate = picked.value();
+    if (best.has_value() && best->reff >= candidate.reff) {
       continue;
     }
-    best = BestInfo{
-        .first = picked->first,
-        .last = picked->second,
-        .reff = reff,
-    };
+    best = candidate;
   }
   if (!best.has_value()) {
     return nullptr;
@@ -156,7 +150,7 @@ Compaction* CompactionPickerEntropyBasedUniversal::PickCompaction(
         for (uint64_t size : sr.sizes) {
           calculator.add_sorted_run(size);
         }
-        double reff = calculator.calc();
+        double reff = calculator.reff();
         if (best->reff <
             reff * mutable_cf_options.k_e + mutable_cf_options.b_e - 1e-6) {
           return nullptr;

@@ -15,7 +15,8 @@ class ReffCalculator {
     sum_nlog2n_ += size * std::log2((double)size);
     sum_ += size;
   }
-  double calc() { return std::log2((double)sum_) - sum_nlog2n_ / sum_; }
+  double reff() const { return std::log2((double)sum_) - sum_nlog2n_ / sum_; }
+  uint64_t size_sum() const { return sum_; }
 
  private:
   double sum_nlog2n_;
@@ -27,7 +28,7 @@ static inline double Reff(std::vector<uint64_t> sizes) {
   for (uint64_t size : sizes) {
     calculator.add_sorted_run(size);
   }
-  return calculator.calc();
+  return calculator.reff();
 }
 
 }  // namespace ROCKSDB_NAMESPACE

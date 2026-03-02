@@ -43,7 +43,7 @@ double Reff(const std::vector<CompactionInputFiles>& input_files) {
       calculator.add_sorted_run(size);
     }
   }
-  return calculator.calc();
+  return calculator.reff();
 }
 
 bool FindIntraL0Compaction(const std::vector<FileMetaData*>& level_files,

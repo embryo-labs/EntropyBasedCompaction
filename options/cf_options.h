@@ -151,7 +151,7 @@ struct MutableCFOptions {
         k_n(options.k_n),
         k_e(options.k_e),
         b_e(options.b_e),
-        exclude_small_sorted_runs(true),
+        exclude_small_sorted_runs(options.exclude_small_sorted_runs),
         sliding_window(options.sliding_window),
         prioritize_last_sorted_run_compaction(
             options.prioritize_last_sorted_run_compaction),
