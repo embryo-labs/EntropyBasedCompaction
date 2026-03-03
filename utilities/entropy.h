@@ -23,7 +23,7 @@ class ReffCalculator {
   uint64_t sum_;
 };
 
-static inline double Reff(std::vector<uint64_t> sizes) {
+inline double Reff(std::vector<uint64_t> sizes) {
   ReffCalculator calculator;
   for (uint64_t size : sizes) {
     calculator.add_sorted_run(size);

@@ -148,6 +148,7 @@ struct MutableCFOptions {
         compaction_policy(options.compaction_policy),
         autotune_size_ratio(options.autotune_size_ratio),
         entropy_threshold(options.entropy_threshold),
+        pick_candidates_with_universal(options.pick_candidates_with_universal),
         pick_best_reff(options.pick_best_reff),
         k_n(options.k_n),
         k_e(options.k_e),
@@ -234,6 +235,7 @@ struct MutableCFOptions {
         periodic_compaction_seconds(0),
         compaction_options_fifo(),
         entropy_threshold(0),
+        pick_candidates_with_universal(false),
         pick_best_reff(true),
         sliding_window(true),
         preclude_last_level_data_seconds(0),
@@ -345,6 +347,7 @@ struct MutableCFOptions {
   bool autotune_size_ratio;
 
   double entropy_threshold;
+  bool pick_candidates_with_universal;
   bool pick_best_reff;
   double k_n;
   double k_e;

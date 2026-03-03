@@ -550,6 +550,8 @@ DEFINE_string(json_log_file, "", "");
 DEFINE_string(compaction_policy, "", "steady/lazy-leveling/dynamic-tiering");
 DEFINE_bool(autotune_size_ratio, false, "");
 DEFINE_double(entropy_threshold, 0.78, "");
+DEFINE_bool(pick_candidates_with_universal,
+            ROCKSDB_NAMESPACE::Options().pick_candidates_with_universal, "");
 DEFINE_bool(pick_best_reff, ROCKSDB_NAMESPACE::Options().pick_best_reff, "");
 DEFINE_double(k_n, 1.7, "");
 DEFINE_double(k_e, 1, "");
@@ -5345,6 +5347,8 @@ class Benchmark {
     };
     options.autotune_size_ratio = FLAGS_autotune_size_ratio;
     options.entropy_threshold = FLAGS_entropy_threshold;
+    options.pick_candidates_with_universal =
+        FLAGS_pick_candidates_with_universal;
     options.pick_best_reff = FLAGS_pick_best_reff;
     options.k_n = FLAGS_k_n;
     options.k_e = FLAGS_k_e;

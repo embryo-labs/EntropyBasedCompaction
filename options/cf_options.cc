@@ -515,6 +515,10 @@ static std::unordered_map<std::string, OptionTypeInfo>
          {offsetof(struct MutableCFOptions, entropy_threshold),
           OptionType::kDouble, OptionVerificationType::kNormal,
           OptionTypeFlags::kMutable}},
+        {"pick_candidates_with_universal",
+         {offsetof(struct MutableCFOptions, pick_candidates_with_universal),
+          OptionType::kBoolean, OptionVerificationType::kNormal,
+          OptionTypeFlags::kMutable}},
         {"pick_best_reff",
          {offsetof(struct MutableCFOptions, pick_best_reff),
           OptionType::kBoolean, OptionVerificationType::kNormal,
@@ -1230,6 +1234,8 @@ void MutableCFOptions::Dump(Logger* log) const {
   ROCKS_LOG_INFO(log, "max_bytes_for_level_multiplier_additional: %s",
                  result.c_str());
   ROCKS_LOG_INFO(log, "entropy_threshold: %f", entropy_threshold);
+  ROCKS_LOG_INFO(log, "pick_candidates_with_universal: %d",
+                 pick_candidates_with_universal);
   ROCKS_LOG_INFO(log, "pick_best_reff: %d", pick_best_reff);
   ROCKS_LOG_INFO(log, "exclude_small_sorted_runs: %d",
                  exclude_small_sorted_runs);

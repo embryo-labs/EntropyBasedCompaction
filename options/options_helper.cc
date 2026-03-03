@@ -258,6 +258,8 @@ void UpdateColumnFamilyOptions(const MutableCFOptions& moptions,
   cf_opts->max_bytes_for_level_multiplier =
       moptions.max_bytes_for_level_multiplier;
   cf_opts->entropy_threshold = moptions.entropy_threshold;
+  cf_opts->pick_candidates_with_universal =
+      moptions.pick_candidates_with_universal;
   cf_opts->pick_best_reff = moptions.pick_best_reff;
   cf_opts->exclude_small_sorted_runs = moptions.exclude_small_sorted_runs;
   cf_opts->sliding_window = moptions.sliding_window;
@@ -366,8 +368,7 @@ std::map<CompactionStyle, std::string>
         {kCompactionStyleBySize, "kCompactionStyleBySize"},
         {kCompactionStyleBenefitCost, "kCompactionStyleBenefitCost"},
         {kCompactionStyleByCount, "kCompactionStyleByCount"},
-        {kCompactionStyleEntropyBasedUniversal,
-         "kCompactionStyleEntropyBasedUniversal"},
+        {kCompactionStyleEntropyBased, "kCompactionStyleEntropyBased"},
         {kCompactionStyleNone, "kCompactionStyleNone"},
 };
 
@@ -968,8 +969,7 @@ std::unordered_map<std::string, CompactionStyle>
         {"kCompactionStyleBySize", kCompactionStyleBySize},
         {"kCompactionStyleBenefitCost", kCompactionStyleBenefitCost},
         {"kCompactionStyleByCount", kCompactionStyleByCount},
-        {"kCompactionStyleEntropyBasedUniversal",
-         kCompactionStyleEntropyBasedUniversal},
+        {"kCompactionStyleEntropyBased", kCompactionStyleEntropyBased},
         {"kCompactionStyleNone", kCompactionStyleNone},
 };
 

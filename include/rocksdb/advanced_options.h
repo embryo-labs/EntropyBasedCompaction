@@ -26,6 +26,8 @@ class TablePropertiesCollectorFactory;
 class TableFactory;
 struct Options;
 
+constexpr double kDefaultEntropyThreshold = 0.78;
+
 enum CompactionStyle : char {
   // level based compaction style
   kCompactionStyleLevel = 0x0,
@@ -38,7 +40,7 @@ enum CompactionStyle : char {
   kCompactionStyleBenefitCost = 0x5,
   // Trigger compactions based on the count of merged flushed SSTables
   kCompactionStyleByCount = 0x6,
-  kCompactionStyleEntropyBasedUniversal = 0x7,
+  kCompactionStyleEntropyBased = 0x7,
   // Disable background compaction. Compaction jobs are submitted
   // via CompactFiles().
   kCompactionStyleNone = 0x8,
@@ -636,6 +638,7 @@ struct AdvancedColumnFamilyOptions {
   bool autotune_size_ratio = false;
 
   double entropy_threshold = 0;
+  bool pick_candidates_with_universal = false;
   bool pick_best_reff = true;
   double k_n = 1.7;
   double k_e = 1;

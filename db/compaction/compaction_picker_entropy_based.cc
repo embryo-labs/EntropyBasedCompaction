@@ -1,10 +1,10 @@
-#include "db/compaction/compaction_picker_entropy_based_universal.h"
+#include "db/compaction/compaction_picker_entropy_based.h"
 
 #include "utilities/entropy.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-void CompactionPickerEntropyBasedUniversal::print_status() const {
+void CompactionPickerEntropyBased::print_status() const {
   {
     size_t num_sorted_runs = 0;
     for (const auto& sr : sorted_runs_) {
@@ -39,7 +39,7 @@ void CompactionPickerEntropyBasedUniversal::print_status() const {
   }
 }
 
-bool CompactionPickerEntropyBasedUniversal::CalcNeedsCompaction(
+bool CompactionPickerEntropyBased::CalcNeedsCompaction(
     const ColumnFamilyData* cfd, const MutableCFOptions& mutable_cf_options,
     const VersionStorageInfo* vstorage) const {
   assert(vstorage->num_levels() == 1);
@@ -52,7 +52,7 @@ bool CompactionPickerEntropyBasedUniversal::CalcNeedsCompaction(
   return (int)num_sr_not_compacted >=
          mutable_cf_options.level0_file_num_compaction_trigger;
 }
-bool CompactionPickerEntropyBasedUniversal::NeedsCompaction(
+bool CompactionPickerEntropyBased::NeedsCompaction(
     const ColumnFamilyData* cfd, const VersionStorageInfo* vstorage) const {
   return vstorage->CompactionScore(0) >= 1;
 }
@@ -61,13 +61,81 @@ struct CandidateInfo {
   size_t first, last;
   double reff;
 };
+
 class CandidatePicker {
  public:
-  CandidatePicker(const MutableCFOptions& mutable_cf_options,
-                  const std::vector<FileMetaData*>& l0_files)
+  virtual ~CandidatePicker() = default;
+  virtual std::optional<CandidateInfo> Pick() = 0;
+};
+
+class CandidatePickerEnumerate : public CandidatePicker {
+ public:
+  CandidatePickerEnumerate(const MutableCFOptions& mutable_cf_options,
+                           const std::vector<FileMetaData*>& l0_files)
+      : mutable_cf_options_(mutable_cf_options),
+        l0_files_(l0_files),
+        i_(0),
+        j_(1) {
+    if (l0_files_.size() > 0) {
+      calculator_.add_sorted_run(l0_files_[0]->fd.file_size);
+    }
+  }
+  std::optional<CandidateInfo> Pick() override {
+    if (i_ == l0_files_.size()) {
+      return std::nullopt;
+    }
+    for (;;) {
+      auto first_file = l0_files_[i_];
+      if (!first_file->being_compacted) {
+        uint64_t first_file_size = first_file->fd.file_size;
+        for (; j_ < l0_files_.size(); j_ += 1) {
+          auto file = l0_files_[j_];
+          if (file->being_compacted) {
+            break;
+          }
+          calculator_.add_sorted_run(file->fd.file_size);
+          if (mutable_cf_options_.exclude_small_sorted_runs &&
+              first_file_size <=
+                  (double)(calculator_.size_sum() - first_file_size) /
+                      (j_ - i_) / mutable_cf_options_.k_n) {
+            continue;
+          }
+          assert(j_ - i_ + 1 >= 2);
+          auto candidate = CandidateInfo{
+              .first = i_,
+              .last = j_,
+              .reff = calculator_.reff(),
+          };
+          j_ += 1;
+          return candidate;
+        }
+      }
+      i_ += 1;
+      if (i_ == l0_files_.size()) {
+        break;
+      }
+      j_ = i_ + 1;
+      calculator_ = ReffCalculator();
+      calculator_.add_sorted_run(l0_files_[i_]->fd.file_size);
+    }
+    return std::nullopt;
+  }
+
+ private:
+  const MutableCFOptions& mutable_cf_options_;
+  const std::vector<FileMetaData*>& l0_files_;
+  size_t i_;
+  size_t j_;
+  ReffCalculator calculator_;
+};
+
+class CandidatePickerUniversal : public CandidatePicker {
+ public:
+  CandidatePickerUniversal(const MutableCFOptions& mutable_cf_options,
+                           const std::vector<FileMetaData*>& l0_files)
       : mutable_cf_options_(mutable_cf_options), l0_files_(l0_files), i_(0) {}
 
-  std::optional<CandidateInfo> Pick() {
+  std::optional<CandidateInfo> Pick() override {
     while (i_ < l0_files_.size()) {
       auto file = l0_files_[i_];
       if (file->being_compacted) {
@@ -116,7 +184,7 @@ class CandidatePicker {
   size_t i_;
 };
 
-Compaction* CompactionPickerEntropyBasedUniversal::PickCompaction(
+Compaction* CompactionPickerEntropyBased::PickCompaction(
     ColumnFamilyData* cfd, const std::string& cf_name,
     const MutableCFOptions& mutable_cf_options,
     const MutableDBOptions& mutable_db_options,
@@ -127,9 +195,16 @@ Compaction* CompactionPickerEntropyBasedUniversal::PickCompaction(
 
   std::optional<CandidateInfo> best;
   const auto& l0_files = vstorage->LevelFiles(0);
-  CandidatePicker picker(mutable_cf_options, l0_files);
+  std::unique_ptr<CandidatePicker> picker;
+  if (mutable_cf_options.pick_candidates_with_universal) {
+    picker = std::make_unique<CandidatePickerUniversal>(mutable_cf_options,
+                                                        l0_files);
+  } else {
+    picker = std::make_unique<CandidatePickerEnumerate>(mutable_cf_options,
+                                                        l0_files);
+  }
   for (;;) {
-    auto picked = picker.Pick();
+    auto picked = picker->Pick();
     if (!picked.has_value()) {
       break;
     }
@@ -145,6 +220,9 @@ Compaction* CompactionPickerEntropyBasedUniversal::PickCompaction(
     best = candidate;
   }
   if (!best.has_value()) {
+    return nullptr;
+  }
+  if (best->reff < mutable_cf_options.entropy_threshold - 1e-6) {
     return nullptr;
   }
   // Check preemption conditions
@@ -220,7 +298,7 @@ Compaction* CompactionPickerEntropyBasedUniversal::PickCompaction(
       Env::IOPriority::IO_LOW);
 }
 
-void CompactionPickerEntropyBasedUniversal::CompactionFinished(
+void CompactionPickerEntropyBased::CompactionFinished(
     const VersionStorageInfo* vstorage, void* info, uint64_t size) {
   vstorage_ = vstorage;
   auto sr = static_cast<SortedRunInfo*>(info);
@@ -229,8 +307,8 @@ void CompactionPickerEntropyBasedUniversal::CompactionFinished(
   sr->sizes.shrink_to_fit();
   print_status();
 }
-void CompactionPickerEntropyBasedUniversal::Flushed(
-    const VersionStorageInfo* vstorage, const FileMetaData& file) {
+void CompactionPickerEntropyBased::Flushed(const VersionStorageInfo* vstorage,
+                                           const FileMetaData& file) {
   vstorage_ = vstorage;
   // raw_key_size and raw_value_size seem to be zero
   sorted_runs_.emplace_front(std::vector<uint64_t>({file.fd.GetFileSize()}));

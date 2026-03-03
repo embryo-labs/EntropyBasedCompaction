@@ -679,7 +679,7 @@ set(SOURCES
         db/compaction/compaction_picker_benefit_cost.cc
         db/compaction/compaction_picker_by_count.cc
         db/compaction/compaction_picker_by_size.cc
-        db/compaction/compaction_picker_entropy_based_universal.cc
+        db/compaction/compaction_picker_entropy_based.cc
         db/compaction/compaction_picker_fifo.cc
         db/compaction/compaction_picker_level.cc
         db/compaction/compaction_picker_tiering.cc
