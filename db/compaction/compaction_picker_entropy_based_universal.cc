@@ -134,6 +134,11 @@ Compaction* CompactionPickerEntropyBasedUniversal::PickCompaction(
       break;
     }
     auto candidate = picked.value();
+    if (!mutable_cf_options.pick_best_reff) {
+      assert(!best.has_value());
+      best = candidate;
+      break;
+    }
     if (best.has_value() && best->reff >= candidate.reff) {
       continue;
     }

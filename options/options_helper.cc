@@ -258,6 +258,7 @@ void UpdateColumnFamilyOptions(const MutableCFOptions& moptions,
   cf_opts->max_bytes_for_level_multiplier =
       moptions.max_bytes_for_level_multiplier;
   cf_opts->entropy_threshold = moptions.entropy_threshold;
+  cf_opts->pick_best_reff = moptions.pick_best_reff;
   cf_opts->exclude_small_sorted_runs = moptions.exclude_small_sorted_runs;
   cf_opts->sliding_window = moptions.sliding_window;
   cf_opts->ttl = moptions.ttl;

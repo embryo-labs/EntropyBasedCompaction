@@ -636,6 +636,7 @@ struct AdvancedColumnFamilyOptions {
   bool autotune_size_ratio = false;
 
   double entropy_threshold = 0;
+  bool pick_best_reff = true;
   double k_n = 1.7;
   double k_e = 1;
   double b_e = 0;
