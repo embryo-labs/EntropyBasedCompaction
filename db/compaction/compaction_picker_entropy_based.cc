@@ -276,9 +276,7 @@ Compaction* CompactionPickerEntropyBased::PickCompaction(
   for (const auto file : inputs[0].files) {
     it->sizes.push_back(file->fd.file_size);
   }
-  print_status();
-
-  return new Compaction(
+  auto c = new Compaction(
       vstorage, ioptions_, mutable_cf_options, mutable_db_options,
       std::move(inputs), 0,
       MaxFileSizeForLevel(mutable_cf_options, 0, kCompactionStyleUniversal),
@@ -296,6 +294,9 @@ Compaction* CompactionPickerEntropyBased::PickCompaction(
       /* l0_files_might_overlap */ true,
       BlobGarbageCollectionPolicy::kUseDefault, -1, &*it,
       Env::IOPriority::IO_LOW);
+  print_status();
+  RegisterCompaction(c);
+  return c;
 }
 
 void CompactionPickerEntropyBased::CompactionFinished(
