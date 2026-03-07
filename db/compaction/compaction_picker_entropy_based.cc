@@ -95,7 +95,8 @@ class CandidatePickerEnumerate : public CandidatePicker {
             break;
           }
           calculator_.add_sorted_run(file->fd.file_size);
-          if (mutable_cf_options_.exclude_small_sorted_runs &&
+          if (j_ - i_ + 1 > 2 &&
+              mutable_cf_options_.exclude_small_sorted_runs &&
               first_file_size <=
                   (double)(calculator_.size_sum() - first_file_size) /
                       (j_ - i_) / mutable_cf_options_.k_n) {
@@ -158,7 +159,7 @@ class CandidatePickerUniversal : public CandidatePicker {
                     100) {
           break;
         }
-        if (mutable_cf_options_.exclude_small_sorted_runs &&
+        if (j - i_ + 1 > 2 && mutable_cf_options_.exclude_small_sorted_runs &&
             first_file_size <= (double)(calculator.size_sum() -
                                         first_file_size + file->fd.file_size) /
                                    (j - i_) / mutable_cf_options_.k_n) {
