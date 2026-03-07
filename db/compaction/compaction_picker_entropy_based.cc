@@ -60,6 +60,7 @@ bool CompactionPickerEntropyBased::NeedsCompaction(
 struct CandidateInfo {
   size_t first, last;
   double reff;
+  uint64_t size_sum;
 };
 
 class CandidatePicker {
@@ -105,6 +106,7 @@ class CandidatePickerEnumerate : public CandidatePicker {
               .first = i_,
               .last = j_,
               .reff = calculator_.reff(),
+              .size_sum = calculator_.size_sum(),
           };
           j_ += 1;
           return candidate;
@@ -172,6 +174,7 @@ class CandidatePickerUniversal : public CandidatePicker {
             .first = i,
             .last = j,
             .reff = calculator.reff(),
+            .size_sum = calculator.size_sum(),
         };
       }
     }
@@ -228,14 +231,21 @@ Compaction* CompactionPickerEntropyBased::PickCompaction(
   // Check preemption conditions
   for (const auto& sr : sorted_runs_) {
     if (sr.is_merging()) {
+      ReffCalculator calculator;
+      for (uint64_t size : sr.sizes) {
+        calculator.add_sorted_run(size);
+      }
       if (mutable_cf_options.preempt_by_entropy) {
-        ReffCalculator calculator;
-        for (uint64_t size : sr.sizes) {
-          calculator.add_sorted_run(size);
-        }
         double reff = calculator.reff();
         if (best->reff <
             reff * mutable_cf_options.k_e + mutable_cf_options.b_e - 1e-6) {
+          return nullptr;
+        }
+      }
+      if (mutable_cf_options.preempt_by_num) {
+        double r_num = (double)(sr.sizes.size() - 1) / calculator.size_sum();
+        if ((double)(best->last - best->first) / best->size_sum <
+            r_num * mutable_cf_options.k_n) {
           return nullptr;
         }
       }
