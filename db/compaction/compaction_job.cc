@@ -2205,7 +2205,6 @@ Status CompactionJob::InstallCompactionResults(bool* compaction_released) {
     *compaction_released = true;
 
     auto cfd = compaction->column_family_data();
-    auto compaction_style = compaction->immutable_options().compaction_style;
     if (compaction->output_level() == 0) {
       assert(edit->GetNewFiles().size() == 1);
       const auto& file = edit->GetNewFiles()[0].second;
