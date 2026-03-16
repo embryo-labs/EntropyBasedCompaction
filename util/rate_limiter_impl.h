@@ -140,6 +140,7 @@ class GenericRateLimiter : public RateLimiter {
   int64_t total_bytes_through_[Env::IO_TOTAL];
   int64_t available_bytes_[Env::IO_TOTAL];
   int64_t next_refill_us_;
+  int64_t refill_bytes_remained_;
 
   int32_t fairness_;
   Random rnd_;

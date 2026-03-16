@@ -64,6 +64,7 @@ GenericRateLimiter::GenericRateLimiter(
       exit_cv_(&request_mutex_),
       requests_to_wait_(0),
       next_refill_us_(NowMicrosMonotonicLocked()),
+      refill_bytes_remained_(0),
       fairness_(fairness > 100 ? 100 : fairness),
       rnd_((uint32_t)time(nullptr)),
       wait_until_refill_pending_(false),
@@ -248,13 +249,15 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
 void GenericRateLimiter::RefillBytesAndGrantRequestsLocked() {
   TEST_SYNC_POINT_CALLBACK(
       "GenericRateLimiter::RefillBytesAndGrantRequestsLocked", &request_mutex_);
-  next_refill_us_ = NowMicrosMonotonicLocked() + refill_period_us_;
+  next_refill_us_ = std::max(next_refill_us_ + refill_period_us_,
+                             (int64_t)NowMicrosMonotonicLocked() +
+                                 refill_period_us_ - refill_period_us_ / 10);
   // Carry over the left over quota from the last period
   auto refill_bytes_per_period =
       refill_bytes_per_period_.load(std::memory_order_relaxed);
-  auto remain = refill_bytes_per_period;
+  refill_bytes_remained_ += refill_bytes_per_period;
 
-  for (int i = Env::IO_TOTAL - 1; i >= 0 && remain > 0; --i) {
+  for (int i = Env::IO_TOTAL - 1; i >= 0 && refill_bytes_remained_ > 0; --i) {
     Env::IOPriority current_pri = static_cast<Env::IOPriority>(i);
     int64_t refill_target;
     if (current_pri == Env::IOPriority::IO_SA &&
@@ -265,17 +268,22 @@ void GenericRateLimiter::RefillBytesAndGrantRequestsLocked() {
       refill_target = refill_bytes_per_period;
     }
     if (available_bytes_[current_pri] < refill_target) {
-      auto refill =
-          std::min(remain, refill_target - available_bytes_[current_pri]);
-      remain -= refill;
+      auto refill = std::min(refill_bytes_remained_,
+                             refill_target - available_bytes_[current_pri]);
+      refill_bytes_remained_ -= refill;
       available_bytes_[current_pri] += refill;
     }
   }
-  if (remain > 0 && available_bytes_[Env::IO_SA] < refill_bytes_per_period) {
-    auto refill = std::min(
-        remain, refill_bytes_per_period - available_bytes_[Env::IO_SA]);
+  if (refill_bytes_remained_ > 0 &&
+      available_bytes_[Env::IO_SA] < refill_bytes_per_period) {
+    auto refill =
+        std::min(refill_bytes_remained_,
+                 refill_bytes_per_period - available_bytes_[Env::IO_SA]);
+    refill_bytes_remained_ -= refill;
     available_bytes_[Env::IO_SA] += refill;
   }
+  refill_bytes_remained_ =
+      std::min(refill_bytes_remained_, refill_bytes_per_period);
   for (int i = Env::IO_TOTAL - 1; i >= 0; --i) {
     Env::IOPriority current_pri = static_cast<Env::IOPriority>(i);
     if (available_bytes_[current_pri] == 0) {
