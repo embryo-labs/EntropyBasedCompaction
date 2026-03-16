@@ -137,10 +137,10 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
                            &rate_bytes_per_sec_);
   MutexLock g(&request_mutex_);
 
+  auto now = NowMicrosMonotonicLocked();
   if (auto_tuned_) {
     static const int kRefillsPerTune = 100;
-    std::chrono::microseconds now(NowMicrosMonotonicLocked());
-    if (now - tuned_time_ >=
+    if (std::chrono::microseconds(now) - tuned_time_ >=
         kRefillsPerTune * std::chrono::microseconds(refill_period_us_)) {
       Status s = TuneLocked();
       s.PermitUncheckedError();  //**TODO: What to do on error?
@@ -152,6 +152,11 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
     // Therefore any new incoming request will exit from here
     // and not get satiesfied.
     return;
+  }
+
+  int64_t time_until_refill_us = next_refill_us_ - now;
+  if (time_until_refill_us <= 0) {
+    RefillBytesAndGrantRequestsLocked();
   }
 
   ++total_requests_[pri];
@@ -178,7 +183,6 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
   // (1) Waiting for the next refill time.
   // (2) Refilling the bytes and granting requests.
   do {
-    int64_t time_until_refill_us = next_refill_us_ - NowMicrosMonotonicLocked();
     if (time_until_refill_us > 0) {
       if (wait_until_refill_pending_) {
         // Somebody is performing (1). Trust we'll be woken up when our request
@@ -229,6 +233,7 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
       assert(num_found == 1);
     }
 #endif  // NDEBUG
+    time_until_refill_us = next_refill_us_ - NowMicrosMonotonicLocked();
   } while (!stop_ && r.request_bytes > 0);
 
   if (stop_) {
