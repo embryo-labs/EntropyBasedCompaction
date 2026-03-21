@@ -2305,6 +2305,8 @@ class ReporterAgent {
     }
   }
 
+  std::filesystem::path output_dir() const { return output_dir_; }
+
   // thread safe
   void ReportFinishedOps(int64_t num_ops, enum OperationType op_type,
                          uint64_t micros) {
@@ -3232,6 +3234,8 @@ class Benchmark {
   bool use_blob_db_;    // Stacked BlobDB
   bool read_operands_;  // read via GetMergeOperands()
   std::vector<std::string> keys_;
+
+  std::unique_ptr<ReporterAgent> reporter_agent_;
 
   class ErrorHandlerListener : public EventListener {
    public:
@@ -4560,10 +4564,12 @@ class Benchmark {
       }
     }
 
-    std::unique_ptr<ReporterAgent> reporter_agent;
     if (FLAGS_report_interval_seconds > 0) {
-      reporter_agent.reset(new ReporterAgent(db_.db, FLAGS_env, output_dir_,
-                                             FLAGS_report_interval_seconds));
+      if (reporter_agent_ == nullptr ||
+          reporter_agent_->output_dir() != output_dir_) {
+        reporter_agent_.reset(new ReporterAgent(db_.db, FLAGS_env, output_dir_,
+                                                FLAGS_report_interval_seconds));
+      }
     }
 
     ThreadArg* arg = new ThreadArg[n];
@@ -4591,7 +4597,7 @@ class Benchmark {
       arg[i].shared = &shared;
       total_thread_count_++;
       arg[i].thread = new ThreadState(i, total_thread_count_);
-      arg[i].thread->stats.SetReporterAgent(reporter_agent.get());
+      arg[i].thread->stats.SetReporterAgent(reporter_agent_.get());
       arg[i].thread->shared = &shared;
       FLAGS_env->StartThread(ThreadBody, &arg[i]);
     }
