@@ -550,6 +550,7 @@ DEFINE_string(json_log_file, "", "");
 DEFINE_string(compaction_policy, "", "steady/lazy-leveling/dynamic-tiering");
 DEFINE_bool(autotune_size_ratio, false, "");
 DEFINE_double(entropy_threshold, 0.78, "");
+DEFINE_bool(autotune_entropy_threshold, false, "");
 DEFINE_bool(pick_candidates_with_universal,
             ROCKSDB_NAMESPACE::Options().pick_candidates_with_universal, "");
 DEFINE_bool(pick_best_reff, ROCKSDB_NAMESPACE::Options().pick_best_reff, "");
@@ -3989,6 +3990,31 @@ class Benchmark {
                             .count()
                      << ", \"event\": \"new-benchmark\", \"name\": \"" << name
                      << "\"}" << std::endl;
+      }
+      if (FLAGS_autotune_entropy_threshold && benchmark_write_rate_limit_ > 0) {
+        uint64_t key_space_data_size =
+            FLAGS_num * (FLAGS_key_size + FLAGS_value_size);
+        double expected_write_amp = (double)(FLAGS_rate_limiter_bytes_per_sec -
+                                             benchmark_write_rate_limit_) /
+                                    benchmark_write_rate_limit_;
+        double entropy_threshold =
+            std::log2(std::numbers::e * key_space_data_size /
+                      FLAGS_write_buffer_size) /
+            expected_write_amp;
+        db_.db
+            ->SetOptions(
+                {{"entropy_threshold", std::to_string(entropy_threshold)}})
+            .AssertOK();
+        if (open_options_.json_log) {
+          auto& json_log = *open_options_.json_log;
+          json_log.out
+              << "{\"timestamp(ns)\": "
+              << std::chrono::duration_cast<std::chrono::nanoseconds>(
+                     std::chrono::steady_clock::now().time_since_epoch())
+                     .count()
+              << ", \"event\": \"adjust-entropy-threshold\", \"value\": "
+              << entropy_threshold << "}" << std::endl;
+        }
       }
       first_benchmark = false;
       // Sanitize parameters
