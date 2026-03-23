@@ -188,13 +188,10 @@ class CandidatePickerUniversal : public CandidatePicker {
   size_t i_;
 };
 
-Compaction* CompactionPickerEntropyBased::PickCompaction(
-    ColumnFamilyData* cfd, const std::string& cf_name,
+std::optional<std::pair<size_t, size_t>>
+CompactionPickerEntropyBased::PickCompaction(
     const MutableCFOptions& mutable_cf_options,
-    const MutableDBOptions& mutable_db_options,
-    const std::vector<SequenceNumber>& existing_snapshots,
-    const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
-    LogBuffer* log_buffer, bool require_max_output_level) {
+    VersionStorageInfo* vstorage) const {
   assert(vstorage->num_levels() == 1);
 
   std::optional<CandidateInfo> best;
@@ -224,10 +221,10 @@ Compaction* CompactionPickerEntropyBased::PickCompaction(
     best = candidate;
   }
   if (!best.has_value()) {
-    return nullptr;
+    return std::nullopt;
   }
   if (best->reff < mutable_cf_options.entropy_threshold - 1e-6) {
-    return nullptr;
+    return std::nullopt;
   }
   // Check preemption conditions
   for (const auto& sr : sorted_runs_) {
@@ -240,49 +237,107 @@ Compaction* CompactionPickerEntropyBased::PickCompaction(
         double reff = calculator.reff();
         if (best->reff <
             reff * mutable_cf_options.k_e + mutable_cf_options.b_e - 1e-6) {
-          return nullptr;
+          return std::nullopt;
         }
       }
       if (mutable_cf_options.preempt_by_num) {
         double r_num = (double)(sr.sizes.size() - 1) / calculator.size_sum();
         if ((double)(best->last - best->first) / best->size_sum <
             r_num * mutable_cf_options.k_n) {
-          return nullptr;
+          return std::nullopt;
         }
       }
     }
   }
+  return std::make_pair(best->first, best->last);
+}
+
+bool CompactionPickerEntropyBased::SetIOPriorityOfLastCompaction(
+    std::list<CompactionPickerEntropyBased::SortedRunInfo>::const_iterator
+        last_sorted_run_picked_for_compaction) {
+  auto it = sorted_runs_.end();
+  if (it == sorted_runs_.begin()) {
+    return false;
+  }
+  --it;
+  while (it != last_sorted_run_picked_for_compaction) {
+    if (it->is_merging()) {
+      if (it->c->io_priority().load(std::memory_order_relaxed) != Env::IO_SA) {
+        it->c->io_priority().store(Env::IO_SA, std::memory_order_relaxed);
+        it->c->release_limiter_handle();
+      }
+      return true;
+    }
+    if (it == sorted_runs_.begin()) {
+      break;
+    }
+    --it;
+  }
+  return false;
+}
+
+Compaction* CompactionPickerEntropyBased::PickCompaction(
+    ColumnFamilyData* cfd, const std::string& cf_name,
+    const MutableCFOptions& mutable_cf_options,
+    const MutableDBOptions& mutable_db_options,
+    const std::vector<SequenceNumber>& existing_snapshots,
+    const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
+    LogBuffer* log_buffer, bool require_max_output_level) {
+  auto best = PickCompaction(mutable_cf_options, vstorage);
+  if (!best.has_value()) {
+    if (mutable_cf_options.last_compaction_io_sa) {
+      SetIOPriorityOfLastCompaction(sorted_runs_.end());
+    }
+    return nullptr;
+  }
+  const auto [first, last] = best.value();
 
   std::vector<CompactionInputFiles> inputs(1);
   inputs[0].level = 0;
-  for (size_t i = best->first; i <= best->last; ++i) {
+  for (size_t i = first; i <= last; ++i) {
     inputs[0].files.push_back(vstorage->LevelFiles(0)[i]);
   }
 
+  auto it_first = sorted_runs_.begin();
+  auto i = best->first;
+  while (i > 0) {
+    assert(i >= it_first->sizes.size());
+    i -= it_first->sizes.size();
+    ++it_first;
+  }
+  auto it_last = it_first;
+  for (const auto file : inputs[0].files) {
+    assert(!it_last->is_merging());
+    assert(it_last->sizes[0] == file->fd.file_size);
+    ++it_last;
+  }
+  --it_last;
+
+  Env::IOPriority io_pri;
+  if (mutable_cf_options.last_compaction_io_sa) {
+    if (SetIOPriorityOfLastCompaction(it_last)) {
+      io_pri = Env::IO_LOW;
+    } else {
+      // The picked compaction will be the last compaction, which always runs.
+      // Its write I/O is controlled by max_bytes_per_second_io_sa
+      io_pri = Env::IO_SA;
+    }
+  } else {
+    io_pri = Env::IO_LOW;
+  }
+
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
-  if (ioptions_.background_job_limiter) {
-    limiter_handle =
-        ioptions_.background_job_limiter->RegisterCompaction(Reff(inputs));
-    if (!limiter_handle.has_value()) {
-      return nullptr;
+  if (io_pri == Env::IO_LOW) {
+    if (ioptions_.background_job_limiter) {
+      limiter_handle =
+          ioptions_.background_job_limiter->RegisterCompaction(Reff(inputs));
+      if (!limiter_handle.has_value()) {
+        return nullptr;
+      }
     }
   }
 
-  auto first = sorted_runs_.begin();
-  auto i = best->first;
-  while (i > 0) {
-    assert(i >= first->sizes.size());
-    i -= first->sizes.size();
-    ++first;
-  }
-  auto last = first;
-  for (const auto file : inputs[0].files) {
-    assert(!last->is_merging());
-    assert(last->sizes[0] == file->fd.file_size);
-    ++last;
-  }
-  --last;
-  auto it = sorted_runs_.erase(first, last);
+  auto it = sorted_runs_.erase(it_first, it_last);
   it->sizes.clear();
   for (const auto file : inputs[0].files) {
     it->sizes.push_back(file->fd.file_size);
@@ -304,7 +359,8 @@ Compaction* CompactionPickerEntropyBased::PickCompaction(
       CompactionReason::kPolicyByCount, /* trim_ts */ "", /*score*/ 2333,
       /* l0_files_might_overlap */ true,
       BlobGarbageCollectionPolicy::kUseDefault, -1, &*it,
-      Env::IOPriority::IO_LOW);
+      io_pri);
+  it->c = c;
   print_status();
   RegisterCompaction(c);
   return c;
@@ -312,16 +368,15 @@ Compaction* CompactionPickerEntropyBased::PickCompaction(
 
 void CompactionPickerEntropyBased::CompactionFinished(
     const VersionStorageInfo* vstorage, void* info, uint64_t size) {
-  vstorage_ = vstorage;
   auto sr = static_cast<SortedRunInfo*>(info);
   sr->sizes.clear();
   sr->sizes.push_back(size);
   sr->sizes.shrink_to_fit();
+  sr->c = nullptr;
   print_status();
 }
 void CompactionPickerEntropyBased::Flushed(const VersionStorageInfo* vstorage,
                                            const FileMetaData& file) {
-  vstorage_ = vstorage;
   // raw_key_size and raw_value_size seem to be zero
   sorted_runs_.emplace_front(std::vector<uint64_t>({file.fd.GetFileSize()}));
   print_status();

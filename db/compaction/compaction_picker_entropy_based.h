@@ -31,12 +31,21 @@ class CompactionPickerEntropyBased : public CompactionPicker {
  private:
   struct SortedRunInfo {
     std::vector<uint64_t> sizes;
-    SortedRunInfo(std::vector<uint64_t>&& _sizes) : sizes(std::move(_sizes)) {}
+    Compaction* c;
+    SortedRunInfo(std::vector<uint64_t>&& _sizes)
+        : sizes(std::move(_sizes)), c(nullptr) {}
     bool is_merging() const { return sizes.size() > 1; }
   };
 
   void print_status() const;
+
+  std::optional<std::pair<size_t, size_t>> PickCompaction(
+      const MutableCFOptions& mutable_cf_options,
+      VersionStorageInfo* vstorage) const;
+
+  bool SetIOPriorityOfLastCompaction(std::list<SortedRunInfo>::const_iterator
+                                         last_sorted_run_picked_for_compaction);
+
   std::list<SortedRunInfo> sorted_runs_;
-  const VersionStorageInfo* vstorage_;
 };
 }  // namespace ROCKSDB_NAMESPACE

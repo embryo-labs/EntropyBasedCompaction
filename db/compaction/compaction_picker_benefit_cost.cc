@@ -158,7 +158,7 @@ bool CompactionPickerBenefitCost::CalcNeedsCompaction(
     // sorted_runs_ not synced yet. Will try again shortly.
     return false;
   }
-  assert(vstorage->num_levels() == 1);
+  assert(vstorage_->num_levels() == 1);
   return PickCompaction(mutable_cf_options).has_value();
 }
 bool CompactionPickerBenefitCost::NeedsCompaction(
