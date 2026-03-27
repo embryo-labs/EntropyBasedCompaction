@@ -441,6 +441,9 @@ DEFINE_double(read_random_exp_range, 0.0,
 
 DEFINE_double(write_random_exp_range, 0.0, "");
 
+DEFINE_double(read_zipfian_theta, 0.0, "");
+DEFINE_double(write_zipfian_theta, 0.0, "");
+
 DEFINE_bool(histogram, false, "Print histogram of operation timings");
 
 DEFINE_bool(confidence_interval_only, false,
@@ -1957,6 +1960,17 @@ static Status CreateMemTableRepFactory(
 
 }  // namespace
 
+class Random64Adapter {
+ public:
+  explicit Random64Adapter(rocksdb::Random64& rand) : rand_(rand) {}
+  uint64_t operator()() { return rand_.Next(); }
+  static constexpr uint64_t min() { return 0; }
+  static constexpr uint64_t max() { return UINT64_MAX; }
+
+ private:
+  rocksdb::Random64& rand_;
+};
+
 enum DistributionType : unsigned char { kFixed = 0, kUniform, kNormal };
 
 static enum DistributionType FLAGS_value_size_distribution_type_e = kFixed;
@@ -3224,6 +3238,8 @@ class Benchmark {
   int64_t deletes_;
   double read_random_exp_range_;
   double write_random_exp_range_;
+  double read_zipfian_theta_;
+  double write_zipfian_theta_;
 
   uint64_t duration_;
   int64_t writes_;
@@ -3718,6 +3734,8 @@ class Benchmark {
         reads_(FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads),
         read_random_exp_range_(0.0),
         write_random_exp_range_(0.0),
+        read_zipfian_theta_(0.0),
+        write_zipfian_theta_(0.0),
         writes_(FLAGS_writes < 0 ? FLAGS_num : FLAGS_writes),
         readwrites_(
             (FLAGS_writes < 0 && FLAGS_reads < 0)
@@ -4031,6 +4049,8 @@ class Benchmark {
       write_options_ = WriteOptions();
       read_random_exp_range_ = FLAGS_read_random_exp_range;
       write_random_exp_range_ = FLAGS_write_random_exp_range;
+      read_zipfian_theta_ = FLAGS_read_zipfian_theta;
+      write_zipfian_theta_ = FLAGS_write_zipfian_theta;
       if (FLAGS_sync) {
         write_options_.sync = true;
       }
@@ -5778,9 +5798,16 @@ class Benchmark {
 
   class KeyGenerator {
    public:
-    KeyGenerator(Random64* rand, WriteMode mode, uint64_t num,
-                 uint64_t /*num_per_set*/ = 64 * 1024)
-        : rand_(rand), mode_(mode), num_(num), next_(0) {
+    virtual ~KeyGenerator() {}
+    virtual uint64_t Next(Random64& rand) = 0;
+  };
+
+  class KeyGeneratorUniform : public KeyGenerator {
+   public:
+    ~KeyGeneratorUniform() {}
+    KeyGeneratorUniform(WriteMode mode, uint64_t num,
+                        uint64_t /*num_per_set*/ = 64 * 1024)
+        : mode_(mode), num_(num), next_(0) {
       if (mode_ == UNIQUE_RANDOM) {
         // NOTE: if memory consumption of this approach becomes a concern,
         // we can either break it into pieces and only random shuffle a section
@@ -5795,12 +5822,12 @@ class Benchmark {
       }
     }
 
-    uint64_t Next() {
+    uint64_t Next(Random64& rand) override {
       switch (mode_) {
         case SEQUENTIAL:
           return next_++;
         case RANDOM:
-          return rand_->Next() % num_;
+          return rand.Next() % num_;
         case UNIQUE_RANDOM:
           assert(next_ < num_);
           return values_[next_++];
@@ -5817,12 +5844,87 @@ class Benchmark {
     }
 
    private:
-    Random64* rand_;
     WriteMode mode_;
     const uint64_t num_;
     uint64_t next_;
     std::vector<uint64_t> values_;
   };
+
+  class KeyGeneratorExp : public KeyGenerator {
+   public:
+    KeyGeneratorExp(double exp_range, uint64_t num)
+        : exp_range_(exp_range), num_(num) {
+      assert(exp_range_ > 0);
+    }
+
+    uint64_t Next(Random64& rand) override {
+      const uint64_t kBigInt = static_cast<uint64_t>(1U) << 62;
+      long double order = -static_cast<long double>(rand.Next() % kBigInt) /
+                          static_cast<long double>(kBigInt) * exp_range_;
+      long double exp_ran = std::exp(order);
+      uint64_t rand_num =
+          static_cast<int64_t>(exp_ran * static_cast<long double>(num_));
+      // Map to a different number to avoid locality.
+      const uint64_t kBigPrime = 0x5bd1e995;
+      // Overflow is like %(2^64). Will have little impact of results.
+      return static_cast<int64_t>((rand_num * kBigPrime) % num_);
+    }
+
+   private:
+    double exp_range_;
+    uint64_t num_;
+  };
+
+  class KeyGeneratorZipfian : public KeyGenerator {
+   public:
+    KeyGeneratorZipfian(double theta, uint64_t num)
+        : n_(num), alpha_(1 / (1 - theta)), zeta2_(1 + pow(2.0, -theta)) {
+      assert(theta < 1);
+      assert(n_ > 2);
+      zetan_ = zeta2_;
+      for (size_t i = 3; i <= n_; ++i) {
+        zetan_ += pow((double)i, -theta);
+      }
+      eta_ = (1 - pow(2.0 / n_, 1 - theta)) / (1 - zeta2_ / zetan_);
+    }
+    uint64_t Next(Random64& rand) override {
+      std::uniform_real_distribution<> dis(0.0, 1.0);
+      Random64Adapter e(rand);
+      double u = dis(e);
+      double uz = u * zetan_;
+      if (uz < 1) return 1;
+      if (uz < zeta2_) return 2;
+      return 1 + (size_t)(n_ * pow(eta_ * u - eta_ + 1, alpha_));
+    }
+
+   private:
+    size_t n_;
+    double alpha_;
+    double zeta2_;
+    double zetan_;
+    double eta_;
+  };
+
+  std::unique_ptr<KeyGenerator> key_generator_for_read(uint64_t num) {
+    std::unique_ptr<KeyGenerator> key_gen;
+    if (read_random_exp_range_ > 0) {
+      return std::make_unique<KeyGeneratorExp>(read_random_exp_range_, num);
+    } else if (read_zipfian_theta_ > 0) {
+      return std::make_unique<KeyGeneratorZipfian>(read_zipfian_theta_, num);
+    } else {
+      return std::make_unique<KeyGeneratorUniform>(WriteMode::RANDOM, num);
+    }
+  }
+  std::unique_ptr<KeyGenerator> key_generator_for_write(uint64_t num) {
+    std::unique_ptr<KeyGenerator> key_gen;
+    if (write_random_exp_range_ > 0) {
+      return std::make_unique<KeyGeneratorExp>(write_random_exp_range_, num);
+    } else if (write_zipfian_theta_ > 0) {
+      return std::make_unique<KeyGeneratorZipfian>(write_zipfian_theta_, num);
+    } else {
+      return std::make_unique<KeyGeneratorUniform>(WriteMode::RANDOM, num);
+    }
+  }
 
   DB* SelectDB(ThreadState* thread) { return SelectDBWithCfh(thread)->db; }
 
@@ -5850,7 +5952,7 @@ class Benchmark {
     if (db_.db == nullptr) {
       num_key_gens = multi_dbs_.size();
     }
-    std::vector<std::unique_ptr<KeyGenerator>> key_gens(num_key_gens);
+    std::vector<std::unique_ptr<KeyGeneratorUniform>> key_gens(num_key_gens);
     int64_t max_ops = num_ops * num_key_gens;
     int64_t ops_per_stage = max_ops;
     if (FLAGS_num_column_families > 1 && FLAGS_num_hot_column_families > 0) {
@@ -5862,8 +5964,8 @@ class Benchmark {
     Duration duration(test_duration, max_ops, ops_per_stage);
     const uint64_t num_per_key_gen = num_ + max_num_range_tombstones_;
     for (size_t i = 0; i < num_key_gens; i++) {
-      key_gens[i].reset(new KeyGenerator(&(thread->rand), write_mode,
-                                         num_per_key_gen, ops_per_stage));
+      key_gens[i].reset(
+          new KeyGeneratorUniform(write_mode, num_per_key_gen, ops_per_stage));
     }
 
     if (num_ != FLAGS_num) {
@@ -6022,7 +6124,7 @@ class Benchmark {
                                            inserted_key_window.size()];
           } else {
             num_unique_keys++;
-            rand_num = key_gens[id]->Next();
+            rand_num = key_gens[id]->Next(thread->rand);
             if (inserted_key_window.size() < FLAGS_overwrite_window_size) {
               inserted_key_window.push_back(rand_num);
             } else {
@@ -6112,7 +6214,7 @@ class Benchmark {
             }
           }
         } else {
-          rand_num = key_gens[id]->Next();
+          rand_num = key_gens[id]->Next(thread->rand);
         }
         GenerateKeyFromInt(rand_num, FLAGS_num, &key);
         Slice val;
@@ -6176,7 +6278,7 @@ class Benchmark {
                     writes_per_range_tombstone_ ==
                 0) {
           num_range_deletions++;
-          int64_t begin_num = key_gens[id]->Next();
+          int64_t begin_num = key_gens[id]->Next(thread->rand);
           if (FLAGS_expand_range_tombstones) {
             for (int64_t offset = 0; offset < range_tombstone_width_;
                  ++offset) {
@@ -6789,31 +6891,8 @@ class Benchmark {
     thread->stats.AddMessage(msg);
   }
 
-  int64_t GetRandomKey(uint64_t rand_int, double random_exp_range,
-                       int64_t num = FLAGS_num) {
-    int64_t key_rand;
-    if (random_exp_range == 0) {
-      key_rand = rand_int % num;
-    } else {
-      const uint64_t kBigInt = static_cast<uint64_t>(1U) << 62;
-      long double order = -static_cast<long double>(rand_int % kBigInt) /
-                          static_cast<long double>(kBigInt) * random_exp_range;
-      long double exp_ran = std::exp(order);
-      uint64_t rand_num =
-          static_cast<int64_t>(exp_ran * static_cast<long double>(num));
-      // Map to a different number to avoid locality.
-      const uint64_t kBigPrime = 0x5bd1e995;
-      // Overflow is like %(2^64). Will have little impact of results.
-      key_rand = static_cast<int64_t>((rand_num * kBigPrime) % num);
-    }
-    return key_rand;
-  }
-  int64_t GetRandomKey(Random64* rand, double random_exp_range,
-                       int64_t num = FLAGS_num) {
-    return GetRandomKey(rand->Next(), random_exp_range, num);
-  }
-
   void ReadRandom(ThreadState* thread) {
+    auto key_gen_read = key_generator_for_read(FLAGS_num);
     int64_t gets = 0;
     int64_t get_found = 0;
     int64_t seek = 0;
@@ -6893,7 +6972,7 @@ class Benchmark {
       if (entries_per_batch_ > 1 && FLAGS_multiread_stride) {
         if (++num_keys == entries_per_batch_) {
           num_keys = 0;
-          key_rand = GetRandomKey(&thread->rand, read_random_exp_range_);
+          key_rand = key_gen_read->Next(thread->rand);
           if ((key_rand + (entries_per_batch_ - 1) * FLAGS_multiread_stride) >=
               FLAGS_num) {
             key_rand = FLAGS_num - entries_per_batch_ * FLAGS_multiread_stride;
@@ -6902,7 +6981,7 @@ class Benchmark {
           key_rand += FLAGS_multiread_stride;
         }
       } else {
-        key_rand = GetRandomKey(&thread->rand, read_random_exp_range_);
+        key_rand = key_gen_read->Next(thread->rand);
       }
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
       std::string ts_ret;
@@ -6924,7 +7003,7 @@ class Benchmark {
         cfh = db_with_cfh->db->DefaultColumnFamily();
       }
 
-      int query_type = query.GetType(GetRandomKey(&thread->rand, 0));
+      int query_type = query.GetType(thread->rand.Next());
       auto start = std::chrono::steady_clock::now();
 
       // Start the query
@@ -7075,6 +7154,7 @@ class Benchmark {
   // Calls MultiGet over a list of keys from a random distribution.
   // Returns the total number of keys found.
   void MultiReadRandom(ThreadState* thread) {
+    auto key_gen_read = key_generator_for_read(FLAGS_num);
     int64_t read = 0;
     int64_t bytes = 0;
     int64_t num_multireads = 0;
@@ -7100,7 +7180,7 @@ class Benchmark {
     while (!duration.Done(entries_per_batch_)) {
       DB* db = SelectDB(thread);
       if (FLAGS_multiread_stride) {
-        int64_t key = GetRandomKey(&thread->rand, read_random_exp_range_);
+        int64_t key = key_gen_read->Next(thread->rand);
         if ((key + (entries_per_batch_ - 1) * FLAGS_multiread_stride) >=
             static_cast<int64_t>(FLAGS_num)) {
           key = FLAGS_num - entries_per_batch_ * FLAGS_multiread_stride;
@@ -7111,9 +7191,8 @@ class Benchmark {
         }
       } else {
         for (int64_t i = 0; i < entries_per_batch_; ++i) {
-          GenerateKeyFromInt(
-              GetRandomKey(&thread->rand, read_random_exp_range_), FLAGS_num,
-              &keys[i]);
+          GenerateKeyFromInt(key_gen_read->Next(thread->rand), FLAGS_num,
+                             &keys[i]);
         }
       }
       Slice ts;
@@ -7273,6 +7352,7 @@ class Benchmark {
 
   // Calls ApproximateSize over random key ranges.
   void ApproximateSizeRandom(ThreadState* thread) {
+    auto key_gen_read = key_generator_for_read(FLAGS_num);
     int64_t size_sum = 0;
     int64_t num_sizes = 0;
     const size_t batch_size = entries_per_batch_;
@@ -7295,8 +7375,8 @@ class Benchmark {
     while (!duration.Done(1)) {
       DB* db = SelectDB(thread);
       for (size_t i = 0; i < batch_size; ++i) {
-        int64_t lkey = GetRandomKey(&thread->rand, read_random_exp_range_);
-        int64_t rkey = GetRandomKey(&thread->rand, read_random_exp_range_);
+        int64_t lkey = key_gen_read->Next(thread->rand);
+        int64_t rkey = key_gen_read->Next(thread->rand);
         if (lkey > rkey) {
           std::swap(lkey, rkey);
         }
@@ -7536,6 +7616,7 @@ class Benchmark {
   // needs to decide the ratio between Get, Put, Iterator queries before
   // starting the benchmark.
   void MixGraph(ThreadState* thread) {
+    auto key_gen_read = key_generator_for_read(FLAGS_num);
     int64_t gets = 0;
     int64_t puts = 0;
     int64_t get_found = 0;
@@ -7591,7 +7672,7 @@ class Benchmark {
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
       int64_t ini_rand, rand_v, key_rand, key_seed;
-      ini_rand = GetRandomKey(&thread->rand, read_random_exp_range_);
+      ini_rand = key_gen_read->Next(thread->rand);
       rand_v = ini_rand % FLAGS_num;
       double u = static_cast<double>(rand_v) / FLAGS_num;
 
@@ -7802,6 +7883,8 @@ class Benchmark {
   };
   void CustomPeriodicWriter(ThreadState* thread) {
     RandomGenerator gen;
+    std::unique_ptr<KeyGenerator> key_gen_write =
+        key_generator_for_write(FLAGS_num);
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
@@ -7818,8 +7901,7 @@ class Benchmark {
     Duration duration(duration_, std::numeric_limits<int64_t>::max());
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
-      auto key_rand =
-          GetRandomKey(&thread->rand, write_random_exp_range_) % FLAGS_num;
+      auto key_rand = key_gen_write->Next(thread->rand);
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
 
       thread->stats.ResetLastOpTime();
@@ -8170,6 +8252,8 @@ class Benchmark {
   void BGWriter(ThreadState* thread, enum OperationType write_merge) {
     // Special thread that keeps writing until other threads are done.
     RandomGenerator gen;
+    std::unique_ptr<KeyGenerator> key_gen_write =
+        key_generator_for_write(FLAGS_num);
     int64_t bytes = 0;
 
     std::unique_ptr<RateLimiter> write_rate_limiter;
@@ -8227,8 +8311,7 @@ class Benchmark {
         }
       }
 
-      auto key_rand =
-          GetRandomKey(&thread->rand, write_random_exp_range_) % FLAGS_num;
+      auto key_rand = key_gen_write->Next(thread->rand);
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
 
       Status s;
@@ -8841,14 +8924,16 @@ class Benchmark {
   void MergeRandom(ThreadState* thread) {
     RandomGenerator gen;
     int64_t bytes = 0;
+    std::unique_ptr<KeyGenerator> key_gen_write =
+        key_generator_for_write(merge_keys_);
+
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
     // The number of iterations is the larger of read_ or write_
     Duration duration(duration_, readwrites_);
     while (!duration.Done(1)) {
       DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(thread);
-      auto key_rand =
-          GetRandomKey(&thread->rand, write_random_exp_range_) % merge_keys_;
+      auto key_rand = key_gen_write->Next(thread->rand) % merge_keys_;
       GenerateKeyFromInt(key_rand, merge_keys_, &key);
 
       Status s;
