@@ -2024,6 +2024,18 @@ void InternalStats::DumpCFStats(std::string* value) {
 void InternalStats::DumpCFStatsNoFileHistogram(bool is_periodic,
                                                std::string* value) {
   char buf[2000];
+
+  snprintf(buf, sizeof(buf),
+           "Pick compaction: count %" PRIu64 ", total %" PRIu64
+           " ns, average %" PRIu64 " ns\n",
+           cf_stats_count_[PICK_COMPACTION_NANOS],
+           cf_stats_value_[PICK_COMPACTION_NANOS],
+           cf_stats_count_[PICK_COMPACTION_NANOS] == 0
+               ? 0
+               : cf_stats_value_[PICK_COMPACTION_NANOS] /
+                     cf_stats_count_[PICK_COMPACTION_NANOS]);
+  value->append(buf);
+
   // Per-ColumnFamily stats
   PrintLevelStatsHeader(buf, sizeof(buf), cfd_->GetName(), "Level");
   value->append(buf);

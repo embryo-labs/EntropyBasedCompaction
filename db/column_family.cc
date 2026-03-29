@@ -1290,6 +1290,7 @@ Compaction* ColumnFamilyData::PickCompaction(
     const std::vector<SequenceNumber>& existing_snapshots,
     const SnapshotChecker* snapshot_checker, LogBuffer* log_buffer,
     bool require_max_output_level) {
+  auto start = std::chrono::steady_clock::now();
   auto* result = compaction_picker_->PickCompaction(
       this, GetName(), mutable_options, mutable_db_options, existing_snapshots,
       snapshot_checker, current_->storage_info(), log_buffer,
@@ -1297,6 +1298,10 @@ Compaction* ColumnFamilyData::PickCompaction(
   if (result != nullptr) {
     result->FinalizeInputInfo(current_);
   }
+  auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                   std::chrono::steady_clock::now() - start)
+                   .count();
+  internal_stats_->AddCFStats(InternalStats::PICK_COMPACTION_NANOS, nanos);
   return result;
 }
 

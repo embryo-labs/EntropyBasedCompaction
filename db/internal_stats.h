@@ -105,6 +105,8 @@ class InternalStats {
   static const std::map<LevelStatType, LevelStat> compaction_level_stats;
 
   enum InternalCFStatsType {
+    PICK_COMPACTION_NANOS,
+
     MEMTABLE_LIMIT_DELAYS,
     MEMTABLE_LIMIT_STOPS,
     L0_FILE_COUNT_LIMIT_DELAYS,
