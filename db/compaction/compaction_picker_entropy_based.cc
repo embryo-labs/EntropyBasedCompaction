@@ -204,19 +204,49 @@ CompactionPickerEntropyBased::PickCompaction(
     picker = std::make_unique<CandidatePickerEnumerate>(mutable_cf_options,
                                                         l0_files);
   }
+  enum class PickMod {
+    BestReff,
+    BestRnum,
+    First,
+  };
+  PickMod pick_mod;
+  if (mutable_cf_options.pick_best_reff) {
+    pick_mod = PickMod::BestReff;
+  } else if (mutable_cf_options.preempt_by_num) {
+    pick_mod = PickMod::BestRnum;
+  } else {
+    pick_mod = PickMod::First;
+  }
   for (;;) {
     auto picked = picker->Pick();
     if (!picked.has_value()) {
       break;
     }
     auto candidate = picked.value();
-    if (!mutable_cf_options.pick_best_reff) {
+    if (pick_mod == PickMod::First) {
       assert(!best.has_value());
       best = candidate;
       break;
     }
-    if (best.has_value() && best->reff >= candidate.reff) {
-      continue;
+    if (best.has_value()) {
+      if (pick_mod == PickMod::BestReff) {
+        if (best->reff >= candidate.reff) {
+          continue;
+        }
+      } else {
+        assert(pick_mod == PickMod::BestRnum);
+        // Since we don't pick the candidate with best R_eff, we need to check
+        // the entropy threshold beforehand.
+        if (best->reff < mutable_cf_options.entropy_threshold - 1e-6) {
+          continue;
+        }
+        double r_num_best = (double)(best->last - best->first) / best->size_sum;
+        double r_num_candidate =
+            (double)(candidate.last - candidate.first) / candidate.size_sum;
+        if (r_num_best >= r_num_candidate) {
+          continue;
+        }
+      }
     }
     best = candidate;
   }
