@@ -51,7 +51,6 @@
 #include "rocksdb/background_job_limiter.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/compaction_policy_lazy_leveling.h"
-#include "rocksdb/compaction_policy_steady.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
@@ -548,7 +547,7 @@ DEFINE_bool(allow_intra_l0_compactions,
             ROCKSDB_NAMESPACE::Options().allow_intra_l0_compactions, "");
 
 DEFINE_string(json_log_file, "", "");
-DEFINE_string(compaction_policy, "", "steady/lazy-leveling/dynamic-tiering");
+DEFINE_string(compaction_policy, "", "lazy-leveling");
 DEFINE_bool(autotune_size_ratio, false, "");
 DEFINE_double(entropy_threshold, 0.78, "");
 DEFINE_bool(autotune_entropy_threshold, false, "");
@@ -564,8 +563,6 @@ DEFINE_bool(prioritize_last_sorted_run_compaction, false, "");
 DEFINE_bool(last_compaction_io_sa, false, "");
 DEFINE_bool(preempt_by_entropy, true, "");
 DEFINE_bool(preempt_by_num, true, "");
-
-DEFINE_string(steady_policy_file, "", "");
 
 DEFINE_int32(universal_size_ratio, 0,
              "Percentage flexibility while comparing file size "
@@ -595,7 +592,6 @@ DEFINE_bool(universal_allow_trivial_move, false,
 DEFINE_bool(universal_incremental, false,
             "Enable incremental compactions in universal compaction.");
 
-DEFINE_string(lazy_leveling_num_sorted_runs, "5,3,3,3", "");
 DEFINE_double(C, 3, "");
 
 DEFINE_uint64(main_level_size_threshold, 0, "");
@@ -5327,47 +5323,11 @@ class Benchmark {
     if (!FLAGS_json_log_file.empty() && !options.json_log) {
       options.json_log = std::make_shared<JsonLogger>(FLAGS_json_log_file);
     }
-    switch (FLAGS_compaction_style_e) {
-      case CompactionStyle::kCompactionStyleByCount: {
-        assert(FLAGS_compaction_policy == "steady");
-        assert(!FLAGS_steady_policy_file.empty());
-        auto policy_json =
-            nlohmann::json::parse(std::ifstream(FLAGS_steady_policy_file));
-        size_t policy_s = policy_json["s"];
-        size_t R = policy_json["R"];
-        std::unordered_map<size_t, std::vector<CompactionPolicySteady::Step>>
-            rounds;
-        for (auto round : policy_json["rounds"]) {
-          size_t n = round["n"];
-          std::vector<CompactionPolicySteady::Step> steps;
-          for (auto step : round["steps"]) {
-            steps.emplace_back(step["total"], step["compact"]);
-          }
-          rounds.emplace(n, std::move(steps));
-        }
-        options.compaction_policy = std::make_shared<CompactionPolicySteady>(
-            policy_s, R, std::move(rounds));
-      } break;
-      case CompactionStyle::kCompactionStyleBySize: {
-        if (FLAGS_compaction_policy == "lazy-leveling") {
-          std::vector<std::string> num_sorted_runs_str =
-              ROCKSDB_NAMESPACE::StringSplit(
-                  FLAGS_lazy_leveling_num_sorted_runs, ',');
-          std::vector<size_t> num_sorted_runs;
-          for (const std::string& item : num_sorted_runs_str) {
-            num_sorted_runs.push_back(std::stoi(item));
-          }
-          options.compaction_policy =
-              std::make_shared<CompactionPolicyLazyLeveling>(
-                  std::move(num_sorted_runs));
-        } else {
-          assert(false);
-        }
-        break;
-        default:
-          assert(FLAGS_compaction_policy == "");
-          break;
-      }
+    if (FLAGS_compaction_style_e == CompactionStyle::kCompactionStyleByCount) {
+      assert(FLAGS_compaction_policy == "lazy-leveling");
+      options.compaction_policy =
+          std::make_shared<CompactionPolicyLazyLeveling>(
+              FLAGS_max_bytes_for_level_multiplier, FLAGS_C);
     };
     options.autotune_size_ratio = FLAGS_autotune_size_ratio;
     options.entropy_threshold = FLAGS_entropy_threshold;

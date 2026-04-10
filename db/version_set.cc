@@ -3614,7 +3614,6 @@ void VersionStorageInfo::ComputeCompactionScore(
       MaxOutputLevel(immutable_options.cf_allow_ingest_behind ||
                      immutable_options.allow_ingest_behind);
   if (compaction_style_ == kCompactionStyleTiering ||
-      compaction_style_ == kCompactionStyleBySize ||
       compaction_style_ == kCompactionStyleBenefitCost ||
       compaction_style_ == kCompactionStyleByCount ||
       compaction_style_ == kCompactionStyleEntropyBased) {
@@ -4276,7 +4275,6 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
       compaction_style_ == kCompactionStyleFIFO ||
       compaction_style_ == kCompactionStyleUniversal ||
       compaction_style_ == kCompactionStyleTiering ||
-      compaction_style_ == kCompactionStyleBySize ||
       compaction_style_ == kCompactionStyleBenefitCost ||
       compaction_style_ == kCompactionStyleByCount ||
       compaction_style_ == kCompactionStyleEntropyBased) {

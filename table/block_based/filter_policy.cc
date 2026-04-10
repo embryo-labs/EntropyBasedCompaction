@@ -1843,7 +1843,6 @@ FilterBitsBuilder* RibbonFilterPolicy::GetBuilderWithContext(
       case kCompactionStyleLevel:
       case kCompactionStyleUniversal:
       case kCompactionStyleTiering:
-      case kCompactionStyleBySize:
       case kCompactionStyleBenefitCost:
       case kCompactionStyleByCount:
       case kCompactionStyleEntropyBased: {

@@ -21,7 +21,6 @@
 #include "db/compaction/compaction_picker.h"
 #include "db/compaction/compaction_picker_benefit_cost.h"
 #include "db/compaction/compaction_picker_by_count.h"
-#include "db/compaction/compaction_picker_by_size.h"
 #include "db/compaction/compaction_picker_entropy_based.h"
 #include "db/compaction/compaction_picker_fifo.h"
 #include "db/compaction/compaction_picker_level.h"
@@ -679,9 +678,6 @@ ColumnFamilyData::ColumnFamilyData(
     } else if (ioptions_.compaction_style == kCompactionStyleTiering) {
       compaction_picker_.reset(
           new CompactionPickerTiering(ioptions_, &internal_comparator_));
-    } else if (ioptions_.compaction_style == kCompactionStyleBySize) {
-      compaction_picker_.reset(
-          new CompactionPickerBySize(ioptions_, &internal_comparator_));
     } else if (ioptions_.compaction_style == kCompactionStyleBenefitCost) {
       compaction_picker_.reset(
           new CompactionPickerBenefitCost(ioptions_, &internal_comparator_));

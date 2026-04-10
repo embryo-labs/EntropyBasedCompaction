@@ -6,13 +6,11 @@
 #pragma once
 
 #include <string>
-#include <variant>
 #include <vector>
 
 #include "db/dbformat.h"
 #include "options/db_options.h"
 #include "rocksdb/compaction_policy_by_count.h"
-#include "rocksdb/compaction_policy_by_size.h"
 #include "rocksdb/options.h"
 #include "util/compression.h"
 
@@ -340,9 +338,7 @@ struct MutableCFOptions {
   std::vector<int> max_bytes_for_level_multiplier_additional;
   CompactionOptionsFIFO compaction_options_fifo;
   CompactionOptionsUniversal compaction_options_universal;
-  std::optional<std::variant<std::shared_ptr<CompactionPolicyByCount>,
-                             std::shared_ptr<CompactionPolicyBySize>>>
-      compaction_policy;
+  std::shared_ptr<CompactionPolicyByCount> compaction_policy;
 
   bool autotune_size_ratio;
 

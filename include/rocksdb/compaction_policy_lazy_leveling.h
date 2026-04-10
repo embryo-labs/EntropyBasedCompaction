@@ -1,24 +1,22 @@
 #pragma once
 
-#include "rocksdb/compaction_policy_by_size.h"
+#include "rocksdb/compaction_policy_by_count.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-class CompactionPolicyLazyLeveling : public CompactionPolicyBySize {
+class CompactionPolicyLazyLeveling : public CompactionPolicyByCount {
  public:
-  CompactionPolicyLazyLeveling(std::vector<size_t>&& num_sorted_runs)
-      : num_sorted_runs_(std::move(num_sorted_runs)) {}
+  CompactionPolicyLazyLeveling(size_t T, double C) : T_(T), C_(C) {}
 
-  const char* name() override { return "LazyLeveling"; }
-
-  std::optional<std::tuple<size_t, size_t, Env::IOPriority>> PickCompaction(
-      size_t write_buffer_size, const std::vector<SortedRunInfo>& status,
-      uint64_t last_level_size) override;
+  std::optional<std::pair<
+      std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator,
+      std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator>>
+  PickCompaction(
+      const std::list<CompactionPolicyByCount::SortedRunInfo> &status) override;
 
  private:
-  inline uint64_t size_threshold(uint64_t target_size, size_t level);
-
-  std::vector<size_t> num_sorted_runs_;
+  size_t T_;
+  double C_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE
