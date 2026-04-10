@@ -50,8 +50,6 @@
 #include "port/stack_trace.h"
 #include "rocksdb/background_job_limiter.h"
 #include "rocksdb/cache.h"
-#include "rocksdb/compaction_policy_dynamic_size_ratio.h"
-#include "rocksdb/compaction_policy_dynamic_tiering.h"
 #include "rocksdb/compaction_policy_lazy_leveling.h"
 #include "rocksdb/compaction_policy_steady.h"
 #include "rocksdb/convenience.h"
@@ -2356,15 +2354,6 @@ class ReporterAgent {
       header << ",IO_LOW,IO_FLATTEN,IO_MAIN_LEVEL,IO_SA,IO_HIGH,IO_USER,rate-"
                 "limit";
     }
-    if (options.compaction_policy.has_value()) {
-      if (options.compaction_policy.value().index() == 1) {
-        std::shared_ptr<CompactionPolicyBySize> policy =
-            std::get<1>(options.compaction_policy.value());
-        if (strcmp(policy->name(), "DynamicSizeRatio") == 0) {
-          header << ",size-ratio";
-        }
-      }
-    }
     return header.str();
   }
   void SleepAndReport() {
@@ -2512,17 +2501,6 @@ class ReporterAgent {
                << bytes_through[Env::IO_HIGH] << ','
                << bytes_through[Env::IO_USER] << ','
                << rate_limiter->GetBytesPerSecond();
-      }
-      if (options.compaction_policy.has_value()) {
-        if (options.compaction_policy.value().index() == 1) {
-          std::shared_ptr<CompactionPolicyBySize> policy =
-              std::get<1>(options.compaction_policy.value());
-          if (strcmp(policy->name(), "DynamicSizeRatio") == 0) {
-            CompactionPolicyDynamicSizeRatio* p =
-                static_cast<CompactionPolicyDynamicSizeRatio*>(policy.get());
-            report << ',' << p->size_ratio();
-          }
-        }
       }
       report << '\n';
 
@@ -5382,12 +5360,6 @@ class Benchmark {
           options.compaction_policy =
               std::make_shared<CompactionPolicyLazyLeveling>(
                   std::move(num_sorted_runs));
-        } else if (FLAGS_compaction_policy == "dynamic-size-ratio") {
-          options.compaction_policy =
-              std::make_shared<CompactionPolicyDynamicSizeRatio>(FLAGS_C);
-        } else if (FLAGS_compaction_policy == "dynamic-tiering") {
-          options.compaction_policy =
-              std::make_shared<CompactionPolicyDynamicTiering>(FLAGS_C);
         } else {
           assert(false);
         }

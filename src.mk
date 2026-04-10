@@ -46,8 +46,6 @@ LIB_SOURCES =                                                   \
   db/compaction/compaction_picker_tiering.cc                    \
   db/compaction/compaction_picker_universal.cc                  \
   db/compaction/compaction_policy_by_count.cc                   \
-  db/compaction/compaction_policy_dynamic_size_ratio.cc         \
-  db/compaction/compaction_policy_dynamic_tiering.cc            \
   db/compaction/compaction_policy_lazy_leveling.cc              \
   db/compaction/compaction_policy_steady.cc                     \
   db/compaction/compaction_service_job.cc                       \
