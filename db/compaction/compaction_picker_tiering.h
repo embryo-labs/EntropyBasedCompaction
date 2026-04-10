@@ -47,7 +47,6 @@ class CompactionPickerTiering : public CompactionPicker {
                           std::list<SortedRunInfo>::const_iterator>>
   PickCompaction(const MutableCFOptions& mutable_cf_options) const;
 
-  mutable std::mutex lock_;
   mutable uint64_t T_;
   mutable std::list<SortedRunInfo> sorted_runs_;
 

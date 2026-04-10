@@ -113,27 +113,25 @@ Compaction* CompactionPickerTiering::PickCompaction(
 }
 
 void CompactionPickerTiering::print_status() const {
-  {
-    printf("[");
-    auto it = sorted_runs_.begin();
+  printf("[");
+  auto it = sorted_runs_.begin();
+  if (it == sorted_runs_.end()) {
+    printf("]\n");
+    fflush(stdout);
+    return;
+  }
+  for (;;) {
+    if (it->is_merging()) {
+      printf("merging %zu ", it->num_sorted_runs);
+    }
+    printf("%" PRIu64, it->count);
+    ++it;
     if (it == sorted_runs_.end()) {
       printf("]\n");
       fflush(stdout);
-      return;
+      break;
     }
-    for (;;) {
-      if (it->is_merging()) {
-        printf("merging %zu ", it->num_sorted_runs);
-      }
-      printf("%" PRIu64, it->count);
-      ++it;
-      if (it == sorted_runs_.end()) {
-        printf("]\n");
-        fflush(stdout);
-        break;
-      }
-      printf(", ");
-    }
+    printf(", ");
   }
 }
 
@@ -142,8 +140,6 @@ std::optional<std::pair<
     std::list<CompactionPickerTiering::SortedRunInfo>::const_iterator>>
 CompactionPickerTiering::PickCompaction(
     const MutableCFOptions& mutable_cf_options) const {
-  std::unique_lock<std::mutex> lock(lock_, std::try_to_lock);
-  assert(lock.owns_lock());
   if (!mutable_cf_options.autotune_size_ratio || T_ == 0) {
     T_ = mutable_cf_options.max_bytes_for_level_multiplier;
   }
