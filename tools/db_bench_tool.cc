@@ -51,6 +51,7 @@
 #include "rocksdb/background_job_limiter.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/compaction_policy_lazy_leveling.h"
+#include "rocksdb/compaction_policy_tiering.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
@@ -547,7 +548,7 @@ DEFINE_bool(allow_intra_l0_compactions,
             ROCKSDB_NAMESPACE::Options().allow_intra_l0_compactions, "");
 
 DEFINE_string(json_log_file, "", "");
-DEFINE_string(compaction_policy, "", "lazy-leveling");
+DEFINE_string(compaction_policy, "", "tiering/lazy-leveling");
 DEFINE_bool(autotune_size_ratio, false, "");
 DEFINE_double(entropy_threshold, 0.78, "");
 DEFINE_bool(autotune_entropy_threshold, false, "");
@@ -5324,10 +5325,15 @@ class Benchmark {
       options.json_log = std::make_shared<JsonLogger>(FLAGS_json_log_file);
     }
     if (FLAGS_compaction_style_e == CompactionStyle::kCompactionStyleByCount) {
-      assert(FLAGS_compaction_policy == "lazy-leveling");
-      options.compaction_policy =
-          std::make_shared<CompactionPolicyLazyLeveling>(
-              FLAGS_max_bytes_for_level_multiplier, FLAGS_C);
+      if (FLAGS_compaction_policy == "tiering") {
+        options.compaction_policy = std::make_shared<CompactionPolicyTiering>(
+            FLAGS_max_bytes_for_level_multiplier);
+      } else {
+        assert(FLAGS_compaction_policy == "lazy-leveling");
+        options.compaction_policy =
+            std::make_shared<CompactionPolicyLazyLeveling>(
+                FLAGS_max_bytes_for_level_multiplier, FLAGS_C);
+      }
     };
     options.autotune_size_ratio = FLAGS_autotune_size_ratio;
     options.entropy_threshold = FLAGS_entropy_threshold;

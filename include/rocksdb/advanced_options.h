@@ -33,14 +33,13 @@ enum CompactionStyle : char {
   kCompactionStyleUniversal = 0x1,
   // FIFO compaction style
   kCompactionStyleFIFO = 0x2,
-  kCompactionStyleTiering = 0x3,
-  kCompactionStyleBenefitCost = 0x4,
+  kCompactionStyleBenefitCost = 0x3,
   // Trigger compactions based on the count of merged flushed SSTables
-  kCompactionStyleByCount = 0x5,
-  kCompactionStyleEntropyBased = 0x6,
+  kCompactionStyleByCount = 0x4,
+  kCompactionStyleEntropyBased = 0x5,
   // Disable background compaction. Compaction jobs are submitted
   // via CompactFiles().
-  kCompactionStyleNone = 0x7,
+  kCompactionStyleNone = 0x6,
 };
 
 // In Level-based compaction, it Determines which file from a level to be

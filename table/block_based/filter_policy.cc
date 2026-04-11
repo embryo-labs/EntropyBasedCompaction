@@ -1842,7 +1842,6 @@ FilterBitsBuilder* RibbonFilterPolicy::GetBuilderWithContext(
     switch (context.compaction_style) {
       case kCompactionStyleLevel:
       case kCompactionStyleUniversal:
-      case kCompactionStyleTiering:
       case kCompactionStyleBenefitCost:
       case kCompactionStyleByCount:
       case kCompactionStyleEntropyBased: {

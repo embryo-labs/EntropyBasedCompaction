@@ -24,7 +24,6 @@
 #include "db/compaction/compaction_picker_entropy_based.h"
 #include "db/compaction/compaction_picker_fifo.h"
 #include "db/compaction/compaction_picker_level.h"
-#include "db/compaction/compaction_picker_tiering.h"
 #include "db/compaction/compaction_picker_universal.h"
 #include "db/db_impl/db_impl.h"
 #include "db/internal_stats.h"
@@ -675,9 +674,6 @@ ColumnFamilyData::ColumnFamilyData(
     } else if (ioptions_.compaction_style == kCompactionStyleFIFO) {
       compaction_picker_.reset(
           new FIFOCompactionPicker(ioptions_, &internal_comparator_));
-    } else if (ioptions_.compaction_style == kCompactionStyleTiering) {
-      compaction_picker_.reset(
-          new CompactionPickerTiering(ioptions_, &internal_comparator_));
     } else if (ioptions_.compaction_style == kCompactionStyleBenefitCost) {
       compaction_picker_.reset(
           new CompactionPickerBenefitCost(ioptions_, &internal_comparator_));
