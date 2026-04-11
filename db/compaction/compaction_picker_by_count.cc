@@ -2,6 +2,29 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+void CompactionPickerByCount::print_status() {
+  printf("[");
+  auto it = sorted_runs_.begin();
+  if (it == sorted_runs_.end()) {
+    printf("]\n");
+    fflush(stdout);
+    return;
+  }
+  for (;;) {
+    if (it->is_merging()) {
+      printf("merging %zu ", it->num_sorted_runs);
+    }
+    printf("%" PRIu64, it->count);
+    ++it;
+    if (it == sorted_runs_.end()) {
+      printf("]\n");
+      fflush(stdout);
+      break;
+    }
+    printf(", ");
+  }
+}
+
 bool CompactionPickerByCount::CalcNeedsCompaction(
     const ColumnFamilyData* cfd, const MutableCFOptions& mutable_cf_options,
     const VersionStorageInfo* vstorage) const {
@@ -10,8 +33,7 @@ bool CompactionPickerByCount::CalcNeedsCompaction(
     return false;
   }
   assert(vstorage->num_levels() == 1);
-  auto policy = mutable_cf_options.compaction_policy;
-  return policy->PickCompaction(sorted_runs_).has_value();
+  return PickRunsToCompact(mutable_cf_options).has_value();
 }
 bool CompactionPickerByCount::NeedsCompaction(
     const ColumnFamilyData* cfd, const VersionStorageInfo* vstorage) const {
@@ -21,19 +43,17 @@ bool CompactionPickerByCount::NeedsCompaction(
 void CompactionPickerByCount::CompactionFinished(
     const VersionStorageInfo* vstorage, void* merging_info, uint64_t size) {
   vstorage_ = vstorage;
-  auto info =
-      static_cast<CompactionPolicyByCount::SortedRunInfo*>(merging_info);
+  auto info = static_cast<SortedRunInfo*>(merging_info);
   assert(info->is_merging());
   info->num_sorted_runs = 1;
-  CompactionPolicyByCount::print(sorted_runs_);
+  print_status();
 }
 
 void CompactionPickerByCount::Flushed(const VersionStorageInfo* vstorage,
                                       const FileMetaData& file) {
   vstorage_ = vstorage;
-  sorted_runs_.push_front(
-      CompactionPolicyByCount::SortedRunInfo{.num_sorted_runs = 1, .count = 1});
-  CompactionPolicyByCount::print(sorted_runs_);
+  sorted_runs_.push_front(SortedRunInfo{.num_sorted_runs = 1, .count = 1});
+  print_status();
 }
 
 Compaction* CompactionPickerByCount::PickCompaction(
@@ -44,9 +64,7 @@ Compaction* CompactionPickerByCount::PickCompaction(
     const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
     LogBuffer* log_buffer, bool require_max_output_level) {
   assert(vstorage->num_levels() == 1);
-  auto policy = mutable_cf_options.compaction_policy;
-  assert(policy != nullptr);
-  auto ret = policy->PickCompaction(sorted_runs_);
+  auto ret = PickRunsToCompact(mutable_cf_options);
   if (!ret.has_value()) return nullptr;
 
   auto [i, j] = ret.value();
@@ -86,12 +104,12 @@ Compaction* CompactionPickerByCount::PickCompaction(
     }
   }
 
-  CompactionPolicyByCount::SortedRunInfo* merging_info;
+  SortedRunInfo* merging_info;
   it = sorted_runs_.erase(first_to_erase, j);
   assert(it == j);
   it->num_sorted_runs = num;
   it->count = count;
-  policy->print(sorted_runs_);
+  print_status();
   return new Compaction(
       vstorage, ioptions_, mutable_cf_options, mutable_db_options,
       std::move(inputs), 0,

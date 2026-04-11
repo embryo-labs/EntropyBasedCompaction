@@ -11,7 +11,6 @@
 #include <memory>
 
 #include "rocksdb/cache.h"
-#include "rocksdb/compaction_policy_by_count.h"
 #include "rocksdb/compression_type.h"
 #include "rocksdb/memtablerep.h"
 #include "rocksdb/universal_compaction.h"
@@ -33,10 +32,10 @@ enum CompactionStyle : char {
   kCompactionStyleUniversal = 0x1,
   // FIFO compaction style
   kCompactionStyleFIFO = 0x2,
-  kCompactionStyleBenefitCost = 0x3,
+  kCompactionStyleEntropyBased = 0x3,
+  kCompactionStyleTiering = 0x4,
   // Trigger compactions based on the count of merged flushed SSTables
-  kCompactionStyleByCount = 0x4,
-  kCompactionStyleEntropyBased = 0x5,
+  kCompactionStyleLazyLeveling = 0x5,
   // Disable background compaction. Compaction jobs are submitted
   // via CompactFiles().
   kCompactionStyleNone = 0x6,
@@ -627,8 +626,6 @@ struct AdvancedColumnFamilyOptions {
   // SetOptions("compaction_options_fifo", "{max_table_files_size=100;}")
   CompactionOptionsFIFO compaction_options_fifo;
 
-  std::shared_ptr<CompactionPolicyByCount> compaction_policy;
-
   bool autotune_size_ratio = false;
 
   double entropy_threshold = 0;
@@ -643,6 +640,8 @@ struct AdvancedColumnFamilyOptions {
   bool last_compaction_io_sa = false;
   bool preempt_by_entropy = true;
   bool preempt_by_num = true;
+
+  double C = 3;
 
   // An iteration->Next() sequentially skips over keys with the same
   // user-key unless this option is set. This number specifies the number

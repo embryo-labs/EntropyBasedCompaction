@@ -316,7 +316,6 @@ void UpdateColumnFamilyOptions(const MutableCFOptions& moptions,
       moptions.memtable_avg_op_scan_flush_trigger;
   cf_opts->space_amplification_percent_limit_hard =
       moptions.space_amplification_percent_limit_hard;
-  cf_opts->main_level_size_threshold = moptions.main_level_size_threshold;
 }
 
 void UpdateColumnFamilyOptions(const ImmutableCFOptions& ioptions,
@@ -364,9 +363,9 @@ std::map<CompactionStyle, std::string>
         {kCompactionStyleLevel, "kCompactionStyleLevel"},
         {kCompactionStyleUniversal, "kCompactionStyleUniversal"},
         {kCompactionStyleFIFO, "kCompactionStyleFIFO"},
-        {kCompactionStyleBenefitCost, "kCompactionStyleBenefitCost"},
-        {kCompactionStyleByCount, "kCompactionStyleByCount"},
         {kCompactionStyleEntropyBased, "kCompactionStyleEntropyBased"},
+        {kCompactionStyleTiering, "kCompactionStyleTiering"},
+        {kCompactionStyleLazyLeveling, "kCompactionStyleLazyLeveling"},
         {kCompactionStyleNone, "kCompactionStyleNone"},
 };
 
@@ -963,9 +962,9 @@ std::unordered_map<std::string, CompactionStyle>
         {"kCompactionStyleLevel", kCompactionStyleLevel},
         {"kCompactionStyleUniversal", kCompactionStyleUniversal},
         {"kCompactionStyleFIFO", kCompactionStyleFIFO},
-        {"kCompactionStyleBenefitCost", kCompactionStyleBenefitCost},
-        {"kCompactionStyleByCount", kCompactionStyleByCount},
         {"kCompactionStyleEntropyBased", kCompactionStyleEntropyBased},
+        {"kCompactionStyleTiering", kCompactionStyleTiering},
+        {"kCompactionStyleLazyLeveling", kCompactionStyleLazyLeveling},
         {"kCompactionStyleNone", kCompactionStyleNone},
 };
 

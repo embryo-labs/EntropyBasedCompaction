@@ -29,8 +29,27 @@ class CompactionPickerByCount : public CompactionPicker {
       const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
       LogBuffer* log_buffer, bool require_max_output_level) override;
 
+ protected:
+  struct SortedRunInfo {
+    // > 1 means merging
+    size_t num_sorted_runs;
+    // The count of merged flushed SSTables
+    uint64_t count;
+
+    bool is_merging() const { return num_sorted_runs > 1; }
+  };
+
+  // REQUIRES: DB mutex held
+  // Returns [a, b]: status[a] to status[b] should be compacted into one
+  // sorted run.
+  virtual std::optional<std::pair<std::list<SortedRunInfo>::const_iterator,
+                                  std::list<SortedRunInfo>::const_iterator>>
+  PickRunsToCompact(const MutableCFOptions& mutable_cf_options) const = 0;
+
+  std::list<SortedRunInfo> sorted_runs_;
+
  private:
-  std::list<CompactionPolicyByCount::SortedRunInfo> sorted_runs_;
+  void print_status();
 
   const VersionStorageInfo* vstorage_;
 };

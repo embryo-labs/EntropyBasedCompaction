@@ -78,7 +78,6 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
       allow_intra_l0_compactions(options.allow_intra_l0_compactions),
       compaction_options_universal(options.compaction_options_universal),
       compaction_options_fifo(options.compaction_options_fifo),
-      compaction_policy(options.compaction_policy),
       entropy_threshold(options.entropy_threshold),
       pick_candidates_with_universal(options.pick_candidates_with_universal),
       pick_best_reff(options.pick_best_reff),

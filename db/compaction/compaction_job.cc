@@ -77,8 +77,8 @@ const char* GetCompactionReasonString(CompactionReason compaction_reason) {
       return "UniversalSortedRunNum";
     case CompactionReason::kPolicyByCount:
       return "PolicyByCount";
-    case CompactionReason::kPolicyBySize:
-      return "PolicyBySize";
+    case CompactionReason::kEntropy:
+      return "PolicyByCountSize";
     case CompactionReason::kUniversalIncrementalLastLevelCompaction:
       return "UniversalIncrementalLastLevelCompaction";
     case CompactionReason::kFIFOMaxSize:

@@ -50,8 +50,6 @@
 #include "port/stack_trace.h"
 #include "rocksdb/background_job_limiter.h"
 #include "rocksdb/cache.h"
-#include "rocksdb/compaction_policy_lazy_leveling.h"
-#include "rocksdb/compaction_policy_tiering.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
@@ -548,7 +546,6 @@ DEFINE_bool(allow_intra_l0_compactions,
             ROCKSDB_NAMESPACE::Options().allow_intra_l0_compactions, "");
 
 DEFINE_string(json_log_file, "", "");
-DEFINE_string(compaction_policy, "", "tiering/lazy-leveling");
 DEFINE_bool(autotune_size_ratio, false, "");
 DEFINE_double(entropy_threshold, 0.78, "");
 DEFINE_bool(autotune_entropy_threshold, false, "");
@@ -564,6 +561,8 @@ DEFINE_bool(prioritize_last_sorted_run_compaction, false, "");
 DEFINE_bool(last_compaction_io_sa, false, "");
 DEFINE_bool(preempt_by_entropy, true, "");
 DEFINE_bool(preempt_by_num, true, "");
+
+DEFINE_double(C, 3, "");
 
 DEFINE_int32(universal_size_ratio, 0,
              "Percentage flexibility while comparing file size "
@@ -592,10 +591,6 @@ DEFINE_bool(universal_allow_trivial_move, false,
 
 DEFINE_bool(universal_incremental, false,
             "Enable incremental compactions in universal compaction.");
-
-DEFINE_double(C, 3, "");
-
-DEFINE_uint64(main_level_size_threshold, 0, "");
 
 DEFINE_int32(
     universal_stop_style,
@@ -4901,7 +4896,6 @@ class Benchmark {
     options.uncache_aggressiveness = FLAGS_uncache_aggressiveness;
     options.space_amplification_percent_limit_hard =
         FLAGS_space_amplification_percent_limit_hard;
-    options.main_level_size_threshold = FLAGS_main_level_size_threshold;
     Status s =
         CreateMemTableRepFactory(config_options, &options.memtable_factory);
     if (!s.ok()) {
@@ -5324,17 +5318,6 @@ class Benchmark {
     if (!FLAGS_json_log_file.empty() && !options.json_log) {
       options.json_log = std::make_shared<JsonLogger>(FLAGS_json_log_file);
     }
-    if (FLAGS_compaction_style_e == CompactionStyle::kCompactionStyleByCount) {
-      if (FLAGS_compaction_policy == "tiering") {
-        options.compaction_policy = std::make_shared<CompactionPolicyTiering>(
-            FLAGS_max_bytes_for_level_multiplier);
-      } else {
-        assert(FLAGS_compaction_policy == "lazy-leveling");
-        options.compaction_policy =
-            std::make_shared<CompactionPolicyLazyLeveling>(
-                FLAGS_max_bytes_for_level_multiplier, FLAGS_C);
-      }
-    };
     options.autotune_size_ratio = FLAGS_autotune_size_ratio;
     options.entropy_threshold = FLAGS_entropy_threshold;
     options.pick_candidates_with_universal =
@@ -5350,6 +5333,7 @@ class Benchmark {
     options.last_compaction_io_sa = FLAGS_last_compaction_io_sa;
     options.preempt_by_entropy = FLAGS_preempt_by_entropy;
     options.preempt_by_num = FLAGS_preempt_by_num;
+    options.C = FLAGS_C;
     if (FLAGS_thread_status_per_interval > 0) {
       options.enable_thread_tracking = true;
     }

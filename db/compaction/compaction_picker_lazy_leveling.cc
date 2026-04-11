@@ -1,4 +1,4 @@
-#include "rocksdb/compaction_policy_lazy_leveling.h"
+#include "db/compaction/compaction_picker_lazy_leveling.h"
 
 #include <cassert>
 #include <cmath>
@@ -7,52 +7,58 @@
 namespace ROCKSDB_NAMESPACE {
 
 std::optional<std::pair<
-    std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator,
-    std::list<CompactionPolicyByCount::SortedRunInfo>::const_iterator>>
-CompactionPolicyLazyLeveling::PickCompaction(
-    const std::list<CompactionPolicyByCount::SortedRunInfo> &status) {
+    std::list<CompactionPickerByCountSize::SortedRunInfo>::const_iterator,
+    std::list<CompactionPickerByCountSize::SortedRunInfo>::const_iterator>>
+CompactionPickerLazyLeveling::PickRunsToCompact(
+    const MutableCFOptions& mutable_cf_options) const {
+  size_t T = mutable_cf_options.max_bytes_for_level_multiplier;
+  double C = mutable_cf_options.C;
+
   size_t count = 1;
-  auto last_sr = status.end();
-  if (last_sr == status.begin()) {
+  auto last_sr = sorted_runs_.end();
+  if (last_sr == sorted_runs_.begin()) {
     return std::nullopt;
   }
   --last_sr;
-  auto it = status.begin();
+  auto it = sorted_runs_.begin();
   auto i = it;
   size_t num = 0;  // it - i
+  uint64_t size = 0;
   while (it != last_sr) {
     if (it->is_merging()) {
       break;
     }
     if (it->count != count) {
-      if (num >= T_) {
+      if (num >= T) {
         break;
       }
       do {
         assert(it->count > count);
-        count *= T_;
+        count *= T;
       } while (it->count != count);
       i = it;
       num = 0;
+      size = 0;
     }
+    size += it->size;
     ++it;
     ++num;
   }
-  if (it == last_sr && num * count * C_ >= last_sr->count) {
+  if (it == last_sr && size * C >= last_sr->size) {
     // Should merge with the last sorted run
     if (last_sr->is_merging()) {
       return std::nullopt;
     }
     return std::make_pair(i, last_sr);
   }
-  if (num < T_) {
+  if (num < T) {
     return std::nullopt;
   }
-  if (it->is_merging() && it->count == count * T_) {
+  if (it->is_merging() && it->count == count * T) {
     // A compaction at this level is already in progress
     return std::nullopt;
   }
-  while (num > T_) {
+  while (num > T) {
     num -= 1;
     ++i;
   }

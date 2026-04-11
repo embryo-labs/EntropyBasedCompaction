@@ -10,7 +10,6 @@
 
 #include "db/dbformat.h"
 #include "options/db_options.h"
-#include "rocksdb/compaction_policy_by_count.h"
 #include "rocksdb/options.h"
 #include "util/compression.h"
 
@@ -143,8 +142,6 @@ struct MutableCFOptions {
             options.max_bytes_for_level_multiplier_additional),
         compaction_options_fifo(options.compaction_options_fifo),
         compaction_options_universal(options.compaction_options_universal),
-        compaction_policy(options.compaction_policy),
-        autotune_size_ratio(options.autotune_size_ratio),
         entropy_threshold(options.entropy_threshold),
         pick_candidates_with_universal(options.pick_candidates_with_universal),
         pick_best_reff(options.pick_best_reff),
@@ -158,6 +155,7 @@ struct MutableCFOptions {
         last_compaction_io_sa(options.last_compaction_io_sa),
         preempt_by_entropy(options.preempt_by_entropy),
         preempt_by_num(options.preempt_by_num),
+        C(options.C),
         preclude_last_level_data_seconds(
             options.preclude_last_level_data_seconds),
         preserve_internal_time_seconds(options.preserve_internal_time_seconds),
@@ -201,8 +199,7 @@ struct MutableCFOptions {
         memtable_avg_op_scan_flush_trigger(
             options.memtable_avg_op_scan_flush_trigger),
         space_amplification_percent_limit_hard(
-            options.space_amplification_percent_limit_hard),
-        main_level_size_threshold(options.main_level_size_threshold) {
+            options.space_amplification_percent_limit_hard) {
     RefreshDerivedOptions(options.num_levels, options.compaction_style);
   }
 
@@ -338,9 +335,6 @@ struct MutableCFOptions {
   std::vector<int> max_bytes_for_level_multiplier_additional;
   CompactionOptionsFIFO compaction_options_fifo;
   CompactionOptionsUniversal compaction_options_universal;
-  std::shared_ptr<CompactionPolicyByCount> compaction_policy;
-
-  bool autotune_size_ratio;
 
   double entropy_threshold;
   bool pick_candidates_with_universal;
@@ -354,6 +348,9 @@ struct MutableCFOptions {
   bool last_compaction_io_sa;
   bool preempt_by_entropy;
   bool preempt_by_num;
+
+  double C;
+
   uint64_t preclude_last_level_data_seconds;
   uint64_t preserve_internal_time_seconds;
 

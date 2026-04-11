@@ -410,7 +410,6 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
   // 0: disabled
   // Default: 0
   uint32_t space_amplification_percent_limit_hard = 0;
-  uint64_t main_level_size_threshold = 0;
 
   // Create ColumnFamilyOptions with default values for all fields
   ColumnFamilyOptions();

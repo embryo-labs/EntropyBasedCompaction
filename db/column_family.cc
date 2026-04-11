@@ -19,11 +19,11 @@
 #include "db/blob/blob_file_cache.h"
 #include "db/blob/blob_source.h"
 #include "db/compaction/compaction_picker.h"
-#include "db/compaction/compaction_picker_benefit_cost.h"
-#include "db/compaction/compaction_picker_by_count.h"
 #include "db/compaction/compaction_picker_entropy_based.h"
 #include "db/compaction/compaction_picker_fifo.h"
+#include "db/compaction/compaction_picker_lazy_leveling.h"
 #include "db/compaction/compaction_picker_level.h"
+#include "db/compaction/compaction_picker_tiering.h"
 #include "db/compaction/compaction_picker_universal.h"
 #include "db/db_impl/db_impl.h"
 #include "db/internal_stats.h"
@@ -674,15 +674,15 @@ ColumnFamilyData::ColumnFamilyData(
     } else if (ioptions_.compaction_style == kCompactionStyleFIFO) {
       compaction_picker_.reset(
           new FIFOCompactionPicker(ioptions_, &internal_comparator_));
-    } else if (ioptions_.compaction_style == kCompactionStyleBenefitCost) {
-      compaction_picker_.reset(
-          new CompactionPickerBenefitCost(ioptions_, &internal_comparator_));
-    } else if (ioptions_.compaction_style == kCompactionStyleByCount) {
-      compaction_picker_.reset(
-          new CompactionPickerByCount(ioptions_, &internal_comparator_));
     } else if (ioptions_.compaction_style == kCompactionStyleEntropyBased) {
       compaction_picker_.reset(
           new CompactionPickerEntropyBased(ioptions_, &internal_comparator_));
+    } else if (ioptions_.compaction_style == kCompactionStyleTiering) {
+      compaction_picker_.reset(
+          new CompactionPickerTiering(ioptions_, &internal_comparator_));
+    } else if (ioptions_.compaction_style == kCompactionStyleLazyLeveling) {
+      compaction_picker_.reset(
+          new CompactionPickerLazyLeveling(ioptions_, &internal_comparator_));
     } else if (ioptions_.compaction_style == kCompactionStyleNone) {
       compaction_picker_.reset(
           new NullCompactionPicker(ioptions_, &internal_comparator_));

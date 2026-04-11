@@ -386,10 +386,9 @@ Compaction* CompactionPickerEntropyBased::PickCompaction(
       /* max_subcompactions */ 0, /* grandparents not supported yet */ {},
       /* earliest_snapshot */ std::nullopt,
       /* snapshot_checker */ nullptr, std::move(limiter_handle),
-      CompactionReason::kPolicyByCount, /* trim_ts */ "", /*score*/ 2333,
+      CompactionReason::kEntropy, /* trim_ts */ "", /*score*/ 2333,
       /* l0_files_might_overlap */ true,
-      BlobGarbageCollectionPolicy::kUseDefault, -1, &*it,
-      io_pri);
+      BlobGarbageCollectionPolicy::kUseDefault, -1, &*it, io_pri);
   it->c = c;
   print_status();
   RegisterCompaction(c);
