@@ -7181,7 +7181,7 @@ class Benchmark {
     options.async_io = true;
     options.readahead_size = readahead;
 
-    Duration duration(FLAGS_duration, reads_);
+    Duration duration(duration_, reads_);
     int64_t num_keys = 1;
     while (!duration.Done(num_keys)) {
       DB* db = SelectDB(thread);
