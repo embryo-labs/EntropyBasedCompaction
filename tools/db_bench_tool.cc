@@ -535,7 +535,7 @@ DEFINE_int32(max_background_flushes,
 static ROCKSDB_NAMESPACE::CompactionStyle FLAGS_compaction_style_e;
 DEFINE_int32(compaction_style,
              (int32_t)ROCKSDB_NAMESPACE::Options().compaction_style,
-             "style of compaction: level-based, universal, fifo, by-count");
+             "style of compaction: level-based, universal and fifo");
 
 static ROCKSDB_NAMESPACE::CompactionPri FLAGS_compaction_pri_e;
 DEFINE_int32(compaction_pri,
@@ -2585,7 +2585,6 @@ class ReporterAgent {
 
   const std::vector<Tickers> tickers_to_report_{
       COMPACT_WRITE_BYTES,
-      WAIT_FOR_LAST_LEVEL_COMPACTION,
   };
   std::unordered_map<Tickers, uint64_t> last_ticker_;
 
