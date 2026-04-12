@@ -446,10 +446,8 @@ const std::string DB::Properties::kBlobCacheUsage =
     rocksdb_prefix + blob_cache_usage;
 const std::string DB::Properties::kBlobCachePinnedUsage =
     rocksdb_prefix + blob_cache_pinned_usage;
-const std::string DB::Properties::kNumTopLevelSortedRuns =
-    rocksdb_prefix + "num-top-level-sorted-runs";
-const std::string DB::Properties::kNumMergingMainLevelSortedRuns =
-    rocksdb_prefix + "num-merging-main-level-sorted-runs";
+const std::string DB::Properties::kNumMergingL0SortedRuns =
+    rocksdb_prefix + "num-merging-l0-sorted-runs";
 const std::string DB::Properties::kBufferLevelSize =
     rocksdb_prefix + "buffer-level-size";
 
@@ -644,12 +642,9 @@ const UnorderedMap<std::string, DBPropertyInfo>
         {DB::Properties::kBlobCachePinnedUsage,
          {false, nullptr, &InternalStats::HandleBlobCachePinnedUsage, nullptr,
           nullptr}},
-        {DB::Properties::kNumTopLevelSortedRuns,
-         {true, nullptr, &InternalStats::HandleNumTopLevelSortedRuns, nullptr,
+        {DB::Properties::kNumMergingL0SortedRuns,
+         {true, nullptr, &InternalStats::HandleNumMergingL0SortedRuns, nullptr,
           nullptr}},
-        {DB::Properties::kNumMergingMainLevelSortedRuns,
-         {true, nullptr, &InternalStats::HandleNumMergingMainLevelSortedRuns,
-          nullptr, nullptr}},
         {DB::Properties::kBufferLevelSize,
          {true, nullptr, &InternalStats::HandleBufferLevelSize, nullptr,
           nullptr}},
@@ -987,43 +982,17 @@ bool InternalStats::HandleBlobCachePinnedUsage(uint64_t* value, DBImpl* /*db*/,
   return false;
 }
 
-bool InternalStats::HandleNumTopLevelSortedRuns(uint64_t* value, DBImpl* /*db*/,
-                                                Version* version) {
+bool InternalStats::HandleNumMergingL0SortedRuns(uint64_t* value,
+                                                 DBImpl* /*db*/,
+                                                 Version* version) {
   *value = 0;
   VersionStorageInfo* storage_info = version->storage_info();
   if (storage_info->num_levels() == 0) {
     return true;
   }
-  uint64_t main_level_size_threshold =
-      version->GetMutableCFOptions().main_level_size_threshold;
   const auto& l0_files = storage_info->LevelFiles(0);
   for (const auto& file : l0_files) {
-    if (file->fd.file_size <= main_level_size_threshold) {
-      *value += 1;
-    }
-  }
-  return true;
-}
-
-bool InternalStats::HandleNumMergingMainLevelSortedRuns(uint64_t* value,
-                                                        DBImpl* /*db*/,
-                                                        Version* version) {
-  *value = 0;
-  VersionStorageInfo* storage_info = version->storage_info();
-  if (storage_info->num_levels() == 0) {
-    return true;
-  }
-  uint64_t main_level_size_threshold =
-      version->GetMutableCFOptions().main_level_size_threshold;
-  const auto& l0_files = storage_info->LevelFiles(0);
-  for (const auto& file : l0_files) {
-    if (file->being_compacted &&
-        file->fd.file_size > main_level_size_threshold) {
-      *value += 1;
-    }
-  }
-  for (int level = 1; level < storage_info->num_levels() - 1; ++level) {
-    if (storage_info->NumLevelFiles(level) > 0) {
+    if (file->being_compacted) {
       *value += 1;
     }
   }

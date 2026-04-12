@@ -2335,8 +2335,8 @@ class ReporterAgent {
         header << ',' << TickersNameMap[ticker].second;
       }
     }
-    header << ",num-sorted-runs," << DB::Properties::kNumTopLevelSortedRuns
-           << ',' << DB::Properties::kNumMergingMainLevelSortedRuns << ','
+    header << ",num-sorted-runs," << ','
+           << DB::Properties::kNumMergingL0SortedRuns << ','
            << DB::Properties::kBufferLevelSize;
     header << ",num-flushes,num-compactions,size,Re";
     if (options.background_job_limiter) {
@@ -2420,12 +2420,7 @@ class ReporterAgent {
 
       uint64_t value;
       bool good =
-          db_->GetIntProperty(DB::Properties::kNumTopLevelSortedRuns, &value);
-      assert(good);
-      report << ',' << value;
-
-      good = db_->GetIntProperty(DB::Properties::kNumMergingMainLevelSortedRuns,
-                                 &value);
+          db_->GetIntProperty(DB::Properties::kNumMergingL0SortedRuns, &value);
       assert(good);
       report << ',' << value;
 

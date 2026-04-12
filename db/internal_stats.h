@@ -921,12 +921,8 @@ class InternalStats {
   bool HandleBlobCacheUsage(uint64_t* value, DBImpl* db, Version* version);
   bool HandleBlobCachePinnedUsage(uint64_t* value, DBImpl* db,
                                   Version* version);
-  bool HandleNumMergingSortedRuns(uint64_t* value, DBImpl* db,
-                                  Version* version);
-  bool HandleNumTopLevelSortedRuns(uint64_t* value, DBImpl* db,
-                                   Version* version);
-  bool HandleNumMergingMainLevelSortedRuns(uint64_t* value, DBImpl* db,
-                                           Version* version);
+  bool HandleNumMergingL0SortedRuns(uint64_t* value, DBImpl* db,
+                                    Version* version);
   bool HandleBufferLevelSize(uint64_t* value, DBImpl* /*db*/, Version* version);
 
   // Total number of background errors encountered. Every time a flush task

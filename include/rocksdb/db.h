@@ -1444,8 +1444,7 @@ class DB {
     //      entries being pinned in blob cache.
     static const std::string kBlobCachePinnedUsage;
 
-    static const std::string kNumTopLevelSortedRuns;
-    static const std::string kNumMergingMainLevelSortedRuns;
+    static const std::string kNumMergingL0SortedRuns;
     static const std::string kBufferLevelSize;
   };
 
