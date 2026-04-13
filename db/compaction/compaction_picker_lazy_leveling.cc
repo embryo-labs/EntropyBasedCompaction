@@ -11,10 +11,10 @@ std::optional<std::pair<
     std::list<CompactionPickerByCountSize::SortedRunInfo>::const_iterator>>
 CompactionPickerLazyLeveling::PickRunsToCompact(
     const MutableCFOptions& mutable_cf_options) const {
-  size_t T = mutable_cf_options.max_bytes_for_level_multiplier;
+  uint64_t T = mutable_cf_options.max_bytes_for_level_multiplier;
   double C = mutable_cf_options.C;
 
-  size_t count = 1;
+  uint64_t count = 1;
   auto last_sr = sorted_runs_.end();
   if (last_sr == sorted_runs_.begin()) {
     return std::nullopt;
