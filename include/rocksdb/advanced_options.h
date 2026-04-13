@@ -34,7 +34,6 @@ enum CompactionStyle : char {
   kCompactionStyleFIFO = 0x2,
   kCompactionStyleEntropyBased = 0x3,
   kCompactionStyleTiering = 0x4,
-  // Trigger compactions based on the count of merged flushed SSTables
   kCompactionStyleLazyLeveling = 0x5,
   // Disable background compaction. Compaction jobs are submitted
   // via CompactFiles().
