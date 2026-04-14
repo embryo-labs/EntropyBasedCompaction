@@ -262,8 +262,7 @@ struct MutableCFOptions {
         uncache_aggressiveness(0),
         memtable_op_scan_flush_trigger(0),
         memtable_avg_op_scan_flush_trigger(0),
-        space_amplification_percent_limit_hard(0),
-        main_level_size_threshold(0) {}
+        space_amplification_percent_limit_hard(0) {}
 
   explicit MutableCFOptions(const Options& options);
 
@@ -391,7 +390,6 @@ struct MutableCFOptions {
   uint32_t memtable_avg_op_scan_flush_trigger;
 
   uint32_t space_amplification_percent_limit_hard;
-  uint64_t main_level_size_threshold;
 
   // Derived options
   // Per-level target file size.

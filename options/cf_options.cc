@@ -679,10 +679,6 @@ static std::unordered_map<std::string, OptionTypeInfo>
                    space_amplification_percent_limit_hard),
           OptionType::kUInt32T, OptionVerificationType::kNormal,
           OptionTypeFlags::kMutable}},
-        {"main_level_size_threshold",
-         {offsetof(struct MutableCFOptions, main_level_size_threshold),
-          OptionType::kUInt64T, OptionVerificationType::kNormal,
-          OptionTypeFlags::kMutable}},
         {"block_protection_bytes_per_key",
          {offsetof(struct MutableCFOptions, block_protection_bytes_per_key),
           OptionType::kUInt8T, OptionVerificationType::kNormal,
@@ -1256,8 +1252,6 @@ void MutableCFOptions::Dump(Logger* log) const {
                  uncache_aggressiveness);
   ROCKS_LOG_INFO(log, "   space_amplification_percent_limit_hard: %" PRIu32,
                  space_amplification_percent_limit_hard);
-  ROCKS_LOG_INFO(log, "                main_level_size_threshold: %" PRIu64,
-                 main_level_size_threshold);
 
   ROCKS_LOG_INFO(log, "             memtable_op_scan_flush_trigger: %" PRIu32,
                  memtable_op_scan_flush_trigger);
