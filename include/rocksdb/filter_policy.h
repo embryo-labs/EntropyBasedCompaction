@@ -79,6 +79,8 @@ struct FilterBuildingContext {
 
   // Reason for creating the file with the filter
   TableFileCreationReason reason = TableFileCreationReason::kMisc;
+
+  uint32_t bloom_millibits_per_key = 0;
 };
 
 // Determines what kind of filter (if any) to generate in SST files, and under

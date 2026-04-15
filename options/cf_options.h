@@ -156,6 +156,7 @@ struct MutableCFOptions {
         preempt_by_entropy(options.preempt_by_entropy),
         preempt_by_num(options.preempt_by_num),
         C(options.C),
+        num_logical_levels(options.num_logical_levels),
         preclude_last_level_data_seconds(
             options.preclude_last_level_data_seconds),
         preserve_internal_time_seconds(options.preserve_internal_time_seconds),
@@ -349,6 +350,8 @@ struct MutableCFOptions {
   bool preempt_by_num;
 
   double C;
+
+  uint64_t num_logical_levels;
 
   uint64_t preclude_last_level_data_seconds;
   uint64_t preserve_internal_time_seconds;

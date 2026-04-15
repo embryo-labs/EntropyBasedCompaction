@@ -37,6 +37,7 @@ LIB_SOURCES =                                                   \
   db/compaction/compaction_iterator.cc                          \
   db/compaction/compaction_job.cc                               \
   db/compaction/compaction_picker.cc                            \
+  db/compaction/compaction_picker_bush.cc                       \
   db/compaction/compaction_picker_by_count.cc                   \
   db/compaction/compaction_picker_by_count_size.cc              \
   db/compaction/compaction_picker_entropy_based.cc              \

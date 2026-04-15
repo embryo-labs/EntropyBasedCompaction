@@ -19,6 +19,7 @@
 #include "db/blob/blob_file_cache.h"
 #include "db/blob/blob_source.h"
 #include "db/compaction/compaction_picker.h"
+#include "db/compaction/compaction_picker_bush.h"
 #include "db/compaction/compaction_picker_entropy_based.h"
 #include "db/compaction/compaction_picker_fifo.h"
 #include "db/compaction/compaction_picker_lazy_leveling.h"
@@ -683,6 +684,9 @@ ColumnFamilyData::ColumnFamilyData(
     } else if (ioptions_.compaction_style == kCompactionStyleLazyLeveling) {
       compaction_picker_.reset(
           new CompactionPickerLazyLeveling(ioptions_, &internal_comparator_));
+    } else if (ioptions_.compaction_style == kCompactionStyleBush) {
+      compaction_picker_.reset(
+          new CompactionPickerBush(ioptions_, &internal_comparator_));
     } else if (ioptions_.compaction_style == kCompactionStyleNone) {
       compaction_picker_.reset(
           new NullCompactionPicker(ioptions_, &internal_comparator_));

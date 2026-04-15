@@ -366,6 +366,7 @@ std::map<CompactionStyle, std::string>
         {kCompactionStyleEntropyBased, "kCompactionStyleEntropyBased"},
         {kCompactionStyleTiering, "kCompactionStyleTiering"},
         {kCompactionStyleLazyLeveling, "kCompactionStyleLazyLeveling"},
+        {kCompactionStyleBush, "kCompactionStyleBush"},
         {kCompactionStyleNone, "kCompactionStyleNone"},
 };
 
@@ -965,6 +966,7 @@ std::unordered_map<std::string, CompactionStyle>
         {"kCompactionStyleEntropyBased", kCompactionStyleEntropyBased},
         {"kCompactionStyleTiering", kCompactionStyleTiering},
         {"kCompactionStyleLazyLeveling", kCompactionStyleLazyLeveling},
+        {"kCompactionStyleBush", kCompactionStyleBush},
         {"kCompactionStyleNone", kCompactionStyleNone},
 };
 

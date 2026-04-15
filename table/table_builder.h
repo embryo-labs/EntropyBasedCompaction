@@ -122,7 +122,8 @@ struct TableBuilderOptions : public TablePropertiesCollectorFactory::Context {
       const uint64_t _target_file_size = 0, const uint64_t _cur_file_num = 0,
       const SequenceNumber _last_level_inclusive_max_seqno_threshold =
           kMaxSequenceNumber,
-      const std::atomic<Env::IOPriority>* _io_priority = nullptr)
+      const std::atomic<Env::IOPriority>* _io_priority = nullptr,
+      uint32_t _bloom_millibits_per_key = 0)
       : TablePropertiesCollectorFactory::Context(
             _column_family_id, _level, _ioptions.num_levels,
             _last_level_inclusive_max_seqno_threshold),
@@ -144,6 +145,7 @@ struct TableBuilderOptions : public TablePropertiesCollectorFactory::Context {
         db_session_id(_db_session_id),
         is_bottommost(_is_bottommost),
         reason(_reason),
+        bloom_millibits_per_key(_bloom_millibits_per_key),
         cur_file_num(_cur_file_num) {}
 
   const ImmutableOptions& ioptions;
@@ -165,6 +167,7 @@ struct TableBuilderOptions : public TablePropertiesCollectorFactory::Context {
   // BEGIN for FilterBuildingContext
   const bool is_bottommost;
   const TableFileCreationReason reason;
+  const uint32_t bloom_millibits_per_key;
   // END for FilterBuildingContext
 
   // XXX: only used by BlockBasedTableBuilder for SstFileWriter. If you

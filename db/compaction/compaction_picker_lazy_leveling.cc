@@ -6,9 +6,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-std::optional<std::pair<
-    std::list<CompactionPickerByCountSize::SortedRunInfo>::const_iterator,
-    std::list<CompactionPickerByCountSize::SortedRunInfo>::const_iterator>>
+std::optional<CompactionPickerByCountSize::PickResult>
 CompactionPickerLazyLeveling::PickRunsToCompact(
     const MutableCFOptions& mutable_cf_options) const {
   uint64_t T = mutable_cf_options.max_bytes_for_level_multiplier;
@@ -49,7 +47,10 @@ CompactionPickerLazyLeveling::PickRunsToCompact(
     if (last_sr->is_merging()) {
       return std::nullopt;
     }
-    return std::make_pair(i, last_sr);
+    return PickResult{
+        .first = i,
+        .last = last_sr,
+    };
   }
   if (num < T) {
     return std::nullopt;
@@ -63,7 +64,10 @@ CompactionPickerLazyLeveling::PickRunsToCompact(
     ++i;
   }
   --it;
-  return std::make_pair(i, it);
+  return PickResult{
+    .first = i,
+    .last = it,
+  };
 }
 
 }  // namespace ROCKSDB_NAMESPACE

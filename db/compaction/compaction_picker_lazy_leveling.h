@@ -10,9 +10,8 @@ class CompactionPickerLazyLeveling : public CompactionPickerByCountSize {
                                const InternalKeyComparator* icmp)
       : CompactionPickerByCountSize(ioptions, icmp) {}
 
-  std::optional<std::pair<std::list<SortedRunInfo>::const_iterator,
-                          std::list<SortedRunInfo>::const_iterator>>
-  PickRunsToCompact(const MutableCFOptions& mutable_cf_options) const override;
+  std::optional<PickResult> PickRunsToCompact(
+      const MutableCFOptions& mutable_cf_options) const override;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

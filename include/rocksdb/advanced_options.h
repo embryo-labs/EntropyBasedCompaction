@@ -35,9 +35,10 @@ enum CompactionStyle : char {
   kCompactionStyleEntropyBased = 0x3,
   kCompactionStyleTiering = 0x4,
   kCompactionStyleLazyLeveling = 0x5,
+  kCompactionStyleBush = 0x6,
   // Disable background compaction. Compaction jobs are submitted
   // via CompactFiles().
-  kCompactionStyleNone = 0x6,
+  kCompactionStyleNone = 0x7,
 };
 
 // In Level-based compaction, it Determines which file from a level to be
@@ -641,6 +642,8 @@ struct AdvancedColumnFamilyOptions {
   bool preempt_by_num = true;
 
   double C = 3;
+
+  uint64_t num_logical_levels = 0;
 
   // An iteration->Next() sequentially skips over keys with the same
   // user-key unless this option is set. This number specifies the number

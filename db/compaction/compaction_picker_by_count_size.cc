@@ -72,19 +72,20 @@ Compaction* CompactionPickerByCountSize::PickCompaction(
   auto ret = PickRunsToCompact(mutable_cf_options);
   if (!ret.has_value()) return nullptr;
 
-  auto [i, j] = ret.value();
+  const auto pick_result = ret.value();
   std::vector<CompactionInputFiles> inputs(1);
   inputs[0].level = 0;
   const auto& l0_files = vstorage->LevelFiles(0);
   size_t file_i = 0;
   auto it = sorted_runs_.begin();
-  while (it != i) {
+  while (it != pick_result.first) {
     file_i += it->num_sorted_runs;
     assert(file_i < l0_files.size());
     ++it;
   }
 
-  auto first_to_erase = i;
+  auto first_to_erase = pick_result.first;
+  auto i = pick_result.first;
   uint64_t num = 0;
   uint64_t count = 0;
   uint64_t size = 0;
@@ -95,7 +96,7 @@ Compaction* CompactionPickerByCountSize::PickCompaction(
     auto file = l0_files.at(file_i);
     assert(!file->being_compacted);
     inputs[0].files.push_back(file);
-    if (i == j) {
+    if (i == pick_result.last) {
       break;
     }
     ++i;
@@ -112,8 +113,8 @@ Compaction* CompactionPickerByCountSize::PickCompaction(
   }
 
   SortedRunInfo* merging_info;
-  it = sorted_runs_.erase(first_to_erase, j);
-  assert(it == j);
+  it = sorted_runs_.erase(first_to_erase, pick_result.last);
+  assert(it == pick_result.last);
   it->num_sorted_runs = num;
   it->count = count;
   it->size = size;
@@ -134,7 +135,8 @@ Compaction* CompactionPickerByCountSize::PickCompaction(
       /* snapshot_checker */ nullptr, std::move(limiter_handle),
       CompactionReason::kPolicyByCount, /* trim_ts */ "", /*score*/ 2333,
       /* l0_files_might_overlap */ true,
-      BlobGarbageCollectionPolicy::kUseDefault, -1, &*it, Env::IO_LOW);
+      BlobGarbageCollectionPolicy::kUseDefault, -1, &*it, Env::IO_LOW,
+      pick_result.bloom_millibits_per_key);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

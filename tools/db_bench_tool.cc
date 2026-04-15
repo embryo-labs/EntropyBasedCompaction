@@ -564,6 +564,8 @@ DEFINE_bool(preempt_by_num, true, "");
 
 DEFINE_double(C, 3, "");
 
+DEFINE_uint64(num_logical_levels, 4, "");
+
 DEFINE_int32(universal_size_ratio, 0,
              "Percentage flexibility while comparing file size "
              "(for universal compaction only).");
@@ -5328,6 +5330,7 @@ class Benchmark {
     options.preempt_by_entropy = FLAGS_preempt_by_entropy;
     options.preempt_by_num = FLAGS_preempt_by_num;
     options.C = FLAGS_C;
+    options.num_logical_levels = FLAGS_num_logical_levels;
     if (FLAGS_thread_status_per_interval > 0) {
       options.enable_thread_tracking = true;
     }

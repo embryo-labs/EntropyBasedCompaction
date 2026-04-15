@@ -287,12 +287,11 @@ Compaction::Compaction(
     std::optional<SequenceNumber> _earliest_snapshot,
     const SnapshotChecker* _snapshot_checker,
     std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle,
-    CompactionReason _compaction_reason,
-    const std::string& _trim_ts, double _score,
-    bool l0_files_might_overlap,
+    CompactionReason _compaction_reason, const std::string& _trim_ts,
+    double _score, bool l0_files_might_overlap,
     BlobGarbageCollectionPolicy _blob_garbage_collection_policy,
     double _blob_garbage_collection_age_cutoff, void* merging_info,
-    Env::IOPriority io_priority)
+    Env::IOPriority io_priority, uint32_t bloom_millibits_per_key)
     : input_vstorage_(vstorage),
       start_level_(_inputs[0].level),
       output_level_(_output_level),
@@ -348,6 +347,7 @@ Compaction::Compaction(
               : _blob_garbage_collection_age_cutoff),
       merging_info_(merging_info),
       io_priority_(io_priority),
+      bloom_millibits_per_key_(bloom_millibits_per_key),
       proximal_level_(
           // For simplicity, we don't support the concept of "proximal level"
           // with `CompactionReason::kExternalSstIngestion` and

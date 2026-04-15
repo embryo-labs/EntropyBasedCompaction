@@ -1510,8 +1510,10 @@ FilterBitsBuilder* BloomLikeFilterPolicy::GetFastLocalBloomBuilderWithContext(
         context.table_options.block_cache);
   }
   return new FastLocalBloomBitsBuilder(
-      millibits_per_key_, offm ? &aggregate_rounding_balance_ : nullptr,
-      cache_res_mgr, context.table_options.detect_filter_construct_corruption);
+      context.bloom_millibits_per_key ? context.bloom_millibits_per_key
+                                      : millibits_per_key_,
+      offm ? &aggregate_rounding_balance_ : nullptr, cache_res_mgr,
+      context.table_options.detect_filter_construct_corruption);
 }
 
 FilterBitsBuilder* BloomLikeFilterPolicy::GetLegacyBloomBuilderWithContext(
@@ -1844,7 +1846,8 @@ FilterBitsBuilder* RibbonFilterPolicy::GetBuilderWithContext(
       case kCompactionStyleUniversal:
       case kCompactionStyleEntropyBased:
       case kCompactionStyleTiering:
-      case kCompactionStyleLazyLeveling: {
+      case kCompactionStyleLazyLeveling:
+      case kCompactionStyleBush: {
         if (context.reason == TableFileCreationReason::kFlush) {
           // Treat flush as level -1
           assert(context.level_at_creation == 0);

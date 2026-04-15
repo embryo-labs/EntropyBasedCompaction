@@ -44,12 +44,17 @@ class CompactionPickerByCountSize : public CompactionPicker {
     bool is_merging() const { return num_sorted_runs > 1; }
   };
 
+  struct PickResult {
+    std::list<SortedRunInfo>::const_iterator first;
+    std::list<SortedRunInfo>::const_iterator last;
+    uint32_t bloom_millibits_per_key = 0;
+  };
+
   // REQUIRES: DB mutex held
   // Returns [a, b]: status[a] to status[b] should be compacted into one
   // sorted run.
-  virtual std::optional<std::pair<std::list<SortedRunInfo>::const_iterator,
-                                  std::list<SortedRunInfo>::const_iterator>>
-  PickRunsToCompact(const MutableCFOptions& mutable_cf_options) const = 0;
+  virtual std::optional<PickResult> PickRunsToCompact(
+      const MutableCFOptions& mutable_cf_options) const = 0;
 
   std::list<SortedRunInfo> sorted_runs_;
 

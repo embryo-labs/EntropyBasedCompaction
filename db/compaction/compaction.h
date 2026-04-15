@@ -83,28 +83,28 @@ class CompactionFilter;
 // A Compaction encapsulates metadata about a compaction.
 class Compaction {
  public:
-  Compaction(VersionStorageInfo* input_version,
-             const ImmutableOptions& immutable_options,
-             const MutableCFOptions& mutable_cf_options,
-             const MutableDBOptions& mutable_db_options,
-             std::vector<CompactionInputFiles> inputs, int output_level,
-             uint64_t target_file_size, uint64_t max_compaction_bytes,
-             uint32_t output_path_id, CompressionType compression,
-             CompressionOptions compression_opts,
-             Temperature output_temperature_override,
-             uint32_t max_subcompactions,
-             std::vector<FileMetaData*> grandparents,
-             std::optional<SequenceNumber> earliest_snapshot,
-             const SnapshotChecker* snapshot_checker,
-             std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle,
-             CompactionReason compaction_reason,
-             const std::string& trim_ts = "", double score = -1,
-             bool l0_files_might_overlap = true,
-             BlobGarbageCollectionPolicy blob_garbage_collection_policy =
-                 BlobGarbageCollectionPolicy::kUseDefault,
-             double blob_garbage_collection_age_cutoff = -1,
-            void* merging_info = nullptr,
-            Env::IOPriority io_priority = Env::IOPriority::IO_LOW);
+  Compaction(
+      VersionStorageInfo* input_version,
+      const ImmutableOptions& immutable_options,
+      const MutableCFOptions& mutable_cf_options,
+      const MutableDBOptions& mutable_db_options,
+      std::vector<CompactionInputFiles> inputs, int output_level,
+      uint64_t target_file_size, uint64_t max_compaction_bytes,
+      uint32_t output_path_id, CompressionType compression,
+      CompressionOptions compression_opts,
+      Temperature output_temperature_override, uint32_t max_subcompactions,
+      std::vector<FileMetaData*> grandparents,
+      std::optional<SequenceNumber> earliest_snapshot,
+      const SnapshotChecker* snapshot_checker,
+      std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle,
+      CompactionReason compaction_reason, const std::string& trim_ts = "",
+      double score = -1, bool l0_files_might_overlap = true,
+      BlobGarbageCollectionPolicy blob_garbage_collection_policy =
+          BlobGarbageCollectionPolicy::kUseDefault,
+      double blob_garbage_collection_age_cutoff = -1,
+      void* merging_info = nullptr,
+      Env::IOPriority io_priority = Env::IOPriority::IO_LOW,
+      uint32_t bloom_millibits_per_key = 0);
 
   // The type of the proximal level output range
   enum class ProximalOutputRangeType : int {
@@ -431,6 +431,7 @@ class Compaction {
   }
 
   void* merging_info() const { return merging_info_; }
+  uint32_t bloom_millibits_per_key() const { return bloom_millibits_per_key_; }
 
   const std::atomic<Env::IOPriority>& io_priority() const {
     return io_priority_;
@@ -676,6 +677,8 @@ class Compaction {
 
   // Actually no need to be atomic. Just to suppress data race warning.
   std::atomic<Env::IOPriority> io_priority_;
+
+  int32_t bloom_millibits_per_key_;
 
   SequenceNumber keep_in_last_level_through_seqno_ = kMaxSequenceNumber;
 
