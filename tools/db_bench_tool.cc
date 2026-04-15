@@ -2337,9 +2337,8 @@ class ReporterAgent {
         header << ',' << TickersNameMap[ticker].second;
       }
     }
-    header << ",num-sorted-runs," << ','
-           << DB::Properties::kNumMergingL0SortedRuns << ','
-           << DB::Properties::kBufferLevelSize;
+    header << ",num-sorted-runs," << DB::Properties::kNumMergingL0SortedRuns
+           << ',' << DB::Properties::kBufferLevelSize;
     header << ",num-flushes,num-compactions,size,Re";
     if (options.background_job_limiter) {
       header << ",num-running-bg-jobs";
