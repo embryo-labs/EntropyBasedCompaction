@@ -85,6 +85,9 @@ struct ImmutableCFOptions {
 
   bool persist_user_defined_timestamps;
 
+  uint64_t num_horizontal_levels;
+  uint64_t k;
+
   bool cf_allow_ingest_behind;
 };
 

@@ -46,6 +46,7 @@ LIB_SOURCES =                                                   \
   db/compaction/compaction_picker_level.cc                      \
   db/compaction/compaction_picker_tiering.cc                    \
   db/compaction/compaction_picker_universal.cc                  \
+  db/compaction/compaction_picker_vertiorizon.cc                \
   db/compaction/compaction_service_job.cc                       \
   db/compaction/compaction_state.cc                             \
   db/compaction/compaction_outputs.cc                           \
@@ -697,6 +698,7 @@ JNI_NATIVE_SOURCES =                                          \
   java/rocksjni/compaction_options.cc                         \
   java/rocksjni/compaction_options_fifo.cc                    \
   java/rocksjni/compaction_options_universal.cc               \
+  java/rocksjni/compaction_options_vertiorizon.cc             \
   java/rocksjni/comparator.cc                                 \
   java/rocksjni/comparatorjnicallback.cc                      \
   java/rocksjni/compression_options.cc                        \

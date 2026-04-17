@@ -3740,6 +3740,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
             cfd, *(c->inputs()), &sfm_reserved_compact_space, log_buffer);
 
         if (!enough_room) {
+          assert(false);  // not supported yet
           // Then don't do the compaction
           c->ReleaseCompactionFiles(status);
           c->column_family_data()
@@ -4174,6 +4175,13 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
         [&c, &compaction_released](const Status& s) {
           c->ReleaseCompactionFiles(s);
           compaction_released = true;
+          assert(c->output_level() > 0);
+          auto cfd = c->column_family_data();
+          auto vstorage = cfd->current()->storage_info();
+          cfd->compaction_picker()->CompactionFinished(
+              cfd->current()->storage_info(), c->merging_info(), 0);
+          vstorage->ComputeCompactionScore(cfd, cfd->ioptions(),
+                                           cfd->GetLatestMutableCFOptions());
         });
     io_s = versions_->io_status();
     InstallSuperVersionAndScheduleWork(

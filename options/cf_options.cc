@@ -927,6 +927,13 @@ static std::unordered_map<std::string, OptionTypeInfo>
          {offsetof(struct ImmutableCFOptions, allow_intra_l0_compactions),
           OptionType::kBoolean, OptionVerificationType::kNormal,
           OptionTypeFlags::kNone}},
+        {"num_horizontal_levels",
+         {offsetof(struct ImmutableCFOptions, num_horizontal_levels),
+          OptionType::kUInt64T, OptionVerificationType::kNormal,
+          OptionTypeFlags::kNone}},
+        {"k",
+         {offsetof(struct ImmutableCFOptions, k), OptionType::kUInt64T,
+          OptionVerificationType::kNormal, OptionTypeFlags::kNone}},
         {"cf_allow_ingest_behind",
          {offsetof(struct ImmutableCFOptions, cf_allow_ingest_behind),
           OptionType::kBoolean, OptionVerificationType::kNormal,
@@ -1072,6 +1079,8 @@ ImmutableCFOptions::ImmutableCFOptions(const ColumnFamilyOptions& cf_options)
       blob_cache(cf_options.blob_cache),
       persist_user_defined_timestamps(
           cf_options.persist_user_defined_timestamps),
+      num_horizontal_levels(cf_options.num_horizontal_levels),
+      k(cf_options.k),
       cf_allow_ingest_behind(cf_options.cf_allow_ingest_behind) {}
 
 ImmutableOptions::ImmutableOptions() : ImmutableOptions(Options()) {}

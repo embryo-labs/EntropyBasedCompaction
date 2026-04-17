@@ -352,6 +352,8 @@ void UpdateColumnFamilyOptions(const ImmutableCFOptions& ioptions,
   cf_opts->persist_user_defined_timestamps =
       ioptions.persist_user_defined_timestamps;
   cf_opts->default_temperature = ioptions.default_temperature;
+  cf_opts->num_horizontal_levels = ioptions.num_horizontal_levels;
+  cf_opts->k = ioptions.k;
   cf_opts->cf_allow_ingest_behind = ioptions.cf_allow_ingest_behind;
 
   // TODO(yhchiang): find some way to handle the following derived options
@@ -367,6 +369,7 @@ std::map<CompactionStyle, std::string>
         {kCompactionStyleTiering, "kCompactionStyleTiering"},
         {kCompactionStyleLazyLeveling, "kCompactionStyleLazyLeveling"},
         {kCompactionStyleBush, "kCompactionStyleBush"},
+        {kCompactionStyleVertiorizon, "kCompactionStyleVertiorizon"},
         {kCompactionStyleNone, "kCompactionStyleNone"},
 };
 
@@ -967,6 +970,7 @@ std::unordered_map<std::string, CompactionStyle>
         {"kCompactionStyleTiering", kCompactionStyleTiering},
         {"kCompactionStyleLazyLeveling", kCompactionStyleLazyLeveling},
         {"kCompactionStyleBush", kCompactionStyleBush},
+        {"kCompactionStyleVertiorizon", kCompactionStyleVertiorizon},
         {"kCompactionStyleNone", kCompactionStyleNone},
 };
 
