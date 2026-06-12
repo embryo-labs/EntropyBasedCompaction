@@ -40,7 +40,7 @@ class BackgroundJobLimiter
       assert(ori_permit_to_run == false);
       cv_.notify_one();
     }
-    void DontPermitToRun() const {
+    void MarkDontRun() const {
       std::unique_lock<std::mutex> lock(lock_);
       bool ori_permit_to_run =
           permit_to_run_.exchange(false, std::memory_order_relaxed);
@@ -192,7 +192,7 @@ class BackgroundJobLimiter
       }
       assert(compactions_.size() >= num_running_compactions);
       compactions_[compactions_.size() - num_running_compactions]
-          ->DontPermitToRun();
+          ->MarkDontRun();
       num_running_compactions_.fetch_sub(1, std::memory_order_relaxed);
     }
   }
