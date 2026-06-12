@@ -653,6 +653,7 @@ class CompactionJobTestBase : public testing::Test {
         cfd->GetLatestMutableCFOptions().compression_opts,
         Temperature::kUnknown, max_subcompactions, grandparents,
         /*earliest_snapshot*/ std::nullopt, /*snapshot_checker*/ nullptr,
+        /*limiter_handle*/ std::nullopt,
         CompactionReason::kManualCompaction);
     compaction.FinalizeInputInfo(cfd->current());
 
@@ -2526,7 +2527,7 @@ class ResumableCompactionJobTest : public CompactionJobTestBase {
         compaction_input_files, 1, mutable_cf_options_.target_file_size_base,
         mutable_cf_options_.max_compaction_bytes, 0, kNoCompression,
         cfd->GetLatestMutableCFOptions().compression_opts,
-        Temperature::kUnknown, 0, {}, std::nullopt, nullptr,
+        Temperature::kUnknown, 0, {}, std::nullopt, nullptr, std::nullopt,
         CompactionReason::kManualCompaction);
     compaction.FinalizeInputInfo(cfd->current());
 
