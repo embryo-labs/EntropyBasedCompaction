@@ -629,7 +629,7 @@ TEST_F(CompactionServiceTest, PreservedOptionsLocalCompaction) {
         auto compaction = static_cast<Compaction*>(arg);
         std::string options_file_name = OptionsFileName(
             dbname_,
-            compaction->input_version()->version_set()->options_file_number());
+            dbfull()->GetVersionSet()->options_file_number());
 
         // Change option twice to make sure the very first OPTIONS file gets
         // purged

@@ -9,6 +9,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "db/compaction/compaction_job.h"
+#include "db/compaction/compaction_input_snapshot.h"
 #include "db/compaction/compaction_state.h"
 #include "logging/logging.h"
 #include "monitoring/iostats_context_imp.h"
@@ -115,7 +116,7 @@ CompactionJob::ProcessKeyValueCompactionWithCompactionService(
   }
 
   std::string debug_str_before_wait =
-      compaction->input_version()->DebugString(/*hex=*/true);
+      compaction->input_snapshot()->DebugString();
 
   ROCKS_LOG_INFO(db_options_.info_log,
                  "[%s] [JOB %d] Waiting for remote compaction...",
@@ -133,7 +134,7 @@ CompactionJob::ProcessKeyValueCompactionWithCompactionService(
         "\nDebugString After Wait():\n%s",
         compaction->column_family_data()->GetName().c_str(), job_id_,
         debug_str_before_wait.c_str(),
-        compaction->input_version()->DebugString(/*hex=*/true).c_str());
+        compaction->input_snapshot()->DebugString().c_str());
   }
 
   if (compaction_status == CompactionServiceJobStatus::kUseLocal) {

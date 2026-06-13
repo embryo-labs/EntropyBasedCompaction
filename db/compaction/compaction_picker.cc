@@ -94,7 +94,7 @@ bool FindIntraL0Compaction(const std::vector<FileMetaData*>& level_files,
 // If enable_compression is false, then compression is always disabled no
 // matter what the values of the other two parameters are.
 // Otherwise, the compression type is determined based on options and level.
-CompressionType GetCompressionType(const VersionStorageInfo* vstorage,
+CompressionType GetCompressionType(int num_non_empty_levels,
                                    const MutableCFOptions& mutable_cf_options,
                                    int level, int base_level,
                                    const bool enable_compression) {
@@ -106,7 +106,7 @@ CompressionType GetCompressionType(const VersionStorageInfo* vstorage,
   // If bottommost_compression is set and we are compacting to the
   // bottommost level then we should use it.
   if (mutable_cf_options.bottommost_compression != kDisableCompressionOption &&
-      level >= (vstorage->num_non_empty_levels() - 1)) {
+      level >= (num_non_empty_levels - 1)) {
     return mutable_cf_options.bottommost_compression;
   }
   // If the user has specified a different compression level for each level,
@@ -127,6 +127,14 @@ CompressionType GetCompressionType(const VersionStorageInfo* vstorage,
   } else {
     return mutable_cf_options.compression;
   }
+}
+
+CompressionType GetCompressionType(const VersionStorageInfo* vstorage,
+                                   const MutableCFOptions& mutable_cf_options,
+                                   int level, int base_level,
+                                   const bool enable_compression) {
+  return GetCompressionType(vstorage->num_non_empty_levels(), mutable_cf_options,
+                            level, base_level, enable_compression);
 }
 
 CompressionOptions GetCompressionOptions(const MutableCFOptions& cf_options,

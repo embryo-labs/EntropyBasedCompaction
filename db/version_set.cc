@@ -855,21 +855,7 @@ Version::~Version() {
   // Drop references to files
   for (int level = 0; level < storage_info_.num_levels_; level++) {
     for (size_t i = 0; i < storage_info_.files_[level].size(); i++) {
-      FileMetaData* f = storage_info_.files_[level][i];
-      assert(f->refs > 0);
-      f->refs--;
-      if (f->refs <= 0) {
-        assert(cfd_ != nullptr);
-        // When not in the process of closing the DB, we'll have a superversion
-        // to get current mutable options from
-        auto* sv = cfd_->GetSuperVersion();
-        uint32_t path_id = f->fd.GetPathId();
-        assert(path_id < cfd_->ioptions().cf_paths.size());
-        vset_->obsolete_files_.emplace_back(
-            f, cfd_->ioptions().cf_paths[path_id].path,
-            sv ? sv->mutable_cf_options.uncache_aggressiveness : 0,
-            cfd_->GetFileMetadataCacheReservationManager());
-      }
+      vset_->UnrefAndMaybeMakeObsolete(storage_info_.files_[level][i], cfd_);
     }
   }
 }
@@ -5115,27 +5101,28 @@ bool VersionStorageInfo::RangeMightExistAfterSortedRun(
 }
 
 Env::WriteLifeTimeHint VersionStorageInfo::CalculateSSTWriteHint(
-    int level, CompactionStyleSet compaction_style_set) const {
-  if (!compaction_style_set.Contains(compaction_style_)) {
+    CompactionStyle compaction_style, int base_level, int level,
+    CompactionStyleSet compaction_style_set) {
+  if (!compaction_style_set.Contains(compaction_style)) {
     return Env::WLTH_NOT_SET;
   }
 
-  switch (compaction_style_) {
+  switch (compaction_style) {
     case kCompactionStyleLevel:
       if (level == 0) {
         return Env::WLTH_MEDIUM;
       }
 
       // L1: medium, L2: long, ...
-      if (level - base_level_ >= 2) {
+      if (level - base_level >= 2) {
         return Env::WLTH_EXTREME;
-      } else if (level < base_level_) {
+      } else if (level < base_level) {
         // There is no restriction which prevents level passed in to be smaller
         // than base_level.
         return Env::WLTH_MEDIUM;
       }
       return static_cast<Env::WriteLifeTimeHint>(
-          level - base_level_ + static_cast<int>(Env::WLTH_MEDIUM));
+          level - base_level + static_cast<int>(Env::WLTH_MEDIUM));
     case kCompactionStyleUniversal:
       if (level == 0) {
         return Env::WLTH_SHORT;
@@ -7472,6 +7459,23 @@ void VersionSet::GetLiveFilesMetaData(std::vector<LiveFileMetaData>* metadata) {
         metadata->push_back(filemetadata);
       }
     }
+  }
+}
+
+void VersionSet::UnrefAndMaybeMakeObsolete(FileMetaData* f,
+                                             ColumnFamilyData* cfd) {
+  assert(f);
+  assert(f->refs > 0);
+  --f->refs;
+  if (f->refs <= 0) {
+    assert(cfd != nullptr);
+    auto* sv = cfd->GetSuperVersion();
+    uint32_t path_id = f->fd.GetPathId();
+    assert(path_id < cfd->ioptions().cf_paths.size());
+    obsolete_files_.emplace_back(
+        f, cfd->ioptions().cf_paths[path_id].path,
+        sv ? sv->mutable_cf_options.uncache_aggressiveness : 0,
+        cfd->GetFileMetadataCacheReservationManager());
   }
 }
 

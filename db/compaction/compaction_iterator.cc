@@ -1391,67 +1391,30 @@ uint64_t CompactionIterator::ComputeBlobGarbageCollectionCutoffFileNumber(
     return 0;
   }
 
-  const Version* const version = compaction->input_version();
-  assert(version);
-
-  const VersionStorageInfo* const storage_info = version->storage_info();
-  assert(storage_info);
-
-  const auto& blob_files = storage_info->GetBlobFiles();
-
-  const size_t cutoff_index = static_cast<size_t>(
-      compaction->blob_garbage_collection_age_cutoff() * blob_files.size());
-
-  if (cutoff_index >= blob_files.size()) {
-    return std::numeric_limits<uint64_t>::max();
+  if (!compaction->DoesInputReferenceBlobFiles()) {
+    return 0;
   }
 
-  const auto& meta = blob_files[cutoff_index];
-  assert(meta);
-
-  return meta->GetBlobFileNumber();
+  // This prototype does not support BlobDB.
+  fprintf(stderr, "FATAL: BlobDB is not supported in this prototype\n");
+  std::abort();
 }
 
 std::unique_ptr<BlobFetcher> CompactionIterator::CreateBlobFetcherIfNeeded(
     const CompactionProxy* compaction) {
-  if (!compaction) {
-    return nullptr;
+  // This prototype does not support BlobDB.
+  if (compaction != nullptr && compaction->DoesInputReferenceBlobFiles()) {
+    fprintf(stderr, "FATAL: BlobDB is not supported in this prototype\n");
+    std::abort();
   }
-
-  const Version* const version = compaction->input_version();
-  if (!version) {
-    return nullptr;
-  }
-
-  ReadOptions read_options;
-  read_options.io_activity = Env::IOActivity::kCompaction;
-  read_options.fill_cache = false;
-
-  return std::unique_ptr<BlobFetcher>(new BlobFetcher(version, read_options));
+  return nullptr;
 }
 
 std::unique_ptr<PrefetchBufferCollection>
 CompactionIterator::CreatePrefetchBufferCollectionIfNeeded(
-    const CompactionProxy* compaction) {
-  if (!compaction) {
-    return nullptr;
-  }
-
-  if (!compaction->input_version()) {
-    return nullptr;
-  }
-
-  if (compaction->allow_mmap_reads()) {
-    return nullptr;
-  }
-
-  const uint64_t readahead_size = compaction->blob_compaction_readahead_size();
-  if (!readahead_size) {
-    return nullptr;
-  }
-
-  return std::unique_ptr<PrefetchBufferCollection>(
-      new PrefetchBufferCollection(readahead_size));
+    const CompactionProxy* /*compaction*/) {
+  // This prototype does not support BlobDB, so no prefetch buffer is needed.
+  return nullptr;
 }
 
 }  // namespace ROCKSDB_NAMESPACE

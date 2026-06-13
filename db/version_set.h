@@ -633,7 +633,14 @@ class VersionStorageInfo {
                                      int last_level, int last_l0_idx);
 
   Env::WriteLifeTimeHint CalculateSSTWriteHint(
-      int level, CompactionStyleSet compaction_style_set) const;
+      int level, CompactionStyleSet compaction_style_set) const {
+    return CalculateSSTWriteHint(compaction_style_, base_level_, level,
+                                 compaction_style_set);
+  }
+
+  static Env::WriteLifeTimeHint CalculateSSTWriteHint(
+      CompactionStyle compaction_style, int base_level, int level,
+      CompactionStyleSet compaction_style_set);
 
   const Comparator* user_comparator() const { return user_comparator_; }
 
@@ -1524,6 +1531,10 @@ class VersionSet {
   void AddObsoleteBlobFile(uint64_t blob_file_number, std::string path) {
     obsolete_blob_files_.emplace_back(blob_file_number, std::move(path));
   }
+
+  // Decrement file ref count. If it reaches zero, add to obsolete list.
+  // REQUIRES: DB mutex held.
+  void UnrefAndMaybeMakeObsolete(FileMetaData* f, ColumnFamilyData* cfd);
 
   void GetObsoleteFiles(std::vector<ObsoleteFileInfo>* files,
                         std::vector<ObsoleteBlobFileInfo>* blob_files,

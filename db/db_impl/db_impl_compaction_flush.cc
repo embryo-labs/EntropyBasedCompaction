@@ -10,6 +10,7 @@
 #include <deque>
 
 #include "db/builder.h"
+#include "db/compaction/compaction_input_snapshot.h"
 #include "db/db_impl/db_impl.h"
 #include "db/error_handler.h"
 #include "db/event_helpers.h"
@@ -1686,7 +1687,8 @@ void DBImpl::NotifyOnCompactionBegin(ColumnFamilyData* cfd, Compaction* c,
   }
 
   c->SetNotifyOnCompactionCompleted();
-  int num_l0_files = c->input_version()->storage_info()->NumLevelFiles(0);
+  int num_l0_files =
+      static_cast<int>(c->input_snapshot()->NumLevelFiles(0));
   // release lock while notifying events
   mutex_.Unlock();
   TEST_SYNC_POINT("DBImpl::NotifyOnCompactionBegin::UnlockMutex");
@@ -1717,7 +1719,8 @@ void DBImpl::NotifyOnCompactionCompleted(
     return;
   }
 
-  int num_l0_files = cfd->current()->storage_info()->NumLevelFiles(0);
+  int num_l0_files =
+      static_cast<int>(c->input_snapshot()->NumLevelFiles(0));
   // release lock while notifying events
   mutex_.Unlock();
   TEST_SYNC_POINT("DBImpl::NotifyOnCompactionCompleted::UnlockMutex");
@@ -4162,10 +4165,9 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
         c->immutable_options().compaction_pri == kRoundRobin) {
       int start_level = c->start_level();
       if (start_level > 0) {
-        auto vstorage = c->input_version()->storage_info();
         c->edit()->AddCompactCursor(
             start_level,
-            vstorage->GetNextCompactCursor(start_level, c->num_input_files(0)));
+            c->input_snapshot()->next_compact_cursor(start_level));
       }
     }
     status = versions_->LogAndApply(
@@ -4451,7 +4453,7 @@ Compaction* DBImpl::CreateIntendedCompactionForwardedToBottomPriorityPool(
   auto* cfd = c->column_family_data();
   const auto& io = c->immutable_options();
   const auto& mo = c->mutable_cf_options();
-  auto* vstorage = c->input_version()->storage_info();
+  auto* vstorage = cfd->current()->storage_info();
 
   std::vector<CompactionInputFiles> inputs(1);
 

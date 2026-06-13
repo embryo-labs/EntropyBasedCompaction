@@ -18,6 +18,9 @@
 #include "util/autovector.h"
 
 namespace ROCKSDB_NAMESPACE {
+
+class CompactionInputSnapshot;
+
 // The file contains class Compaction, as well as some helper functions
 // and data structures used by the class.
 
@@ -150,8 +153,12 @@ class Compaction {
     return 0;
   }
 
-  // Returns input version of the compaction
-  Version* input_version() const { return input_version_; }
+  // Returns the input snapshot that holds references to input files
+  // and cached version metadata. Never returns nullptr after
+  // FinalizeInputInfo() is called.
+  const CompactionInputSnapshot* input_snapshot() const {
+    return input_snapshot_.get();
+  }
 
   // Returns the ColumnFamilyData associated with the compaction.
   ColumnFamilyData* column_family_data() const { return cfd_; }
@@ -543,14 +550,16 @@ class Compaction {
   // populate proximal level output range, which will be used to determine if
   // a key is safe to output to the proximal level (details see
   // `Compaction::WithinProximalLevelOutputRange()`.
-  void PopulateProximalLevelOutputRange();
+  void PopulateProximalLevelOutputRange(VersionStorageInfo* vstorage);
 
   // If oldest snapshot is specified at Compaction construction time, we have
   // an opportunity to optimize inputs for compaction iterator for this case:
   // When a standalone range deletion file on the start level is recognized and
   // can be determined to completely shadow some input files on non-start level.
   // These files will be filtered out and later not feed to compaction iterator.
-  void FilterInputsForCompactionIterator();
+  // `ucmp` is passed explicitly because this method is called from the
+  // constructor before `cfd_` is populated.
+  void FilterInputsForCompactionIterator(const Comparator* ucmp);
 
   // Get the atomic file boundaries for all files in the compaction. Necessary
   // in order to avoid the scenario described in
@@ -569,7 +578,7 @@ class Compaction {
   static bool IsFullCompaction(VersionStorageInfo* vstorage,
                                const std::vector<CompactionInputFiles>& inputs);
 
-  VersionStorageInfo* input_vstorage_;
+  std::unique_ptr<CompactionInputSnapshot> input_snapshot_;
 
   const int start_level_;   // the lowest level to be compacted
   const int output_level_;  // levels to which output files are stored
@@ -579,7 +588,6 @@ class Compaction {
   uint32_t max_subcompactions_;
   const ImmutableOptions immutable_options_;
   const MutableCFOptions mutable_cf_options_;
-  Version* input_version_;
   VersionEdit edit_;
   const int number_levels_;
   ColumnFamilyData* cfd_;

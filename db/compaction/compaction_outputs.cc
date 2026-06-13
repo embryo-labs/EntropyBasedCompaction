@@ -11,6 +11,7 @@
 #include "db/compaction/compaction_outputs.h"
 
 #include "db/builder.h"
+#include "db/compaction/compaction_input_snapshot.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -742,11 +743,9 @@ Status CompactionOutputs::AddRangeDels(
           SizeApproximationOptions approx_opts;
           approx_opts.files_size_error_margin = 0.1;
           auto approximate_covered_size =
-              compaction_->input_version()->version_set()->ApproximateSize(
-                  approx_opts, read_options, compaction_->input_version(),
+              compaction_->input_snapshot()->ApproximateSize(
                   tombstone_start.Encode(), tombstone_end.Encode(),
-                  compaction_->output_level() + 1 /* start_level */,
-                  -1 /* end_level */, kCompaction);
+                  compaction_->output_level() + 1 /* start_level */);
           meta.compensated_range_deletion_size += approximate_covered_size;
         }
       }

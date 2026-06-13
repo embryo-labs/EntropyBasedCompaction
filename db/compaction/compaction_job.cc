@@ -22,6 +22,7 @@
 #include "db/blob/blob_file_builder.h"
 #include "db/builder.h"
 #include "db/compaction/clipping_iterator.h"
+#include "db/compaction/compaction_input_snapshot.h"
 #include "db/compaction/compaction_state.h"
 #include "db/db_impl/db_impl.h"
 #include "db/dbformat.h"
@@ -272,11 +273,10 @@ void CompactionJob::Prepare(
   auto* c = compact_->compaction;
   [[maybe_unused]] ColumnFamilyData* cfd = c->column_family_data();
   assert(cfd != nullptr);
-  const VersionStorageInfo* storage_info = c->input_version()->storage_info();
-  assert(storage_info);
-  assert(storage_info->NumLevelFiles(compact_->compaction->level()) > 0);
+  assert(c->input_snapshot() != nullptr);
+  assert(c->input_snapshot()->NumLevelFiles(compact_->compaction->level()) > 0);
 
-  write_hint_ = storage_info->CalculateSSTWriteHint(
+  write_hint_ = c->input_snapshot()->CalculateSSTWriteHint(
       c->output_level(), db_options_.calculate_sst_write_lifetime_hint_set);
   bottommost_level_ = c->bottommost_level();
 
@@ -324,17 +324,13 @@ void CompactionJob::Prepare(
       MinAndMaxPreserveSeconds(c->mutable_cf_options()).max_preserve_seconds;
 
   if (preserve_time_duration > 0) {
-    const ReadOptions read_options(Env::IOActivity::kCompaction);
     // Setup seqno_to_time_mapping_ with relevant time range.
     seqno_to_time_mapping_.SetMaxTimeSpan(preserve_time_duration);
     for (const auto& each_level : *c->inputs()) {
       for (const auto& fmd : each_level.files) {
-        std::shared_ptr<const TableProperties> tp;
-        Status s = c->input_version()->GetTableProperties(read_options, &tp,
-                                                          fmd, nullptr);
-        if (s.ok()) {
-          s = seqno_to_time_mapping_.DecodeFrom(tp->seqno_to_time_mapping);
-        }
+        std::shared_ptr<const TableProperties> tp =
+            c->input_snapshot()->GetTableProperties(fmd, nullptr);
+        Status s = seqno_to_time_mapping_.DecodeFrom(tp->seqno_to_time_mapping);
         if (!s.ok()) {
           ROCKS_LOG_WARN(
               db_options_.info_log,
@@ -573,8 +569,7 @@ void CompactionJob::GenSubcompactionBoundaries() {
   const Comparator* cfd_comparator = cfd->user_comparator();
   const InternalKeyComparator& icomp = cfd->internal_comparator();
 
-  auto* v = compact_->compaction->input_version();
-  int base_level = v->storage_info()->base_level();
+  int base_level = compact_->compaction->input_snapshot()->base_level();
   InstrumentedMutexUnlock unlock_guard(db_mutex_);
 
   uint64_t total_size = 0;
@@ -2192,10 +2187,9 @@ Status CompactionJob::InstallCompactionResults(bool* compaction_released) {
       compaction->immutable_options().compaction_pri == kRoundRobin) {
     int start_level = compaction->start_level();
     if (start_level > 0) {
-      auto vstorage = compaction->input_version()->storage_info();
-      edit->AddCompactCursor(start_level,
-                             vstorage->GetNextCompactCursor(
-                                 start_level, compaction->num_input_files(0)));
+      edit->AddCompactCursor(
+          start_level,
+          compaction->input_snapshot()->next_compact_cursor(start_level));
     }
   }
 
