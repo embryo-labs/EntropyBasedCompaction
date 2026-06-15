@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <cinttypes>
+#include <unordered_set>
+#include <vector>
 
 #include "db/arena_wrapped_db_iter.h"
 #include "db/merge_context.h"
@@ -106,9 +108,9 @@ Status DBImplFollower::TryCatchUpWithLeader() {
             ->ReadAndApply(&mutex_, &manifest_reader_,
                            manifest_reader_status_.get(), &cfds_changed,
                            &files_to_delete);
-    ReleaseFileNumberFromPendingOutputs(pending_outputs_inserted_elem_);
-    pending_outputs_inserted_elem_.reset(new std::list<uint64_t>::iterator(
-        CaptureCurrentFileNumberInPendingOutputs()));
+    ReleaseMinObsoleteSstNumberToKeep(min_obsolete_sst_number_to_keep_elem_);
+    min_obsolete_sst_number_to_keep_elem_.reset(
+        new std::list<uint64_t>::iterator(CaptureMinObsoleteSstNumberToKeep()));
 
     ROCKS_LOG_INFO(immutable_db_options_.info_log, "Last sequence is %" PRIu64,
                    static_cast<uint64_t>(versions_->LastSequence()));
@@ -230,7 +232,7 @@ Status DBImplFollower::Close() {
     catch_up_thread_.reset();
   }
 
-  ReleaseFileNumberFromPendingOutputs(pending_outputs_inserted_elem_);
+  ReleaseMinObsoleteSstNumberToKeep(min_obsolete_sst_number_to_keep_elem_);
 
   return DBImpl::Close();
 }

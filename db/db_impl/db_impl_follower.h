@@ -49,6 +49,7 @@ class DBImplFollower : public DBImplSecondary {
   std::string src_path_;
   port::Mutex mu_;
   port::CondVar cv_;
-  std::unique_ptr<std::list<uint64_t>::iterator> pending_outputs_inserted_elem_;
+  std::unique_ptr<std::list<uint64_t>::iterator>
+      min_obsolete_sst_number_to_keep_elem_;
 };
 }  // namespace ROCKSDB_NAMESPACE

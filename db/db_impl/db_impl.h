@@ -18,6 +18,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -880,14 +881,6 @@ class DBImpl : public DB {
 
   uint64_t MinLogNumberToRecycle();
 
-  // Returns the lower bound file number for SSTs that won't be deleted, even if
-  // they're obsolete. This lower bound is used internally to prevent newly
-  // created flush/compaction output files from being deleted before they're
-  // installed. This technique avoids the need for tracking the exact numbers of
-  // files pending creation, although it prevents more files than necessary from
-  // being deleted.
-  uint64_t MinObsoleteSstNumberToKeep();
-
   uint64_t GetObsoleteSstFilesSize();
 
   uint64_t MinOptionsFileNumberToKeep();
@@ -1259,6 +1252,10 @@ class DBImpl : public DB {
   }
 
   void TEST_DeleteObsoleteFiles();
+
+  void TEST_AddPendingOutput(uint64_t file_number) {
+    AddPendingOutput(file_number);
+  }
 
   const std::unordered_set<uint64_t>& TEST_GetFilesGrabbedForPurge() const {
     return files_grabbed_for_purge_;
@@ -2033,24 +2030,72 @@ class DBImpl : public DB {
                               const std::string& path_to_sync, FileType type,
                               uint64_t number);
 
-  // Background process needs to call
-  //     auto x = CaptureCurrentFileNumberInPendingOutputs()
-  //     auto file_num = versions_->NewFileNumber();
-  //     <do something>
-  //     ReleaseFileNumberFromPendingOutputs(x)
-  // This will protect any file with number `file_num` or greater from being
-  // deleted while <do something> is running.
-  // -----------
-  // This function will capture current file number and append it to
-  // pending_outputs_. This will prevent any background process to delete any
-  // file created after this point.
-  std::list<uint64_t>::iterator CaptureCurrentFileNumberInPendingOutputs();
-  // This function should be called with the result of
-  // CaptureCurrentFileNumberInPendingOutputs(). It then marks that any file
-  // created between the calls CaptureCurrentFileNumberInPendingOutputs() and
-  // ReleaseFileNumberFromPendingOutputs() can now be deleted (if it's not live
-  // and blocked by any other pending_outputs_ calls)
-  void ReleaseFileNumberFromPendingOutputs(
+  // Tracks individual SST/BLOB file numbers created by in-progress flushes,
+  // compactions, ingestion, DB open/recovery, and follower catch-up that should
+  // not be deleted yet. Per-file protection avoids a long-running job from
+  // blocking deletion of files created and obsoleted by other jobs.
+  //
+  // This guard is held for the lifetime of a background job. The job calls
+  // Protect() for each output file it creates; the destructor unprotects them
+  // once the job no longer needs the protection.
+  friend class FlushJob;
+  friend class CompactionJob;
+  class JobOutputFileDeletionGuard : public OutputFileDeletionGuard {
+   public:
+    explicit JobOutputFileDeletionGuard(DBImpl* db_impl) : db_impl_(db_impl) {}
+
+    void Protect(uint64_t file_number) override {
+      db_impl_->AddPendingOutput(file_number);
+      std::lock_guard<std::mutex> lock(file_numbers_mutex_);
+      file_numbers_.push_back(file_number);
+    }
+
+    ~JobOutputFileDeletionGuard() {
+      std::vector<uint64_t> file_numbers;
+      {
+        std::lock_guard<std::mutex> lock(file_numbers_mutex_);
+        file_numbers.swap(file_numbers_);
+      }
+      for (uint64_t fn : file_numbers) {
+        db_impl_->RemovePendingOutput(fn);
+      }
+    }
+
+   private:
+    DBImpl* db_impl_;
+    std::mutex file_numbers_mutex_;
+    std::vector<uint64_t> file_numbers_;
+  };
+
+  // Protect/unprotect a specific output file number from deletion.
+  //
+  // Invariant: a file number must be added to pending_outputs_ (via
+  // AddPendingOutput) before the corresponding file is created on disk or
+  // becomes visible to other threads. This means any file we observe in
+  // FindObsoleteFiles() while scanning the directory is already protected if
+  // it is still being written. Consequently, in PurgeObsoleteFiles() we can
+  // safely snapshot pending_outputs_ after the directory scan and use it to
+  // decide which files to keep.
+  void AddPendingOutput(uint64_t file_number);
+  void RemovePendingOutput(uint64_t file_number);
+
+  // Return true if `file_number` is currently protected from deletion by an
+  // in-progress background job or by the follower lower-bound guard.
+  bool IsPendingOutput(uint64_t file_number) const;
+
+  // Return the lower bound file number for SST/BLOB files that won't be
+  // deleted, even if they're obsolete. This protects files that may be
+  // outputting but have not yet been committed to the MANIFEST. Returns max()
+  // when no such lower bound is in effect.
+  uint64_t MinObsoleteSstNumberToKeep() const;
+
+  // Capture/release a lower-bound guard for obsolete SST/BLOB file numbers.
+  // Capture uses the current next file number; because file numbers increase
+  // monotonically, the captured values are sorted and the effective lower bound
+  // is the minimum of all captured values. Multiple guards can coexist. Must be
+  // called with db mutex held.
+  std::list<uint64_t>::iterator CaptureMinObsoleteSstNumberToKeep();
+  void ReleaseMinObsoleteSstNumberToKeep(
       std::unique_ptr<std::list<uint64_t>::iterator>& v);
 
   // Similar to pending_outputs, preserve OPTIONS file. Used for remote
@@ -2604,11 +2649,12 @@ class DBImpl : public DB {
                               const int job_id,
                               CompactionJobInfo* compaction_job_info) const;
   // Reserve the next 'num' file numbers for to-be-ingested external SST files,
-  // and return the current file_number in 'next_file_number'.
-  // Write a version edit to the MANIFEST.
+  // protect them from deletion, and return the first reserved file number in
+  // 'next_file_number'. Write a version edit to the MANIFEST.
   Status ReserveFileNumbersBeforeIngestion(
       ColumnFamilyData* cfd, uint64_t num,
-      std::unique_ptr<std::list<uint64_t>::iterator>& pending_output_elem,
+      const std::shared_ptr<OutputFileDeletionGuard>&
+          output_file_deletion_guard,
       uint64_t* next_file_number);
 
   bool ShouldPurge(uint64_t file_number) const;
@@ -2966,20 +3012,23 @@ class DBImpl : public DB {
 
   TimestampedSnapshotList timestamped_snapshots_;
 
-  // For each background job, pending_outputs_ keeps the current file number at
-  // the time that background job started.
-  // FindObsoleteFiles()/PurgeObsoleteFiles() never deletes any file that has
-  // number bigger than any of the file number in pending_outputs_. Since file
-  // numbers grow monotonically, this also means that pending_outputs_ is always
-  // sorted. After a background job is done executing, its file number is
-  // deleted from pending_outputs_, which allows PurgeObsoleteFiles() to clean
-  // it up.
-  // State is protected with db mutex.
-  std::list<uint64_t> pending_outputs_;
+  // Set of individual SST/BLOB output file numbers currently protected from
+  // deletion because they are being created or referenced by in-progress
+  // flushes, compactions, ingestion, DB open/recovery, and follower catch-up.
+  // State is protected with pending_outputs_mutex_.
+  mutable std::mutex pending_outputs_mutex_;
+  std::unordered_set<uint64_t> pending_outputs_;
 
-  // Similar to pending_outputs_, FindObsoleteFiles()/PurgeObsoleteFiles() never
-  // deletes any OPTIONS file that has number bigger than any of the file number
-  // in min_options_file_numbers_.
+  // Lower-bound guards for SST/BLOB file numbers. Files with number greater
+  // than or equal to the minimum value in this list are protected from
+  // deletion. Multiple guards can coexist. Used to avoid deleting files that
+  // may be outputting but have not yet been committed to the MANIFEST.
+  // Protected by pending_outputs_mutex_.
+  std::list<uint64_t> min_obsolete_sst_numbers_to_keep_;
+
+  // FindObsoleteFiles()/PurgeObsoleteFiles() never deletes any OPTIONS file
+  // that has number bigger than any of the file number in
+  // min_options_file_numbers_.
   std::list<uint64_t> min_options_file_numbers_;
 
   // flush_queue_ and compaction_queue_ hold column families that we need to

@@ -208,10 +208,10 @@ Status DBImpl::FlushMemTableToOutputFile(
   // picking so that no new snapshot can be taken between the two functions.
 
   FlushJob flush_job(
-      dbname_, cfd, immutable_db_options_, mutable_cf_options, max_memtable_id,
-      file_options_for_compaction_, versions_.get(), &mutex_, &shutting_down_,
-      job_context, flush_reason, log_buffer, directories_.GetDbDir(),
-      GetDataDir(cfd, 0U),
+      this, dbname_, cfd, immutable_db_options_, mutable_cf_options,
+      max_memtable_id, file_options_for_compaction_, versions_.get(), &mutex_,
+      &shutting_down_, job_context, flush_reason, log_buffer,
+      directories_.GetDbDir(), GetDataDir(cfd, 0U),
       GetCompressionFlush(cfd->ioptions(), mutable_cf_options), stats_,
       &event_logger_, mutable_cf_options.report_bg_io_stats,
       true /* sync_output_directory */, true /* write_manifest */, thread_pri,
@@ -473,7 +473,7 @@ Status DBImpl::AtomicFlushMemTablesToOutputFiles(
     uint64_t max_memtable_id = bg_flush_args[i].max_memtable_id_;
     FlushReason flush_reason = bg_flush_args[i].flush_reason_;
     jobs.emplace_back(new FlushJob(
-        dbname_, cfd, immutable_db_options_, mutable_cf_options,
+        this, dbname_, cfd, immutable_db_options_, mutable_cf_options,
         max_memtable_id, file_options_for_compaction_, versions_.get(), &mutex_,
         &shutting_down_, job_context, flush_reason, log_buffer,
         directories_.GetDbDir(), data_dir,
@@ -1514,16 +1514,12 @@ Status DBImpl::CompactFilesImpl(
 
   InitSnapshotContext(job_context);
 
-  std::unique_ptr<std::list<uint64_t>::iterator> pending_outputs_inserted_elem(
-      new std::list<uint64_t>::iterator(
-          CaptureCurrentFileNumberInPendingOutputs()));
-
   assert(is_snapshot_supported_ || snapshots_.empty());
   CompactionJobStats compaction_job_stats;
   CompactionJob compaction_job(
-      job_context->job_id, c.get(), immutable_db_options_, mutable_db_options_,
-      file_options_for_compaction_, versions_.get(), &shutting_down_,
-      log_buffer, directories_.GetDbDir(),
+      this, job_context->job_id, c.get(), immutable_db_options_,
+      mutable_db_options_, file_options_for_compaction_, versions_.get(),
+      &shutting_down_, log_buffer, directories_.GetDbDir(),
       GetDataDir(c->column_family_data(), c->output_path_id()),
       GetDataDir(c->column_family_data(), 0), stats_, &mutex_, &error_handler_,
       job_context, table_cache_, &event_logger_,
@@ -1583,8 +1579,6 @@ Status DBImpl::CompactFilesImpl(
   if (sfm && sfm_reserved_compact_space) {
     sfm->OnCompactionCompletion(c.get());
   }
-
-  ReleaseFileNumberFromPendingOutputs(pending_outputs_inserted_elem);
 
   mutex_.Unlock();
   if (compaction_job_info != nullptr) {
@@ -1687,8 +1681,7 @@ void DBImpl::NotifyOnCompactionBegin(ColumnFamilyData* cfd, Compaction* c,
   }
 
   c->SetNotifyOnCompactionCompleted();
-  int num_l0_files =
-      static_cast<int>(c->input_snapshot()->NumLevelFiles(0));
+  int num_l0_files = static_cast<int>(c->input_snapshot()->NumLevelFiles(0));
   // release lock while notifying events
   mutex_.Unlock();
   TEST_SYNC_POINT("DBImpl::NotifyOnCompactionBegin::UnlockMutex");
@@ -1719,8 +1712,7 @@ void DBImpl::NotifyOnCompactionCompleted(
     return;
   }
 
-  int num_l0_files =
-      static_cast<int>(c->input_snapshot()->NumLevelFiles(0));
+  int num_l0_files = static_cast<int>(c->input_snapshot()->NumLevelFiles(0));
   // release lock while notifying events
   mutex_.Unlock();
   TEST_SYNC_POINT("DBImpl::NotifyOnCompactionCompleted::UnlockMutex");
@@ -1860,8 +1852,8 @@ Status DBImpl::ReFitLevel(ColumnFamilyData* cfd, int level, int target_level) {
         0 /* max_subcompactions, not applicable */,
         {} /* grandparents, not applicable */,
         std::nullopt /* earliest_snapshot */, nullptr /* snapshot_checker */,
-        std::move(limiter_handle), CompactionReason::kRefitLevel, "" /* trim_ts */,
-        -1 /* score, not applicable */,
+        std::move(limiter_handle), CompactionReason::kRefitLevel,
+        "" /* trim_ts */, -1 /* score, not applicable */,
         false /* l0_files_might_overlap, not applicable */));
     cfd->compaction_picker()->RegisterCompaction(c.get());
     TEST_SYNC_POINT("DBImpl::ReFitLevel:PostRegisterCompaction");
@@ -3334,9 +3326,6 @@ void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
     assert(bg_flush_scheduled_);
     num_running_flushes_++;
 
-    std::unique_ptr<std::list<uint64_t>::iterator>
-        pending_outputs_inserted_elem(new std::list<uint64_t>::iterator(
-            CaptureCurrentFileNumberInPendingOutputs()));
     FlushReason reason;
     bool flush_rescheduled_to_retain_udt = false;
     Status s =
@@ -3371,7 +3360,6 @@ void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
     }
 
     TEST_SYNC_POINT("DBImpl::BackgroundCallFlush:FlushFinish:0");
-    ReleaseFileNumberFromPendingOutputs(pending_outputs_inserted_elem);
     // There is no need to find obsolete files if the flush job is rescheduled
     // to retain user-defined timestamps because the job doesn't get to the
     // stage of actually flushing the MemTables.
@@ -3430,10 +3418,6 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
 
     num_running_compactions_++;
 
-    std::unique_ptr<std::list<uint64_t>::iterator>
-        pending_outputs_inserted_elem(new std::list<uint64_t>::iterator(
-            CaptureCurrentFileNumberInPendingOutputs()));
-
     assert((bg_thread_pri == Env::Priority::BOTTOM &&
             bg_bottom_compaction_scheduled_) ||
            (bg_thread_pri == Env::Priority::LOW && bg_compaction_scheduled_));
@@ -3471,8 +3455,6 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
       ROCKS_LOG_BUFFER(&log_buffer, "[%s] [JOB %d] Manual compaction paused",
                        m->cfd->GetName().c_str(), job_context.job_id);
     }
-
-    ReleaseFileNumberFromPendingOutputs(pending_outputs_inserted_elem);
 
     // If compaction failed, we want to delete all temporary files that we
     // might have created (they might not be all recorded in job_context in
@@ -3888,9 +3870,15 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     NotifyOnCompactionBegin(c->column_family_data(), c.get(), status,
                             compaction_job_stats, job_context->job_id);
 
+    // Guard output file numbers generated during trivial-copy so they are not
+    // deleted before the MANIFEST commit finishes.
+    auto output_file_deletion_guard =
+        std::make_shared<JobOutputFileDeletionGuard>(this);
+
     std::vector<FileMetaData> out_files;
     for (const auto& in_file : *c->inputs(0)) {
       const uint64_t out_file_number = versions_->NewFileNumber();
+      output_file_deletion_guard->Protect(out_file_number);
       const std::string in_fname =
           TableFileName(c->immutable_options().cf_paths,
                         in_file->fd.GetNumber(), in_file->fd.GetPathId());
@@ -4166,8 +4154,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
       int start_level = c->start_level();
       if (start_level > 0) {
         c->edit()->AddCompactCursor(
-            start_level,
-            c->input_snapshot()->next_compact_cursor(start_level));
+            start_level, c->input_snapshot()->next_compact_cursor(start_level));
       }
     }
     status = versions_->LogAndApply(
@@ -4264,7 +4251,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     assert(is_snapshot_supported_ || snapshots_.empty());
 
     CompactionJob compaction_job(
-        job_context->job_id, c.get(), immutable_db_options_,
+        this, job_context->job_id, c.get(), immutable_db_options_,
         mutable_db_options_, file_options_for_compaction_, versions_.get(),
         &shutting_down_, log_buffer, directories_.GetDbDir(),
         GetDataDir(c->column_family_data(), c->output_path_id()),
@@ -4492,14 +4479,14 @@ Compaction* DBImpl::CreateIntendedCompactionForwardedToBottomPriorityPool(
         Reff(inputs));
   }
 
-  Compaction* intended_compaction =
-      new Compaction(vstorage, io, mo, mutable_db_options_, std::move(inputs),
-                     c->output_level(), c->target_output_file_size(),
-                     c->max_compaction_bytes(), c->output_path_id(),
-                     c->output_compression(), c->output_compression_opts(),
-                     c->GetOutputTemperature(), c->max_subcompactions(),
-                     c->grandparents(), std::nullopt /* earliest_snapshot */,
-                     nullptr /* snapshot_checker */, std::move(limiter_handle), c->compaction_reason());
+  Compaction* intended_compaction = new Compaction(
+      vstorage, io, mo, mutable_db_options_, std::move(inputs),
+      c->output_level(), c->target_output_file_size(),
+      c->max_compaction_bytes(), c->output_path_id(), c->output_compression(),
+      c->output_compression_opts(), c->GetOutputTemperature(),
+      c->max_subcompactions(), c->grandparents(),
+      std::nullopt /* earliest_snapshot */, nullptr /* snapshot_checker */,
+      std::move(limiter_handle), c->compaction_reason());
 
   cfd->compaction_picker()->RegisterCompaction(intended_compaction);
   vstorage->ComputeCompactionScore(cfd, io, mo);

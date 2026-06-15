@@ -1336,9 +1336,8 @@ class DB {
     //      log files that should be kept.
     static const std::string kMinLogNumberToKeep;
 
-    //  "rocksdb.min-obsolete-sst-number-to-keep" - return the minimum file
-    //      number for an obsolete SST to be kept. The max value of `uint64_t`
-    //      will be returned if all obsolete files can be deleted.
+    //  "rocksdb.min-obsolete-sst-number-to-keep" - return the minimum SST/BLOB
+    //      file number that should be kept from deletion, even if obsolete.
     static const std::string kMinObsoleteSstNumberToKeep;
 
     //  "rocksdb.total-sst-files-size" - returns total size (bytes) of all SST

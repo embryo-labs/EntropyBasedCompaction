@@ -9,7 +9,9 @@
 
 #pragma once
 
+#include <limits>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "db/column_family.h"
@@ -192,6 +194,10 @@ struct JobContext {
   // the list of all live blob files that cannot be deleted
   std::vector<uint64_t> blob_live;
 
+  // SST/BLOB output file numbers protected from deletion when
+  // FindObsoleteFiles() snapshots live files after a full scan.
+  std::unordered_set<uint64_t> pending_output_file_numbers;
+
   // the list of blob files that we need to delete
   std::vector<ObsoleteBlobFileInfo> blob_delete_files;
 
@@ -234,7 +240,12 @@ struct JobContext {
   uint64_t log_number = 0;
   uint64_t prev_log_number = 0;
 
-  uint64_t min_pending_output = 0;
+  // SST/BLOB file numbers greater than or equal to this value are protected
+  // from deletion even if they are obsolete. Used to avoid deleting files that
+  // may be outputting but have not yet been committed to the MANIFEST.
+  uint64_t min_obsolete_sst_number_to_keep =
+      std::numeric_limits<uint64_t>::max();
+
   uint64_t prev_wals_total_size = 0;
   size_t num_alive_wal_files = 0;
   uint64_t size_log_to_delete = 0;

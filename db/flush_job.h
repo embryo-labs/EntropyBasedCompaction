@@ -48,6 +48,7 @@ namespace ROCKSDB_NAMESPACE {
 
 class DBImpl;
 class MemTable;
+class OutputFileDeletionGuard;
 class SnapshotChecker;
 class TableCache;
 class Version;
@@ -59,7 +60,7 @@ class FlushJob {
  public:
   // TODO(icanadi) make effort to reduce number of parameters here
   // IMPORTANT: mutable_cf_options needs to be alive while FlushJob is alive
-  FlushJob(const std::string& dbname, ColumnFamilyData* cfd,
+  FlushJob(DBImpl* db_impl, const std::string& dbname, ColumnFamilyData* cfd,
            const ImmutableDBOptions& db_options,
            const MutableCFOptions& mutable_cf_options, uint64_t max_memtable_id,
            const FileOptions& file_options, VersionSet* versions,
@@ -223,6 +224,11 @@ class FlushJob {
   // Note this is only installed when seqno to time recording feature is
   // enables, so it could be nullptr.
   std::shared_ptr<const SeqnoToTimeMapping> seqno_to_time_mapping_;
+
+  // Guard for protecting the output SST file number from deletion while this
+  // flush is creating it. PickMemTable() calls Protect() after assigning the
+  // file number.
+  std::shared_ptr<OutputFileDeletionGuard> output_file_deletion_guard_;
 
   // Keeps track of the newest user-defined timestamp for this flush job if
   // `persist_user_defined_timestamps` flag is false.

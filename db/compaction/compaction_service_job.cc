@@ -8,8 +8,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "db/compaction/compaction_job.h"
 #include "db/compaction/compaction_input_snapshot.h"
+#include "db/compaction/compaction_job.h"
 #include "db/compaction/compaction_state.h"
 #include "logging/logging.h"
 #include "monitoring/iostats_context_imp.h"
@@ -127,14 +127,13 @@ CompactionJob::ProcessKeyValueCompactionWithCompactionService(
                                            &compaction_result_binary);
 
   if (compaction_status != CompactionServiceJobStatus::kSuccess) {
-    ROCKS_LOG_ERROR(
-        db_options_.info_log,
-        "[%s] [JOB %d] Wait() status is not kSuccess. "
-        "\nDebugString Before Wait():\n%s"
-        "\nDebugString After Wait():\n%s",
-        compaction->column_family_data()->GetName().c_str(), job_id_,
-        debug_str_before_wait.c_str(),
-        compaction->input_snapshot()->DebugString().c_str());
+    ROCKS_LOG_ERROR(db_options_.info_log,
+                    "[%s] [JOB %d] Wait() status is not kSuccess. "
+                    "\nDebugString Before Wait():\n%s"
+                    "\nDebugString After Wait():\n%s",
+                    compaction->column_family_data()->GetName().c_str(),
+                    job_id_, debug_str_before_wait.c_str(),
+                    compaction->input_snapshot()->DebugString().c_str());
   }
 
   if (compaction_status == CompactionServiceJobStatus::kUseLocal) {
@@ -300,7 +299,8 @@ void CompactionServiceCompactionJob::RecordCompactionIOStats() {
 }
 
 CompactionServiceCompactionJob::CompactionServiceCompactionJob(
-    int job_id, Compaction* compaction, const ImmutableDBOptions& db_options,
+    DBImpl* db_impl, int job_id, Compaction* compaction,
+    const ImmutableDBOptions& db_options,
     const MutableDBOptions& mutable_db_options, const FileOptions& file_options,
     VersionSet* versions, const std::atomic<bool>* shutting_down,
     LogBuffer* log_buffer, FSDirectory* output_directory, Statistics* stats,
@@ -313,7 +313,7 @@ CompactionServiceCompactionJob::CompactionServiceCompactionJob(
     std::string output_path,
     const CompactionServiceInput& compaction_service_input,
     CompactionServiceResult* compaction_service_result)
-    : CompactionJob(job_id, compaction, db_options, mutable_db_options,
+    : CompactionJob(db_impl, job_id, compaction, db_options, mutable_db_options,
                     file_options, versions, shutting_down, log_buffer, nullptr,
                     output_directory, nullptr, stats, db_mutex,
                     db_error_handler, job_context, std::move(table_cache),

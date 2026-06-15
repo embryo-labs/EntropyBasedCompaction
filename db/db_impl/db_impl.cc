@@ -13,6 +13,7 @@
 #include <alloca.h>
 #endif
 
+#include <algorithm>
 #include <cinttypes>
 #include <cstdio>
 #include <map>
@@ -4850,21 +4851,57 @@ Status DBImpl::GetApproximateSizes(const SizeApproximationOptions& options,
   return Status::OK();
 }
 
-std::list<uint64_t>::iterator
-DBImpl::CaptureCurrentFileNumberInPendingOutputs() {
-  // We need to remember the iterator of our insert, because after the
-  // background job is done, we need to remove that element from
-  // pending_outputs_.
-  pending_outputs_.push_back(versions_->current_next_file_number());
-  auto pending_outputs_inserted_elem = pending_outputs_.end();
-  --pending_outputs_inserted_elem;
-  return pending_outputs_inserted_elem;
+void DBImpl::AddPendingOutput(uint64_t file_number) {
+  std::lock_guard<std::mutex> lock(pending_outputs_mutex_);
+  auto [it, inserted] = pending_outputs_.insert(file_number);
+  (void)it;
+  assert(inserted);
 }
 
-void DBImpl::ReleaseFileNumberFromPendingOutputs(
+void DBImpl::RemovePendingOutput(uint64_t file_number) {
+  std::lock_guard<std::mutex> lock(pending_outputs_mutex_);
+  auto it = pending_outputs_.find(file_number);
+  assert(it != pending_outputs_.end());
+  pending_outputs_.erase(it);
+}
+
+bool DBImpl::IsPendingOutput(uint64_t file_number) const {
+  std::lock_guard<std::mutex> lock(pending_outputs_mutex_);
+  if (pending_outputs_.find(file_number) != pending_outputs_.end()) {
+    return true;
+  }
+  if (min_obsolete_sst_numbers_to_keep_.empty()) {
+    return false;
+  }
+  return file_number >= *min_obsolete_sst_numbers_to_keep_.begin();
+}
+
+uint64_t DBImpl::MinObsoleteSstNumberToKeep() const {
+  std::lock_guard<std::mutex> lock(pending_outputs_mutex_);
+  if (min_obsolete_sst_numbers_to_keep_.empty()) {
+    return std::numeric_limits<uint64_t>::max();
+  }
+  return *min_obsolete_sst_numbers_to_keep_.begin();
+}
+
+std::list<uint64_t>::iterator DBImpl::CaptureMinObsoleteSstNumberToKeep() {
+  mutex_.AssertHeld();
+  // File numbers increase monotonically, so we can keep the list sorted by
+  // appending at the end. The smallest element (the effective lower bound) is
+  // always at the front.
+  std::lock_guard<std::mutex> lock(pending_outputs_mutex_);
+  min_obsolete_sst_numbers_to_keep_.push_back(
+      versions_->current_next_file_number());
+  auto it = min_obsolete_sst_numbers_to_keep_.end();
+  --it;
+  return it;
+}
+
+void DBImpl::ReleaseMinObsoleteSstNumberToKeep(
     std::unique_ptr<std::list<uint64_t>::iterator>& v) {
   if (v.get() != nullptr) {
-    pending_outputs_.erase(*v.get());
+    std::lock_guard<std::mutex> lock(pending_outputs_mutex_);
+    min_obsolete_sst_numbers_to_keep_.erase(*v.get());
     v.reset();
   }
 }
@@ -5816,18 +5853,18 @@ Status DBImpl::IngestExternalFiles(
 
   // TODO (yanqin) maybe handle the case in which column_families have
   // duplicates
-  std::unique_ptr<std::list<uint64_t>::iterator> pending_output_elem;
   size_t total = 0;
   for (const auto& arg : args) {
     total += arg.external_files.size();
   }
+  // Guard keeps the reserved file numbers protected until ingestion finishes.
+  auto output_file_deletion_guard =
+      std::make_shared<JobOutputFileDeletionGuard>(this);
   uint64_t next_file_number = 0;
   Status status = ReserveFileNumbersBeforeIngestion(
       static_cast<ColumnFamilyHandleImpl*>(args[0].column_family)->cfd(), total,
-      pending_output_elem, &next_file_number);
+      output_file_deletion_guard, &next_file_number);
   if (!status.ok()) {
-    InstrumentedMutexLock l(&mutex_);
-    ReleaseFileNumberFromPendingOutputs(pending_output_elem);
     return status;
   }
 
@@ -5876,8 +5913,6 @@ Status DBImpl::IngestExternalFiles(
     for (size_t i = 0; i != num_cfs; ++i) {
       ingestion_jobs[i].Cleanup(status);
     }
-    InstrumentedMutexLock l(&mutex_);
-    ReleaseFileNumberFromPendingOutputs(pending_output_elem);
     return status;
   }
 
@@ -6068,7 +6103,7 @@ Status DBImpl::IngestExternalFiles(
         job.UpdateStats();
       }
     }
-    ReleaseFileNumberFromPendingOutputs(pending_output_elem);
+    output_file_deletion_guard.reset();
     num_running_ingest_file_ -= static_cast<int>(num_cfs);
     if (0 == num_running_ingest_file_) {
       bg_cv_.SignalAll();
@@ -6134,10 +6169,13 @@ Status DBImpl::CreateColumnFamilyWithImport(
                                    file_options_, import_options,
                                    metadata_files, io_tracer_);
 
+  // Guard keeps the imported file numbers protected until the import finishes.
+  auto output_file_deletion_guard =
+      std::make_shared<JobOutputFileDeletionGuard>(this);
+
   SuperVersionContext dummy_sv_ctx(/* create_superversion */ true);
   VersionEdit dummy_edit;
   uint64_t next_file_number = 0;
-  std::unique_ptr<std::list<uint64_t>::iterator> pending_output_elem;
   {
     // Lock db mutex
     InstrumentedMutexLock l(&mutex_);
@@ -6146,16 +6184,15 @@ Status DBImpl::CreateColumnFamilyWithImport(
       status = error_handler_.GetBGError();
     }
 
-    // Make sure that bg cleanup wont delete the files that we are importing
-    pending_output_elem.reset(new std::list<uint64_t>::iterator(
-        CaptureCurrentFileNumberInPendingOutputs()));
-
     if (status.ok()) {
       // If crash happen after a hard link established, Recover function may
       // reuse the file number that has already assigned to the internal file,
       // and this will overwrite the external file. To protect the external
       // file, we have to make sure the file number will never being reused.
       next_file_number = versions_->FetchAddFileNumber(total_file_num);
+      for (uint64_t i = 0; i < total_file_num; ++i) {
+        output_file_deletion_guard->Protect(next_file_number + i);
+      }
       status =
           versions_->LogAndApply(cfd, read_options, write_options, &dummy_edit,
                                  &mutex_, directories_.GetDbDir());
@@ -6217,10 +6254,9 @@ Status DBImpl::CreateColumnFamilyWithImport(
     sv_context.Clean();
   }
 
-  {
-    InstrumentedMutexLock l(&mutex_);
-    ReleaseFileNumberFromPendingOutputs(pending_output_elem);
-  }
+  // Files are now committed to the MANIFEST; release the temporary deletion
+  // guard so obsolete files can be purged.
+  output_file_deletion_guard.reset();
 
   import_job.Cleanup(status);
   if (!status.ok()) {
@@ -6598,7 +6634,7 @@ Status DBImpl::TraceIteratorSeekForPrev(const uint32_t& cf_id, const Slice& key,
 
 Status DBImpl::ReserveFileNumbersBeforeIngestion(
     ColumnFamilyData* cfd, uint64_t num,
-    std::unique_ptr<std::list<uint64_t>::iterator>& pending_output_elem,
+    const std::shared_ptr<OutputFileDeletionGuard>& output_file_deletion_guard,
     uint64_t* next_file_number) {
   // TODO: plumb Env::IOActivity, Env::IOPriority
   const ReadOptions read_options;
@@ -6612,9 +6648,11 @@ Status DBImpl::ReserveFileNumbersBeforeIngestion(
     // Do not ingest files when there is a bg_error
     return error_handler_.GetBGError();
   }
-  pending_output_elem.reset(new std::list<uint64_t>::iterator(
-      CaptureCurrentFileNumberInPendingOutputs()));
   *next_file_number = versions_->FetchAddFileNumber(static_cast<uint64_t>(num));
+  assert(output_file_deletion_guard);
+  for (uint64_t i = 0; i < num; ++i) {
+    output_file_deletion_guard->Protect(*next_file_number + i);
+  }
   VersionEdit dummy_edit;
   // If crash happen after a hard link established, Recover function may
   // reuse the file number that has already assigned to the internal file,

@@ -202,7 +202,7 @@ class CompactionPickerTestBase : public testing::Test {
       vstorage_ = std::move(temp_vstorage_);
     }
     vstorage_->PrepareForVersionAppend(ioptions_, mutable_cf_options_);
-    vstorage_->ComputeCompactionScore(ioptions_, mutable_cf_options_);
+    vstorage_->ComputeCompactionScore(nullptr, ioptions_, mutable_cf_options_);
     vstorage_->SetFinalized();
   }
 
@@ -3463,7 +3463,7 @@ TEST_F(CompactionPickerTest, UniversalMarkedCompactionStartOutputOverlap) {
       ASSERT_EQ(1U, compaction->num_input_files(1));
     }
 
-    vstorage_->ComputeCompactionScore(ioptions_, mutable_cf_options_);
+    vstorage_->ComputeCompactionScore(nullptr, ioptions_, mutable_cf_options_);
     // After recomputing the compaction score, only one marked file will remain
     random_index = 0;
     std::unique_ptr<Compaction> compaction2(

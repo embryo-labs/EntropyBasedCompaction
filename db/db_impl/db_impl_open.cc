@@ -1980,9 +1980,9 @@ Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd,
   FileMetaData meta;
   std::vector<BlobFileAddition> blob_file_additions;
 
-  std::unique_ptr<std::list<uint64_t>::iterator> pending_outputs_inserted_elem(
-      new std::list<uint64_t>::iterator(
-          CaptureCurrentFileNumberInPendingOutputs()));
+  std::unique_ptr<std::list<uint64_t>::iterator>
+      min_obsolete_sst_number_to_keep_elem(new std::list<uint64_t>::iterator(
+          CaptureMinObsoleteSstNumberToKeep()));
   meta.fd = FileDescriptor(versions_->NewFileNumber(), 0, 0);
   ReadOptions ro;
   ro.total_order_seek = true;
@@ -2133,7 +2133,7 @@ Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd,
       }
     }
   }
-  ReleaseFileNumberFromPendingOutputs(pending_outputs_inserted_elem);
+  ReleaseMinObsoleteSstNumberToKeep(min_obsolete_sst_number_to_keep_elem);
 
   // Note that if file_size is zero, the file has been deleted and
   // should not be added to the manifest.

@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <limits>
 #include <string>
 
 #include "db/db_test_util.h"
@@ -1800,61 +1801,14 @@ TEST_F(DBPropertiesTest, SstFilesSize) {
 }
 
 TEST_F(DBPropertiesTest, MinObsoleteSstNumberToKeep) {
-  class TestListener : public EventListener {
-   public:
-    void OnTableFileCreated(const TableFileCreationInfo& info) override {
-      if (info.reason == TableFileCreationReason::kCompaction) {
-        // Verify the property indicates that SSTs created by a running
-        // compaction cannot be deleted.
-        uint64_t created_file_num;
-        FileType created_file_type;
-        std::string filename =
-            info.file_path.substr(info.file_path.rfind('/') + 1);
-        ASSERT_TRUE(
-            ParseFileName(filename, &created_file_num, &created_file_type));
-        ASSERT_EQ(kTableFile, created_file_type);
+  // The property is queryable and returns max() when no lower-bound guard is
+  // in effect.
+  Reopen(CurrentOptions());
 
-        uint64_t keep_sst_lower_bound;
-        ASSERT_TRUE(
-            db_->GetIntProperty(DB::Properties::kMinObsoleteSstNumberToKeep,
-                                &keep_sst_lower_bound));
-
-        ASSERT_LE(keep_sst_lower_bound, created_file_num);
-        validated_ = true;
-      }
-    }
-
-    void SetDB(DB* db) { db_ = db; }
-
-    int GetNumCompactions() { return num_compactions_; }
-
-    // True if we've verified the property for at least one output file
-    bool Validated() { return validated_; }
-
-   private:
-    int num_compactions_ = 0;
-    bool validated_ = false;
-    DB* db_ = nullptr;
-  };
-
-  const int kNumL0Files = 4;
-
-  std::shared_ptr<TestListener> listener = std::make_shared<TestListener>();
-
-  Options options = CurrentOptions();
-  options.listeners.push_back(listener);
-  options.level0_file_num_compaction_trigger = kNumL0Files;
-  DestroyAndReopen(options);
-  listener->SetDB(db_);
-
-  for (int i = 0; i < kNumL0Files; ++i) {
-    // Make sure they overlap in keyspace to prevent trivial move
-    ASSERT_OK(Put("key1", "val"));
-    ASSERT_OK(Put("key2", "val"));
-    ASSERT_OK(Flush());
-  }
-  ASSERT_OK(dbfull()->TEST_WaitForCompact());
-  ASSERT_TRUE(listener->Validated());
+  uint64_t value = 0;
+  ASSERT_TRUE(
+      db_->GetIntProperty(DB::Properties::kMinObsoleteSstNumberToKeep, &value));
+  ASSERT_EQ(value, std::numeric_limits<uint64_t>::max());
 }
 
 TEST_F(DBPropertiesTest, BlobCacheProperties) {

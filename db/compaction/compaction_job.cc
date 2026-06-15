@@ -136,7 +136,8 @@ const char* GetCompactionProximalOutputRangeTypeString(
 }
 
 CompactionJob::CompactionJob(
-    int job_id, Compaction* compaction, const ImmutableDBOptions& db_options,
+    DBImpl* db_impl, int job_id, Compaction* compaction,
+    const ImmutableDBOptions& db_options,
     const MutableDBOptions& mutable_db_options, const FileOptions& file_options,
     VersionSet* versions, const std::atomic<bool>* shutting_down,
     LogBuffer* log_buffer, FSDirectory* db_directory,
@@ -179,6 +180,11 @@ CompactionJob::CompactionJob(
       blob_output_directory_(blob_output_directory),
       db_mutex_(db_mutex),
       db_error_handler_(db_error_handler),
+      output_file_deletion_guard_(
+          db_impl ? std::shared_ptr<OutputFileDeletionGuard>(
+                        std::make_shared<DBImpl::JobOutputFileDeletionGuard>(
+                            db_impl))
+                  : std::make_shared<NoOpOutputFileDeletionGuard>()),
       // job_context cannot be nullptr, but we will assert later in the body of
       // the constructor.
       earliest_snapshot_(job_context
@@ -1397,12 +1403,19 @@ void CompactionJob::CreateBlobFileBuilder(SubcompactionState* sub_compact,
   if (mutable_cf_options.enable_blob_files &&
       sub_compact->compaction->output_level() >=
           mutable_cf_options.blob_file_starting_level) {
+    // Wrap the file number generator so each new blob file number is also
+    // protected from deletion while this compaction is running.
+    auto blob_file_number_generator = [this]() {
+      uint64_t fn = versions_->NewFileNumber();
+      output_file_deletion_guard_->Protect(fn);
+      return fn;
+    };
     blob_resources.blob_file_builder = std::make_unique<BlobFileBuilder>(
-        versions_, fs_.get(), &sub_compact->compaction->immutable_options(),
-        &mutable_cf_options, &file_options_, &write_options, db_id_,
-        db_session_id_, job_id_, cfd->GetID(), cfd->GetName(), write_hint_,
-        io_tracer_, blob_callback_, BlobFileCreationReason::kCompaction,
-        &blob_resources.blob_file_paths,
+        blob_file_number_generator, fs_.get(),
+        &sub_compact->compaction->immutable_options(), &mutable_cf_options,
+        &file_options_, &write_options, db_id_, db_session_id_, job_id_,
+        cfd->GetID(), cfd->GetName(), write_hint_, io_tracer_, blob_callback_,
+        BlobFileCreationReason::kCompaction, &blob_resources.blob_file_paths,
         sub_compact->Current().GetBlobFileAdditionsPtr());
   } else {
     blob_resources.blob_file_builder = nullptr;
@@ -2250,6 +2263,10 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
 
   // no need to lock because VersionSet::next_file_number_ is atomic
   uint64_t file_number = versions_->NewFileNumber();
+  // Register this output file number so it is not deleted while the
+  // compaction is still running. If per-file pending-output protection is not
+  // enabled (e.g., remote compaction service), this is a no-op.
+  output_file_deletion_guard_->Protect(file_number);
 #ifndef NDEBUG
   TEST_SYNC_POINT_CALLBACK(
       "CompactionJob::OpenCompactionOutputFile::NewFileNumber", &file_number);

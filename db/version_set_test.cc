@@ -391,7 +391,7 @@ TEST_F(VersionStorageInfoTest, MaxBytesForLevelDynamicWithLargeL0_1) {
   ASSERT_EQ(51450U, vstorage_.MaxBytesForLevel(3));
   ASSERT_EQ(257250U, vstorage_.MaxBytesForLevel(4));
 
-  vstorage_.ComputeCompactionScore(ioptions_, mutable_cf_options_);
+  vstorage_.ComputeCompactionScore(nullptr, ioptions_, mutable_cf_options_);
   // Only L0 hits compaction.
   ASSERT_EQ(vstorage_.CompactionScoreLevel(0), 0);
 }
@@ -421,7 +421,7 @@ TEST_F(VersionStorageInfoTest, MaxBytesForLevelDynamicWithLargeL0_2) {
   ASSERT_EQ(51450U, vstorage_.MaxBytesForLevel(3));
   ASSERT_EQ(257250U, vstorage_.MaxBytesForLevel(4));
 
-  vstorage_.ComputeCompactionScore(ioptions_, mutable_cf_options_);
+  vstorage_.ComputeCompactionScore(nullptr, ioptions_, mutable_cf_options_);
   // Although L2 and l3 have higher unadjusted compaction score, considering
   // a relatively large L0 being compacted down soon, L4 is picked up for
   // compaction.
@@ -453,7 +453,7 @@ TEST_F(VersionStorageInfoTest, MaxBytesForLevelDynamicWithLargeL0_3) {
   ASSERT_EQ(2, vstorage_.base_level());
   ASSERT_EQ(20000U, vstorage_.MaxBytesForLevel(2));
 
-  vstorage_.ComputeCompactionScore(ioptions_, mutable_cf_options_);
+  vstorage_.ComputeCompactionScore(nullptr, ioptions_, mutable_cf_options_);
   // Although L2 has higher unadjusted compaction score, considering
   // a relatively large L0 being compacted down soon, L3 is picked up for
   // compaction.
@@ -483,7 +483,7 @@ TEST_F(VersionStorageInfoTest, DrainUnnecessaryLevel) {
   ASSERT_EQ(1, vstorage_.base_level());
   ASSERT_EQ(1000, vstorage_.MaxBytesForLevel(1));
   ASSERT_EQ(10100, vstorage_.MaxBytesForLevel(3));
-  vstorage_.ComputeCompactionScore(ioptions_, mutable_cf_options_);
+  vstorage_.ComputeCompactionScore(nullptr, ioptions_, mutable_cf_options_);
 
   // Tests that levels 1 and 3 are eligible for compaction.
   // Levels 1 and 3 are much smaller than target size,
@@ -1744,8 +1744,9 @@ TEST_F(VersionSetTest, ObsoleteBlobFile) {
     std::vector<std::string> manifest_files;
     constexpr uint64_t min_pending_output = blob_file_number;
 
-    versions_->GetObsoleteFiles(&table_files, &blob_files, &manifest_files,
-                                min_pending_output);
+    versions_->GetObsoleteFiles(
+        &table_files, &blob_files, &manifest_files,
+        [min_pending_output](uint64_t fn) { return fn >= min_pending_output; });
 
     ASSERT_TRUE(blob_files.empty());
   }
@@ -1758,8 +1759,9 @@ TEST_F(VersionSetTest, ObsoleteBlobFile) {
     std::vector<std::string> manifest_files;
     constexpr uint64_t min_pending_output = blob_file_number + 1;
 
-    versions_->GetObsoleteFiles(&table_files, &blob_files, &manifest_files,
-                                min_pending_output);
+    versions_->GetObsoleteFiles(
+        &table_files, &blob_files, &manifest_files,
+        [min_pending_output](uint64_t fn) { return fn >= min_pending_output; });
 
     ASSERT_EQ(blob_files.size(), 1);
     ASSERT_EQ(blob_files[0].GetBlobFileNumber(), blob_file_number);
@@ -1772,8 +1774,9 @@ TEST_F(VersionSetTest, ObsoleteBlobFile) {
     std::vector<std::string> manifest_files;
     constexpr uint64_t min_pending_output = blob_file_number + 1;
 
-    versions_->GetObsoleteFiles(&table_files, &blob_files, &manifest_files,
-                                min_pending_output);
+    versions_->GetObsoleteFiles(
+        &table_files, &blob_files, &manifest_files,
+        [min_pending_output](uint64_t fn) { return fn >= min_pending_output; });
 
     ASSERT_TRUE(blob_files.empty());
   }

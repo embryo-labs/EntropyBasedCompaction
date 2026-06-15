@@ -30,14 +30,6 @@ uint64_t DBImpl::MinLogNumberToKeep() {
 
 uint64_t DBImpl::MinLogNumberToRecycle() { return min_wal_number_to_recycle_; }
 
-uint64_t DBImpl::MinObsoleteSstNumberToKeep() {
-  mutex_.AssertHeld();
-  if (!pending_outputs_.empty()) {
-    return *pending_outputs_.begin();
-  }
-  return std::numeric_limits<uint64_t>::max();
-}
-
 uint64_t DBImpl::GetObsoleteSstFilesSize() {
   mutex_.AssertHeld();
   return versions_->GetObsoleteSstFilesSize();
@@ -148,21 +140,19 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
     }
   }
 
-  // don't delete files that might be currently written to from compaction
-  // threads
-  // Since job_context->min_pending_output is set, until file scan finishes,
-  // mutex_ cannot be released. Otherwise, we might see no min_pending_output
-  // here but later find newer generated unfinalized files while scanning.
-  job_context->min_pending_output = MinObsoleteSstNumberToKeep();
   job_context->files_to_quarantine = error_handler_.GetFilesToQuarantine();
   job_context->min_options_file_number = MinOptionsFileNumberToKeep();
 
-  // Get obsolete files.  This function will also update the list of
-  // pending files in VersionSet().
+  // Get obsolete files. Use a per-file protection check so that a
+  // long-running compaction's low file number does not block deletion of
+  // files created and obsoleted by other compactions. Lower-bound guards may
+  // also be set to protect files that are being output but have not yet been
+  // committed to the MANIFEST.
   assert(versions_);
   versions_->GetObsoleteFiles(
       &job_context->sst_delete_files, &job_context->blob_delete_files,
-      &job_context->manifest_delete_files, job_context->min_pending_output);
+      &job_context->manifest_delete_files,
+      [this](uint64_t file_number) { return IsPendingOutput(file_number); });
 
   // Mark the elements in job_context->sst_delete_files and
   // job_context->blob_delete_files as "grabbed for purge" so that other threads
@@ -184,13 +174,26 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
   job_context->prev_log_number = versions_->prev_log_number();
 
   if (doing_the_full_scan) {
-    versions_->AddLiveFiles(&job_context->sst_live, &job_context->blob_live);
     InfoLogPrefix info_log_prefix(!immutable_db_options_.db_log_dir.empty(),
                                   dbname_);
     // PurgeObsoleteFiles will dedupe duplicate files.
     IOOptions io_opts;
     io_opts.do_not_recurse = true;
-    for (auto& path : CollectAllDBPaths()) {
+    struct DBPathCandidateFile {
+      JobContext::CandidateFileInfo file_info;
+      uint64_t number;
+    };
+    std::vector<DBPathCandidateFile> db_path_candidate_files;
+
+    // Collect paths while db mutex is held.
+    auto paths = CollectAllDBPaths();
+
+    // Release db mutex before doing potentially slow directory IO.
+    // AddPendingOutput() is always called before an output file is created, so
+    // any visible file that is still being written can be captured when we
+    // snapshot pending_outputs_ after the scan.
+    mutex_.Unlock();
+    for (auto& path : paths) {
       // set of all files in the directory. We'll exclude files that are still
       // alive in the subsequent processings.
       std::vector<std::string> files;
@@ -200,21 +203,14 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
       for (const std::string& file : files) {
         uint64_t number;
         FileType type;
-        // 1. If we cannot parse the file name, we skip;
-        // 2. If the file with file_number equals number has already been
-        // grabbed for purge by another compaction job, or it has already been
-        // schedule for purge, we also skip it if we
-        // are doing full scan in order to avoid double deletion of the same
-        // file under race conditions. See
-        // https://github.com/facebook/rocksdb/issues/3573
-        if (!ParseFileName(file, &number, info_log_prefix.prefix, &type) ||
-            !ShouldPurge(number)) {
+        if (!ParseFileName(file, &number, info_log_prefix.prefix, &type)) {
           continue;
         }
 
         // TODO(icanadi) clean up this mess to avoid having one-off "/"
         // prefixes
-        job_context->full_scan_candidate_files.emplace_back("/" + file, path);
+        db_path_candidate_files.push_back(
+            {JobContext::CandidateFileInfo("/" + file, path), number});
       }
     }
 
@@ -244,6 +240,26 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
             log_file, immutable_db_options_.db_log_dir);
       }
     }
+    mutex_.Lock();
+
+    job_context->min_obsolete_sst_number_to_keep = MinObsoleteSstNumberToKeep();
+    {
+      std::lock_guard<std::mutex> lock(pending_outputs_mutex_);
+      job_context->pending_output_file_numbers = pending_outputs_;
+    }
+
+    for (auto& candidate : db_path_candidate_files) {
+      // If the file has already been grabbed for purge by another compaction
+      // job, or it has already been scheduled for purge, skip it to avoid
+      // double deletion under race conditions. See
+      // https://github.com/facebook/rocksdb/issues/3573
+      if (ShouldPurge(candidate.number)) {
+        job_context->full_scan_candidate_files.push_back(
+            std::move(candidate.file_info));
+      }
+    }
+
+    versions_->AddLiveFiles(&job_context->sst_live, &job_context->blob_live);
   } else {
     // Instead of filling ob_context->sst_live and job_context->blob_live,
     // directly remove files that show up in any Version. This is because
@@ -435,7 +451,6 @@ void DBImpl::PurgeObsoleteFiles(JobContext& state, bool schedule_only) {
       state.log_recycle_files.begin(), state.log_recycle_files.end());
   std::unordered_set<uint64_t> quarantine_files_set(
       state.files_to_quarantine.begin(), state.files_to_quarantine.end());
-
   auto candidate_files = state.full_scan_candidate_files;
   candidate_files.reserve(
       candidate_files.size() + state.sst_delete_files.size() +
@@ -568,11 +583,10 @@ void DBImpl::PurgeObsoleteFiles(JobContext& state, bool schedule_only) {
         keep = (number >= state.manifest_file_number);
         break;
       case kTableFile:
-        // If the second condition is not there, this makes
-        // DontDeletePendingOutputs fail
-        // FIXME: but should NOT keep if it came from sst_delete_files?
         keep = (sst_live_set.find(number) != sst_live_set.end()) ||
-               number >= state.min_pending_output;
+               (state.pending_output_file_numbers.find(number) !=
+                state.pending_output_file_numbers.end()) ||
+               number >= state.min_obsolete_sst_number_to_keep;
         if (!keep) {
           // NOTE: sometimes redundant (if came from sst_delete_files)
           // We don't know which column family is applicable here so we don't
@@ -585,18 +599,17 @@ void DBImpl::PurgeObsoleteFiles(JobContext& state, bool schedule_only) {
         }
         break;
       case kBlobFile:
-        keep = number >= state.min_pending_output ||
-               (blob_live_set.find(number) != blob_live_set.end());
+        keep = (blob_live_set.find(number) != blob_live_set.end()) ||
+               (state.pending_output_file_numbers.find(number) !=
+                state.pending_output_file_numbers.end()) ||
+               number >= state.min_obsolete_sst_number_to_keep;
         if (!keep) {
           files_to_del.insert(number);
         }
         break;
       case kTempFile:
-        // Any temp files that are currently being written to must
-        // be recorded in pending_outputs_, which is inserted into "live".
-        // Also, SetCurrentFile creates a temp file when writing out new
-        // manifest, which is equal to state.pending_manifest_file_number. We
-        // should not delete that file
+        // which is equal to state.pending_manifest_file_number. We should not
+        // delete that file.
         //
         // TODO(yhchiang): carefully modify the third condition to safely
         //                 remove the temp options files.

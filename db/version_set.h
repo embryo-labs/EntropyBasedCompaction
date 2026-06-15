@@ -21,6 +21,7 @@
 #pragma once
 #include <atomic>
 #include <deque>
+#include <functional>
 #include <limits>
 #include <map>
 #include <memory>
@@ -1539,7 +1540,7 @@ class VersionSet {
   void GetObsoleteFiles(std::vector<ObsoleteFileInfo>* files,
                         std::vector<ObsoleteBlobFileInfo>* blob_files,
                         std::vector<std::string>* manifest_filenames,
-                        uint64_t min_pending_output);
+                        const std::function<bool(uint64_t)>& is_file_protected);
 
   // REQUIRES: DB mutex held
   uint64_t GetObsoleteSstFilesSize() const;

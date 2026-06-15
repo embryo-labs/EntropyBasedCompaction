@@ -7463,7 +7463,7 @@ void VersionSet::GetLiveFilesMetaData(std::vector<LiveFileMetaData>* metadata) {
 }
 
 void VersionSet::UnrefAndMaybeMakeObsolete(FileMetaData* f,
-                                             ColumnFamilyData* cfd) {
+                                           ColumnFamilyData* cfd) {
   assert(f);
   assert(f->refs > 0);
   --f->refs;
@@ -7479,10 +7479,11 @@ void VersionSet::UnrefAndMaybeMakeObsolete(FileMetaData* f,
   }
 }
 
-void VersionSet::GetObsoleteFiles(std::vector<ObsoleteFileInfo>* files,
-                                  std::vector<ObsoleteBlobFileInfo>* blob_files,
-                                  std::vector<std::string>* manifest_filenames,
-                                  uint64_t min_pending_output) {
+void VersionSet::GetObsoleteFiles(
+    std::vector<ObsoleteFileInfo>* files,
+    std::vector<ObsoleteBlobFileInfo>* blob_files,
+    std::vector<std::string>* manifest_filenames,
+    const std::function<bool(uint64_t)>& is_file_protected) {
   assert(files);
   assert(blob_files);
   assert(manifest_filenames);
@@ -7492,20 +7493,20 @@ void VersionSet::GetObsoleteFiles(std::vector<ObsoleteFileInfo>* files,
 
   std::vector<ObsoleteFileInfo> pending_files;
   for (auto& f : obsolete_files_) {
-    if (f.metadata->fd.GetNumber() < min_pending_output) {
-      files->emplace_back(std::move(f));
-    } else {
+    if (is_file_protected(f.metadata->fd.GetNumber())) {
       pending_files.emplace_back(std::move(f));
+    } else {
+      files->emplace_back(std::move(f));
     }
   }
   obsolete_files_.swap(pending_files);
 
   std::vector<ObsoleteBlobFileInfo> pending_blob_files;
   for (auto& blob_file : obsolete_blob_files_) {
-    if (blob_file.GetBlobFileNumber() < min_pending_output) {
-      blob_files->emplace_back(std::move(blob_file));
-    } else {
+    if (is_file_protected(blob_file.GetBlobFileNumber())) {
       pending_blob_files.emplace_back(std::move(blob_file));
+    } else {
+      blob_files->emplace_back(std::move(blob_file));
     }
   }
   obsolete_blob_files_.swap(pending_blob_files);

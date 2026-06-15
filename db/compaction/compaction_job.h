@@ -49,6 +49,7 @@ namespace ROCKSDB_NAMESPACE {
 
 class Arena;
 class CompactionState;
+class DBImpl;
 class ErrorHandler;
 class MemTable;
 class SnapshotChecker;
@@ -59,6 +60,23 @@ class VersionEdit;
 class VersionSet;
 
 class SubcompactionState;
+
+// Interface for protecting an individual SST/BLOB output file number from
+// deletion while a compaction is creating it. DBImpl provides an implementation
+// that tracks file numbers in a refcounted set.
+class OutputFileDeletionGuard {
+ public:
+  virtual ~OutputFileDeletionGuard() = default;
+  virtual void Protect(uint64_t file_number) = 0;
+};
+
+// No-op implementation for callers that do not need per-file deletion
+// protection (e.g., tests or remote compaction jobs whose outputs live in an
+// isolated directory).
+class NoOpOutputFileDeletionGuard : public OutputFileDeletionGuard {
+ public:
+  void Protect(uint64_t /* file_number */) override {}
+};
 
 // CompactionJob is responsible for executing the compaction. Each (manual or
 // automated) compaction corresponds to a CompactionJob object, and usually
@@ -142,7 +160,7 @@ class SubcompactionState;
 
 class CompactionJob {
  public:
-  CompactionJob(int job_id, Compaction* compaction,
+  CompactionJob(DBImpl* db_impl, int job_id, Compaction* compaction,
                 const ImmutableDBOptions& db_options,
                 const MutableDBOptions& mutable_db_options,
                 const FileOptions& file_options, VersionSet* versions,
@@ -465,6 +483,11 @@ class CompactionJob {
   InstrumentedMutex* db_mutex_;
   ErrorHandler* db_error_handler_;
 
+  // Deletion guard for individual output file numbers created by this
+  // compaction. Always non-null (NoOpOutputFileDeletionGuard when per-file
+  // deletion protection is not needed, e.g. remote compaction service jobs).
+  std::shared_ptr<OutputFileDeletionGuard> output_file_deletion_guard_;
+
   SequenceNumber earliest_snapshot_;
   JobContext* job_context_;
 
@@ -688,7 +711,8 @@ struct CompactionServiceResult {
 class CompactionServiceCompactionJob : private CompactionJob {
  public:
   CompactionServiceCompactionJob(
-      int job_id, Compaction* compaction, const ImmutableDBOptions& db_options,
+      DBImpl* db_impl, int job_id, Compaction* compaction,
+      const ImmutableDBOptions& db_options,
       const MutableDBOptions& mutable_db_options,
       const FileOptions& file_options, VersionSet* versions,
       const std::atomic<bool>* shutting_down, LogBuffer* log_buffer,

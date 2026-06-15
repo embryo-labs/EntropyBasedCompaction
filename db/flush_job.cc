@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "db/builder.h"
+#include "db/db_impl/db_impl.h"
 #include "db/db_iter.h"
 #include "db/dbformat.h"
 #include "db/event_helpers.h"
@@ -87,7 +88,7 @@ const char* GetFlushReasonString(FlushReason flush_reason) {
 }
 
 FlushJob::FlushJob(
-    const std::string& dbname, ColumnFamilyData* cfd,
+    DBImpl* db_impl, const std::string& dbname, ColumnFamilyData* cfd,
     const ImmutableDBOptions& db_options,
     const MutableCFOptions& mutable_cf_options, uint64_t max_memtable_id,
     const FileOptions& file_options, VersionSet* versions,
@@ -133,6 +134,11 @@ FlushJob::FlushJob(
       full_history_ts_low_(std::move(full_history_ts_low)),
       blob_callback_(blob_callback),
       seqno_to_time_mapping_(std::move(seqno_to_time_mapping)),
+      output_file_deletion_guard_(
+          db_impl ? std::shared_ptr<OutputFileDeletionGuard>(
+                        std::make_shared<DBImpl::JobOutputFileDeletionGuard>(
+                            db_impl))
+                  : std::make_shared<NoOpOutputFileDeletionGuard>()),
       limiter_handle_(
           cfd->ioptions().background_job_limiter
               ? std::optional<BackgroundJobLimiter::FlushHandle>(
@@ -214,6 +220,7 @@ void FlushJob::PickMemTable() {
   // path 0 for level 0 file.
   meta_.fd = FileDescriptor(versions_->NewFileNumber(), 0, 0);
   meta_.epoch_number = cfd_->NewEpochNumber();
+  output_file_deletion_guard_->Protect(meta_.fd.GetNumber());
 
   base_ = cfd_->current();
   base_->Ref();  // it is likely that we do not need this reference

@@ -1399,7 +1399,7 @@ Status DBImplSecondary::CompactWithoutInstallation(
   // compaction cannot guarantee the uniqueness of orig_file_number, the file
   // number is only assigned when compaction is done.
   CompactionServiceCompactionJob compaction_job(
-      job_id, c.get(), immutable_db_options_, mutable_db_options_,
+      this, job_id, c.get(), immutable_db_options_, mutable_db_options_,
       file_options_for_compaction_, versions_.get(), &shutting_down_,
       &log_buffer, output_dir.get(), stats_, &mutex_, &error_handler_,
       &job_context, table_cache_, &event_logger_, dbname_, io_tracer_,

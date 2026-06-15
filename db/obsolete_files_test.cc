@@ -253,9 +253,9 @@ TEST_F(ObsoleteFilesTest, BlobFiles) {
   ASSERT_EQ(job_context.blob_live[0], second_blob_file_number);
 
   // Hack the job context a bit by adding a few files to the full scan
-  // list and adjusting the pending file number. We add the two files
-  // above as well as two additional ones, where one is old
-  // and should be cleaned up, and the other is still pending.
+  // list and registering one as a pending output. We add the two files above
+  // as well as two additional ones, where one is old and should be cleaned
+  // up, and the other is still pending.
   constexpr uint64_t old_blob_file_number = 123;
   constexpr uint64_t pending_blob_file_number = 567;
 
@@ -268,7 +268,7 @@ TEST_F(ObsoleteFilesTest, BlobFiles) {
   job_context.full_scan_candidate_files.emplace_back(
       BlobFileName(pending_blob_file_number), path);
 
-  job_context.min_pending_output = pending_blob_file_number;
+  dbfull()->TEST_AddPendingOutput(pending_blob_file_number);
 
   // Purge obsolete files and make sure we purge the old file and the first file
   // (and keep the second file and the pending file).
