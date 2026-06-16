@@ -8561,31 +8561,34 @@ class Benchmark {
     RandomGenerator gen;
     std::string value;
     int64_t found = 0;
-    int get_weight = 0;
-    int put_weight = 0;
+    int64_t seeks = 0;
+    int64_t seek_found = 0;
+    uint64_t seek_scanned = 0;
     int64_t reads_done = 0;
     int64_t writes_done = 0;
     Duration duration(duration_, readwrites_);
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
+    std::unique_ptr<const char[]> upper_bound_key_guard;
+    Slice upper_bound = AllocateKey(&upper_bound_key_guard);
 
     std::unique_ptr<char[]> ts_guard;
     if (user_timestamp_size_ > 0) {
       ts_guard.reset(new char[user_timestamp_size_]);
     }
 
-    // the number of iterations is the larger of read_ or write_
+    QueryDecider query;
+    query.Initiate(
+        {FLAGS_mix_get_ratio, FLAGS_mix_seek_ratio, FLAGS_mix_put_ratio});
+
     while (!duration.Done(1)) {
       DB* db = SelectDB(thread);
-      GenerateKeyFromInt(thread->rand.Next() % FLAGS_num, FLAGS_num, &key);
-      if (get_weight == 0 && put_weight == 0) {
-        // one batch completed, reinitialize for next batch
-        get_weight = FLAGS_readwritepercent;
-        put_weight = 100 - get_weight;
-      }
-      if (get_weight > 0) {
-        // do all the gets first
+      int64_t key_rand = thread->rand.Next() % FLAGS_num;
+      GenerateKeyFromInt(key_rand, FLAGS_num, &key);
+
+      int query_type = query.GetType(thread->rand.Next());
+      if (query_type == 0) {
         Slice ts;
         if (user_timestamp_size_ > 0) {
           ts = mock_app_clock_->GetTimestampForRead(thread->rand,
@@ -8600,12 +8603,38 @@ class Benchmark {
         } else if (!s.IsNotFound()) {
           found++;
         }
-        get_weight--;
         reads_done++;
         thread->stats.FinishedOps(nullptr, db, 1, kRead);
-      } else if (put_weight > 0) {
-        // then do all the corresponding number of puts
-        // for all the gets we have done earlier
+      } else if (query_type == 1) {
+        ReadOptions seek_options = read_options_;
+        if (FLAGS_max_scan_distance != 0) {
+          assert(keys_.empty());
+          assert(keys_per_prefix_ == 0);
+          assert(!FLAGS_reverse_iterator);
+          assert(!FLAGS_seek_missing_prefix);
+          auto min_num =
+              std::min(FLAGS_num, key_rand + FLAGS_max_scan_distance);
+          GenerateKeyFromInt(static_cast<uint64_t>(min_num), FLAGS_num,
+                             &upper_bound);
+          seek_options.iterate_upper_bound = &upper_bound;
+        }
+        Iterator* iter = db->NewIterator(seek_options);
+        if (iter != nullptr) {
+          iter->Seek(key);
+          seeks++;
+          if (iter->Valid() && iter->key().compare(key) == 0) {
+            seek_found++;
+          }
+          for (int64_t j = 0; j < FLAGS_seek_nexts && iter->Valid(); j++) {
+            seek_scanned++;
+            iter->Next();
+            assert(iter->status().ok());
+          }
+        }
+        delete iter;
+        reads_done++;
+        thread->stats.FinishedOps(nullptr, db, 1, kSeek);
+      } else {
         Status s;
         if (user_timestamp_size_ > 0) {
           Slice ts = mock_app_clock_->Allocate(ts_guard.get());
@@ -8617,16 +8646,17 @@ class Benchmark {
           fprintf(stderr, "put error: %s\n", s.ToString().c_str());
           ErrorExit();
         }
-        put_weight--;
         writes_done++;
         thread->stats.FinishedOps(nullptr, db, 1, kWrite);
       }
     }
-    char msg[100];
+    char msg[256];
     snprintf(msg, sizeof(msg),
              "( reads:%" PRIu64 " writes:%" PRIu64 " total:%" PRIu64
-             " found:%" PRIu64 ")",
-             reads_done, writes_done, readwrites_, found);
+             " found:%" PRIu64 " seeks:%" PRIu64 " seek_found:%" PRIu64
+             " seek_scanned:%" PRIu64 ")",
+             reads_done, writes_done, readwrites_, found, seeks, seek_found,
+             seek_scanned);
     thread->stats.AddMessage(msg);
   }
 
