@@ -33,6 +33,7 @@ class LogBuffer;
 class Compaction;
 class VersionStorageInfo;
 struct CompactionInputFiles;
+struct GrandparentFileRange;
 
 double Reff(const std::vector<CompactionInputFiles>& input_files);
 
@@ -230,7 +231,7 @@ class CompactionPicker {
   void GetGrandparents(VersionStorageInfo* vstorage,
                        const CompactionInputFiles& inputs,
                        const CompactionInputFiles& output_level_inputs,
-                       std::vector<FileMetaData*>* grandparents);
+                       std::vector<GrandparentFileRange>* grandparents);
 
   void PickFilesMarkedForCompaction(
       const std::string& cf_name, VersionStorageInfo* vstorage,

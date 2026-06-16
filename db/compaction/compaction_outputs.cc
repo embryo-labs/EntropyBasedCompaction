@@ -132,7 +132,7 @@ bool CompactionOutputs::UpdateFilesToCutForTTLStates(
 size_t CompactionOutputs::UpdateGrandparentBoundaryInfo(
     const Slice& internal_key) {
   size_t curr_key_boundary_switched_num = 0;
-  const std::vector<FileMetaData*>& grandparents = compaction_->grandparents();
+  const auto& grandparents = compaction_->grandparents();
 
   if (grandparents.empty()) {
     return curr_key_boundary_switched_num;
@@ -145,26 +145,26 @@ size_t CompactionOutputs::UpdateGrandparentBoundaryInfo(
   while (grandparent_index_ < grandparents.size()) {
     if (being_grandparent_gap_) {
       if (sstableKeyCompare(ucmp, internal_key,
-                            grandparents[grandparent_index_]->smallest) < 0) {
+                            grandparents[grandparent_index_].smallest) < 0) {
         break;
       }
       if (seen_key_) {
         curr_key_boundary_switched_num++;
         grandparent_overlapped_bytes_ +=
-            grandparents[grandparent_index_]->fd.GetFileSize();
+            grandparents[grandparent_index_].file_size;
         grandparent_boundary_switched_num_++;
       }
       being_grandparent_gap_ = false;
     } else {
       int cmp_result = sstableKeyCompare(
-          ucmp, internal_key, grandparents[grandparent_index_]->largest);
+          ucmp, internal_key, grandparents[grandparent_index_].largest);
       // If it's same key, make sure grandparent_index_ is pointing to the last
       // one.
       if (cmp_result < 0 ||
           (cmp_result == 0 &&
            (grandparent_index_ == grandparents.size() - 1 ||
             sstableKeyCompare(ucmp, internal_key,
-                              grandparents[grandparent_index_ + 1]->smallest) <
+                              grandparents[grandparent_index_ + 1].smallest) <
                 0))) {
         break;
       }
@@ -197,7 +197,7 @@ uint64_t CompactionOutputs::GetCurrentKeyGrandparentOverlappedBytes(
   }
   uint64_t overlapped_bytes = 0;
 
-  const std::vector<FileMetaData*>& grandparents = compaction_->grandparents();
+  const auto& grandparents = compaction_->grandparents();
   const Comparator* ucmp = compaction_->column_family_data()->user_comparator();
   InternalKey ikey;
   ikey.DecodeFrom(internal_key);
@@ -205,17 +205,17 @@ uint64_t CompactionOutputs::GetCurrentKeyGrandparentOverlappedBytes(
   // make sure the grandparent_index_ is pointing to the last files containing
   // the current key.
   int cmp_result =
-      sstableKeyCompare(ucmp, ikey, grandparents[grandparent_index_]->largest);
+      sstableKeyCompare(ucmp, ikey, grandparents[grandparent_index_].largest);
   assert(
       cmp_result < 0 ||
       (cmp_result == 0 &&
        (grandparent_index_ == grandparents.size() - 1 ||
-        sstableKeyCompare(
-            ucmp, ikey, grandparents[grandparent_index_ + 1]->smallest) < 0)));
+        sstableKeyCompare(ucmp, ikey,
+                          grandparents[grandparent_index_ + 1].smallest) < 0)));
   assert(sstableKeyCompare(ucmp, ikey,
-                           grandparents[grandparent_index_]->smallest) >= 0);
+                           grandparents[grandparent_index_].smallest) >= 0);
 #endif
-  overlapped_bytes += grandparents[grandparent_index_]->fd.GetFileSize();
+  overlapped_bytes += grandparents[grandparent_index_].file_size;
 
   // go backwards to find all overlapped files, one key can overlap multiple
   // files. In the following example, if the current output key is `c`, and one
@@ -223,9 +223,9 @@ uint64_t CompactionOutputs::GetCurrentKeyGrandparentOverlappedBytes(
   //  [a b]               [c...
   // [b, b] [c, c] [c, c] [c, d]
   for (int64_t i = static_cast<int64_t>(grandparent_index_) - 1;
-       i >= 0 && sstableKeyCompare(ucmp, ikey, grandparents[i]->largest) == 0;
+       i >= 0 && sstableKeyCompare(ucmp, ikey, grandparents[i].largest) == 0;
        i--) {
-    overlapped_bytes += grandparents[i]->fd.GetFileSize();
+    overlapped_bytes += grandparents[i].file_size;
   }
 
   return overlapped_bytes;

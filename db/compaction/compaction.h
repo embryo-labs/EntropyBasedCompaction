@@ -21,6 +21,12 @@ namespace ROCKSDB_NAMESPACE {
 
 class CompactionInputSnapshot;
 
+struct GrandparentFileRange {
+  std::string smallest;
+  std::string largest;
+  uint64_t file_size = 0;
+};
+
 // The file contains class Compaction, as well as some helper functions
 // and data structures used by the class.
 
@@ -96,7 +102,7 @@ class Compaction {
       uint32_t output_path_id, CompressionType compression,
       CompressionOptions compression_opts,
       Temperature output_temperature_override, uint32_t max_subcompactions,
-      std::vector<FileMetaData*> grandparents,
+      std::vector<GrandparentFileRange> grandparents,
       std::optional<SequenceNumber> earliest_snapshot,
       const SnapshotChecker* snapshot_checker,
       std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle,
@@ -415,7 +421,7 @@ class Compaction {
 
   CompactionReason compaction_reason() const { return compaction_reason_; }
 
-  const std::vector<FileMetaData*>& grandparents() const {
+  const std::vector<GrandparentFileRange>& grandparents() const {
     return grandparents_;
   }
 
@@ -616,7 +622,7 @@ class Compaction {
 
   // State used to check for number of overlapping grandparent files
   // (grandparent == "output_level_ + 1")
-  std::vector<FileMetaData*> grandparents_;
+  std::vector<GrandparentFileRange> grandparents_;
 
   // The earliest snapshot and snapshot checker at compaction picking time.
   // These fields are only set for deletion triggered compactions picked in

@@ -263,7 +263,7 @@ Compaction::Compaction(
     uint32_t _output_path_id, CompressionType _compression,
     CompressionOptions _compression_opts,
     Temperature _output_temperature_override, uint32_t _max_subcompactions,
-    std::vector<FileMetaData*> _grandparents,
+    std::vector<GrandparentFileRange> _grandparents,
     std::optional<SequenceNumber> _earliest_snapshot,
     const SnapshotChecker* _snapshot_checker,
     std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle,

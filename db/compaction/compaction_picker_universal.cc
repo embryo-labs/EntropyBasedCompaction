@@ -1062,17 +1062,25 @@ Compaction* UniversalCompactionBuilder::PickCompactionToReduceSortedRuns(
                      cf_name_.c_str(), file_num_buf);
   }
 
-  std::vector<FileMetaData*> grandparents;
   // Include grandparents for potential file cutting in incremental
   // mode. It is for aligning file cutting boundaries across levels,
   // so that subsequent compactions can pick files with aligned
   // buffer.
   // Single files are only picked up in incremental mode, so that
   // there is no need for full range.
+  std::vector<GrandparentFileRange> grandparents;
   if (mutable_cf_options_.compaction_options_universal.incremental &&
       first_index_after < sorted_runs_.size() &&
       sorted_runs_[first_index_after].level > 1) {
-    grandparents = vstorage_->LevelFiles(sorted_runs_[first_index_after].level);
+    auto gp_files = vstorage_->LevelFiles(sorted_runs_[first_index_after].level);
+    grandparents.reserve(gp_files.size());
+    for (auto* f : gp_files) {
+      grandparents.push_back(GrandparentFileRange{
+          .smallest = f->smallest.Encode().ToString(),
+          .largest = f->largest.Encode().ToString(),
+          .file_size = f->fd.GetFileSize(),
+      });
+    }
   }
 
   if (output_level != 0 && picker_->FilesRangeOverlapWithCompaction(
@@ -1480,7 +1488,7 @@ Compaction* UniversalCompactionBuilder::PickDeleteTriggeredCompaction() {
   CompactionInputFiles start_level_inputs;
   int output_level;
   std::vector<CompactionInputFiles> inputs;
-  std::vector<FileMetaData*> grandparents;
+  std::vector<GrandparentFileRange> grandparents;
 
   if (vstorage_->num_levels() == 1) {
     // This is single level universal. Since we're basically trying to reclaim
@@ -1629,7 +1637,7 @@ Compaction* UniversalCompactionBuilder::PickDeleteTriggeredCompaction() {
       GetCompressionType(vstorage_, mutable_cf_options_, output_level, 1),
       GetCompressionOptions(mutable_cf_options_, vstorage_, output_level),
       Temperature::kUnknown,
-      /* max_subcompactions */ 0, grandparents, earliest_snapshot_,
+      /* max_subcompactions */ 0, std::move(grandparents), earliest_snapshot_,
       snapshot_checker_, std::move(limiter_handle), CompactionReason::kFilesMarkedForCompaction,
       /* trim_ts */ "", score_,
       /* l0_files_might_overlap */ true);

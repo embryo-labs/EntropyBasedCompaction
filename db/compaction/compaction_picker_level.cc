@@ -152,7 +152,7 @@ class LevelCompactionBuilder {
   CompactionInputFiles start_level_inputs_;
   std::vector<CompactionInputFiles> compaction_inputs_;
   CompactionInputFiles output_level_inputs_;
-  std::vector<FileMetaData*> grandparents_;
+  std::vector<GrandparentFileRange> grandparents_;
   CompactionReason compaction_reason_ = CompactionReason::kUnknown;
 
   const MutableCFOptions& mutable_cf_options_;

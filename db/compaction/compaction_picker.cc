@@ -627,18 +627,27 @@ bool CompactionPicker::SetupOtherInputs(
 void CompactionPicker::GetGrandparents(
     VersionStorageInfo* vstorage, const CompactionInputFiles& inputs,
     const CompactionInputFiles& output_level_inputs,
-    std::vector<FileMetaData*>* grandparents) {
+    std::vector<GrandparentFileRange>* grandparents) {
   InternalKey start, limit;
   GetRange(inputs, output_level_inputs, &start, &limit);
   // Compute the set of grandparent files that overlap this compaction
   // (parent == level+1; grandparent == level+2 or the first
   // level after that has overlapping files)
+  std::vector<FileMetaData*> gp_files;
   for (int level = output_level_inputs.level + 1; level < NumberLevels();
        level++) {
-    vstorage->GetOverlappingInputs(level, &start, &limit, grandparents);
-    if (!grandparents->empty()) {
+    vstorage->GetOverlappingInputs(level, &start, &limit, &gp_files);
+    if (!gp_files.empty()) {
       break;
     }
+  }
+  grandparents->reserve(gp_files.size());
+  for (auto* f : gp_files) {
+    grandparents->push_back(GrandparentFileRange{
+        .smallest = f->smallest.Encode().ToString(),
+        .largest = f->largest.Encode().ToString(),
+        .file_size = f->fd.GetFileSize(),
+    });
   }
 }
 
@@ -906,7 +915,7 @@ Compaction* CompactionPicker::PickCompactionForCompactRange(
     return nullptr;
   }
 
-  std::vector<FileMetaData*> grandparents;
+  std::vector<GrandparentFileRange> grandparents;
   GetGrandparents(vstorage, inputs, output_level_inputs, &grandparents);
 
   std::optional<BackgroundJobLimiter::CompactionHandle> limiter_handle;
