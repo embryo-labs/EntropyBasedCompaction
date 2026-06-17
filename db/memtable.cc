@@ -207,6 +207,21 @@ bool MemTable::ShouldFlushNow() {
   }
 
   size_t write_buffer_size = write_buffer_size_.LoadRelaxed();
+
+  // Flush based on data_size_ (actual encoded key+value bytes) instead of
+  // allocated_memory (arena bytes including per-CPU shard waste).
+  // ConcurrentArena pre-allocates 128KB per-CPU shard blocks on first use;
+  // with many CPU cores this can inflate allocated_memory far beyond
+  // write_buffer_size before any real data is written, causing micro-flushes.
+
+  auto data_size = data_size_.LoadRelaxed();
+  if (data_size < write_buffer_size) {
+    return false;
+  }
+  return true;
+
+  // Original logic: flush based on allocated_memory
+#if 0
   // In a lot of times, we cannot allocate arena blocks that exactly matches the
   // buffer size. Thus we have to decide if we should over-allocate or
   // under-allocate.
@@ -264,6 +279,7 @@ bool MemTable::ShouldFlushNow() {
   // as: "arena block size * 0.25 / write buffer size". User who specify a small
   // write buffer size and/or big arena block size may suffer.
   return arena_.AllocatedAndUnused() < kArenaBlockSize / 4;
+#endif
 }
 
 void MemTable::UpdateFlushState() {
