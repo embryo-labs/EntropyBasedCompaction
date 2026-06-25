@@ -8587,8 +8587,11 @@ class Benchmark {
       int64_t key_rand = thread->rand.Next() % FLAGS_num;
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
 
+      OperationType op_type;
       int query_type = query.GetType(thread->rand.Next());
+      auto start = std::chrono::steady_clock::now();
       if (query_type == 0) {
+        op_type = kGet;
         Slice ts;
         if (user_timestamp_size_ > 0) {
           ts = mock_app_clock_->GetTimestampForRead(thread->rand,
@@ -8604,8 +8607,8 @@ class Benchmark {
           found++;
         }
         reads_done++;
-        thread->stats.FinishedOps(nullptr, db, 1, kRead);
       } else if (query_type == 1) {
+        op_type = kSeek;
         ReadOptions seek_options = read_options_;
         if (FLAGS_max_scan_distance != 0) {
           assert(keys_.empty());
@@ -8633,8 +8636,8 @@ class Benchmark {
         }
         delete iter;
         reads_done++;
-        thread->stats.FinishedOps(nullptr, db, 1, kSeek);
       } else {
+        op_type = kWrite;
         Status s;
         if (user_timestamp_size_ > 0) {
           Slice ts = mock_app_clock_->Allocate(ts_guard.get());
@@ -8648,6 +8651,14 @@ class Benchmark {
         }
         writes_done++;
         thread->stats.FinishedOps(nullptr, db, 1, kWrite);
+      }
+      auto now = std::chrono::steady_clock::now();
+      auto micros =
+          std::chrono::duration_cast<std::chrono::microseconds>(now - start)
+              .count();
+      thread->stats.FinishedOps(nullptr, db, 1, op_type, micros);
+      if (op_type == kGet || op_type == kSeek) {
+        thread->stats.FinishedOps(nullptr, db, 1, kRead, micros);
       }
     }
     char msg[256];
