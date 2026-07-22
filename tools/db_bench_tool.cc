@@ -2319,8 +2319,10 @@ class ReporterAgent {
 
   // thread safe
   void ReportFinishedOps(int64_t num_ops, enum OperationType op_type,
-                         uint64_t micros) {
-    total_ops_done_.fetch_add(num_ops);
+                         uint64_t micros, bool count_toward_total = true) {
+    if (count_toward_total) {
+      total_ops_done_.fetch_add(num_ops);
+    }
     auto& count_time = count_time_[op_type];
     count_time.count.fetch_add(num_ops, std::memory_order_relaxed);
     count_time.micros.fetch_add(micros, std::memory_order_relaxed);
@@ -2747,7 +2749,8 @@ class Stats {
 
   void FinishedOps(DBWithColumnFamilies* db_with_cfh, DB* db, int64_t num_ops,
                    enum OperationType op_type = kOthers,
-                   std::optional<uint64_t> _micros = std::nullopt) {
+                   std::optional<uint64_t> _micros = std::nullopt,
+                   bool count_toward_total = true) {
     if (FLAGS_histogram || reporter_agent_) {
       uint64_t micros;
       if (_micros.has_value()) {
@@ -2759,7 +2762,8 @@ class Stats {
       }
 
       if (reporter_agent_) {
-        reporter_agent_->ReportFinishedOps(num_ops, op_type, micros);
+        reporter_agent_->ReportFinishedOps(num_ops, op_type, micros,
+                                           count_toward_total);
       }
 
       if (hist_.find(op_type) == hist_.end()) {
@@ -2772,6 +2776,10 @@ class Stats {
         fprintf(stderr, "long op: %" PRIu64 " micros%30s\r", micros, "");
         fflush(stderr);
       }
+    }
+
+    if (!count_toward_total) {
+      return;
     }
 
     done_ += num_ops;
@@ -4573,8 +4581,9 @@ class Benchmark {
       PerSec reads_per_second(FLAGS_reads_per_second_file);
       auto init = reads_per_second.init();
       if (init >= 0) {
-        shared.read_rate_limiter.reset(NewGenericRateLimiter(init, 100000 /* refill_period_us */,
-          10 /* fairness */, RateLimiter::Mode::kReadsOnly));
+        shared.read_rate_limiter.reset(NewGenericRateLimiter(
+            init, 100000 /* refill_period_us */, 10 /* fairness */,
+            RateLimiter::Mode::kReadsOnly));
       }
     }
 
@@ -8650,7 +8659,6 @@ class Benchmark {
           ErrorExit();
         }
         writes_done++;
-        thread->stats.FinishedOps(nullptr, db, 1, kWrite);
       }
       auto now = std::chrono::steady_clock::now();
       auto micros =
@@ -8658,7 +8666,8 @@ class Benchmark {
               .count();
       thread->stats.FinishedOps(nullptr, db, 1, op_type, micros);
       if (op_type == kGet || op_type == kSeek) {
-        thread->stats.FinishedOps(nullptr, db, 1, kRead, micros);
+        thread->stats.FinishedOps(nullptr, db, 1, kRead, micros,
+                                  false /* count_toward_total */);
       }
     }
     char msg[256];
