@@ -1259,9 +1259,9 @@ Status DBImpl::WriteImplWALOnly(
     WriteContext write_context;
     Status status =
         PreprocessWrite(write_options, &wal_context, &write_context);
-    WriteStatusCheckOnLocked(status);
 
     if (!status.ok()) {
+      WriteStatusCheckOnLocked(status);
       WriteThread::WriteGroup write_group;
       write_thread->EnterAsBatchGroupLeader(&w, &write_group);
       write_thread->ExitAsBatchGroupLeader(write_group, status);
