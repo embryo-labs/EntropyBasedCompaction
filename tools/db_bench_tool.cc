@@ -2362,16 +2362,6 @@ class ReporterAgent {
     std::unordered_map<OperationType, std::unique_ptr<WritableFile>>
         op_count_time;
 
-    std::unique_ptr<WritableFile> sorted_run_status_file;
-    std::string fname = "sorted-run-status.txt";
-    Status s =
-        env_->NewWritableFile(fname, &sorted_run_status_file, EnvOptions());
-    if (!s.ok()) {
-      fprintf(stderr, "Can't open %s: %s\n", fname.c_str(),
-              s.ToString().c_str());
-      abort();
-    }
-
     auto* clock = env_->GetSystemClock().get();
     auto time_started = clock->NowMicros();
     while (true) {
@@ -2445,10 +2435,9 @@ class ReporterAgent {
       assert(good);
       report << ',' << value;
 
-      // size
-      ColumnFamilyMetaData cf_meta;
-      db_->GetColumnFamilyMetaData(&cf_meta);
-      report << ',' << cf_meta.size;
+      good = db_->GetIntProperty(DB::Properties::kLiveSstFilesSize, &value);
+      assert(good);
+      report << ',' << value;
 
       // Re
       std::vector<std::vector<uint64_t>> compactions_info;
@@ -2497,7 +2486,7 @@ class ReporterAgent {
       }
       report << '\n';
 
-      s = report_file_->Append(report.str());
+      Status s = report_file_->Append(report.str());
       if (s.ok()) {
         s = report_file_->Flush();
       }
@@ -2518,7 +2507,8 @@ class ReporterAgent {
         last_count_time_[op] = count_time;
         auto it = op_count_time.find(op);
         if (it == op_count_time.end()) {
-          fname = output_dir_ / (OperationTypeString[op] + "-count-time.csv");
+          std::string fname =
+              output_dir_ / (OperationTypeString[op] + "-count-time.csv");
           std::unique_ptr<WritableFile> file;
           s = env_->NewWritableFile(fname, &file, EnvOptions());
           if (s.ok()) {
@@ -2547,32 +2537,6 @@ class ReporterAgent {
           return;
         }
       }
-
-      bool first = true;
-      for (const auto& file : cf_meta.levels[0].files) {
-        if (first) {
-          first = false;
-        } else {
-          sorted_run_status_file->Append(", ");
-        }
-        if (file.being_compacted) {
-          sorted_run_status_file->Append("merging ");
-        }
-        sorted_run_status_file->Append(std::to_string(file.size));
-      }
-      for (size_t i = 1; i < cf_meta.levels.size(); ++i) {
-        if (cf_meta.levels[i].size == 0) {
-          continue;
-        }
-        if (first) {
-          first = false;
-        } else {
-          sorted_run_status_file->Append(", ");
-        }
-        sorted_run_status_file->Append("Level ");
-        sorted_run_status_file->Append(std::to_string(cf_meta.levels[i].size));
-      }
-      sorted_run_status_file->Append("\n");
     }
   }
 
