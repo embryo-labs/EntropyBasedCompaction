@@ -2256,6 +2256,20 @@ class ReporterAgent {
       abort();
     }
 
+    if (dbstats) {
+      for (Tickers ticker : tickers_to_report_) {
+        last_ticker_[ticker] = dbstats->getTickerCount(ticker);
+      }
+    }
+
+    RateLimiter* rate_limiter = db_->GetOptions().rate_limiter.get();
+    if (rate_limiter) {
+      for (int pri = Env::IO_LOW; pri < Env::IO_TOTAL; ++pri) {
+        last_bytes_through_[pri] = rate_limiter->GetTotalBytesThrough(
+            static_cast<Env::IOPriority>(pri));
+      }
+    }
+
     reporting_thread_ = port::Thread([&]() { SleepAndReport(); });
   }
 
