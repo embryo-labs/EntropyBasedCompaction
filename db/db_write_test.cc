@@ -39,6 +39,22 @@ class DBWriteTestUnparameterized : public DBTestBase {
       : DBTestBase("pipelined_write_test", /*env_do_fsync=*/false) {}
 };
 
+TEST_F(DBWriteTestUnparameterized, UnorderedWriteHonorsDelay) {
+  Options options = CurrentOptions();
+  options.unordered_write = true;
+  options.enable_pipelined_write = false;
+  options.allow_concurrent_memtable_write = true;
+  DestroyAndReopen(options);
+
+  auto token = dbfull()->TEST_write_controler().GetDelayToken(1);
+  WriteOptions write_options;
+  write_options.no_slowdown = true;
+  std::string large_value(1024, 'x');
+
+  ASSERT_OK(dbfull()->Put(write_options, "foo", large_value));
+  ASSERT_TRUE(dbfull()->Put(write_options, "foo2", large_value).IsIncomplete());
+}
+
 // It is invalid to do sync write while disabling WAL.
 TEST_P(DBWriteTest, SyncAndDisableWAL) {
   WriteOptions write_options;

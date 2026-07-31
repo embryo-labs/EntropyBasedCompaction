@@ -1285,7 +1285,15 @@ Status DBImpl::WriteImplWALOnly(
 
   WriteThread::WriteGroup write_group;
   uint64_t last_sequence;
-  write_thread->EnterAsBatchGroupLeader(&w, &write_group);
+  const size_t write_group_size =
+      write_thread->EnterAsBatchGroupLeader(&w, &write_group);
+
+  // Unordered writes apply this group to the memtable after the WAL phase and
+  // therefore contribute to compaction pressure. Pure WAL-only writes disable
+  // the memtable and do not need to be charged to write slowdown.
+  if (!disable_memtable) {
+    last_batch_group_size_ = write_group_size;
+  }
 
   size_t pre_release_callback_cnt = 0;
   size_t total_byte_size = 0;
@@ -1300,8 +1308,6 @@ Status DBImpl::WriteImplWALOnly(
     }
   }
 
-  // Note: no need to update last_batch_group_size_ here since the batch writes
-  // to WAL only
   // TODO: this use of operator bool on `tracer_` can avoid unnecessary lock
   // grabs but does not seem thread-safe.
   if (tracer_) {
