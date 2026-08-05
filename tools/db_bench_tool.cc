@@ -8647,8 +8647,7 @@ class Benchmark {
               .count();
       thread->stats.FinishedOps(nullptr, db, 1, op_type, micros);
       if (op_type == kGet || op_type == kSeek) {
-        thread->stats.FinishedOps(nullptr, db, 1, kRead, micros,
-                                  false /* count_toward_total */);
+        thread->stats.FinishedOps(nullptr, db, 1, kRead, micros, false);
       }
     }
     char msg[256];
