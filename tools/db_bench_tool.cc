@@ -7043,7 +7043,7 @@ class Benchmark {
       thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, op_type,
                                 micros);
       thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1,
-                                OperationType::kRead, micros);
+                                OperationType::kRead, micros, false);
 
       if (thread->shared->read_rate_limiter.get() != nullptr) {
                                   thread->shared->read_rate_limiter->Request(
