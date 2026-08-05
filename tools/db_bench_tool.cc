@@ -2256,14 +2256,14 @@ class ReporterAgent {
       abort();
     }
 
-    if (dbstats) {
+    if (dbstats != nullptr) {
       for (Tickers ticker : tickers_to_report_) {
         last_ticker_[ticker] = dbstats->getTickerCount(ticker);
       }
     }
 
     RateLimiter* rate_limiter = db_->GetOptions().rate_limiter.get();
-    if (rate_limiter) {
+    if (rate_limiter != nullptr) {
       for (int pri = Env::IO_LOW; pri < Env::IO_TOTAL; ++pri) {
         last_bytes_through_[pri] = rate_limiter->GetTotalBytesThrough(
             static_cast<Env::IOPriority>(pri));
@@ -2308,7 +2308,7 @@ class ReporterAgent {
         }
       }
     }
-    if (dbstats) {
+    if (dbstats != nullptr) {
       std::string fname = output_dir_ / "compaction-sorted-run-sizes-cv.json";
       std::unique_ptr<WritableFile> file;
       Status s = env_->NewWritableFile(fname, &file, EnvOptions());
@@ -2351,7 +2351,7 @@ class ReporterAgent {
     Options options = db_->GetOptions();
     std::ostringstream header;
     header << "secs_elapsed,interval_qps";
-    if (dbstats) {
+    if (dbstats != nullptr) {
       for (Tickers ticker : tickers_to_report_) {
         assert(ticker == TickersNameMap[ticker].first);
         header << ',' << TickersNameMap[ticker].second;
@@ -2360,10 +2360,10 @@ class ReporterAgent {
     header << ",num-sorted-runs," << DB::Properties::kNumMergingL0SortedRuns
            << ',' << DB::Properties::kBufferLevelSize;
     header << ",num-flushes,num-compactions,size,Re";
-    if (options.background_job_limiter) {
+    if (options.background_job_limiter != nullptr) {
       header << ",num-running-bg-jobs";
     }
-    if (options.rate_limiter.get()) {
+    if (options.rate_limiter.get() != nullptr) {
       header << ",IO_LOW,IO_FLATTEN,IO_MAIN_LEVEL,IO_SA,IO_HIGH,IO_USER,rate-"
                 "limit";
     }
@@ -2402,7 +2402,7 @@ class ReporterAgent {
       report << secs_elapsed << ',' << (total_ops_done_snapshot - last_report_);
       last_report_ = total_ops_done_snapshot;
 
-      if (dbstats) {
+      if (dbstats != nullptr) {
         for (Tickers ticker : tickers_to_report_) {
           uint64_t cur = dbstats->getTickerCount(ticker);
           uint64_t& last = last_ticker_[ticker];
@@ -2473,11 +2473,11 @@ class ReporterAgent {
       }
       report << ',' << re;
 
-      if (background_job_limiter) {
+      if (background_job_limiter != nullptr) {
         report << ',' << background_job_limiter->num_running_bg_jobs();
       }
 
-      if (rate_limiter) {
+      if (rate_limiter != nullptr) {
         uint64_t bytes_through[Env::IO_TOTAL];
         for (int pri = Env::IO_LOW; pri < Env::IO_TOTAL; ++pri) {
           uint64_t total = rate_limiter->GetTotalBytesThrough(
