@@ -2285,7 +2285,8 @@ class ReporterAgent {
       OperationType op = static_cast<OperationType>(i);
       const auto& hist = hist_[op];
       if (!hist.Empty()) {
-        std::string fname = OperationTypeString[op] + "-latency-us.json";
+        std::string fname =
+            output_dir_ / (OperationTypeString[op] + "-latency-us.json");
         std::unique_ptr<WritableFile> file;
         Status s = env_->NewWritableFile(fname, &file, EnvOptions());
         if (!s.ok()) {
