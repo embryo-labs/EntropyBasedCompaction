@@ -2406,7 +2406,7 @@ class ReporterAgent {
         for (Tickers ticker : tickers_to_report_) {
           uint64_t cur = dbstats->getTickerCount(ticker);
           uint64_t& last = last_ticker_[ticker];
-          report << ',' << std::to_string(cur - last);
+          report << ',' << cur - last;
           last = cur;
         }
       }
