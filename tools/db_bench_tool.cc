@@ -3209,8 +3209,6 @@ class Benchmark {
   bool read_operands_;  // read via GetMergeOperands()
   std::vector<std::string> keys_;
 
-  std::unique_ptr<ReporterAgent> reporter_agent_;
-
   class ErrorHandlerListener : public EventListener {
    public:
     ErrorHandlerListener()
@@ -4568,12 +4566,10 @@ class Benchmark {
       }
     }
 
+    std::unique_ptr<ReporterAgent> reporter_agent;
     if (FLAGS_report_interval_seconds > 0) {
-      if (reporter_agent_ == nullptr ||
-          reporter_agent_->output_dir() != output_dir_) {
-        reporter_agent_.reset(new ReporterAgent(db_.db, FLAGS_env, output_dir_,
-                                                FLAGS_report_interval_seconds));
-      }
+      reporter_agent.reset(new ReporterAgent(db_.db, FLAGS_env, output_dir_,
+                                             FLAGS_report_interval_seconds));
     }
 
     ThreadArg* arg = new ThreadArg[n];
@@ -4601,7 +4597,7 @@ class Benchmark {
       arg[i].shared = &shared;
       total_thread_count_++;
       arg[i].thread = new ThreadState(i, total_thread_count_);
-      arg[i].thread->stats.SetReporterAgent(reporter_agent_.get());
+      arg[i].thread->stats.SetReporterAgent(reporter_agent.get());
       arg[i].thread->shared = &shared;
       FLAGS_env->StartThread(ThreadBody, &arg[i]);
     }
