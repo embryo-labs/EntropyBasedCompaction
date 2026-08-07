@@ -31,6 +31,9 @@
 #include "rocksdb/status.h"
 #include "rocksdb/types.h"
 
+#define EULER 2.71828182845904523536
+#define LOG2SQUARED 0.48045301391
+
 namespace ROCKSDB_NAMESPACE {
 
 class Slice;
@@ -218,6 +221,43 @@ class FilterPolicy {
     return nullptr;
   }
 };
+
+class MonkeyFilterPolicy : public FilterPolicy
+{
+public:
+    double default_bpe;
+    int size_ratio;
+    size_t levels;
+
+    std::vector<double> level_fpr_opt;
+    std::vector<double> level_bpe;
+
+    const std::unique_ptr<const FilterPolicy> default_policy;
+    std::vector<const FilterPolicy *> policy_per_level;
+
+    MonkeyFilterPolicy(double _bits_per_element, int _size_ratio, size_t _levels);
+
+    ~MonkeyFilterPolicy();
+
+    const char *Name() const override {return "Monkey";}
+
+    void CreateFilter(const Slice *keys, int n, std::string *dst) const override;
+
+    bool KeyMayMatch(const Slice &key, const Slice &filter) const override;
+
+    FilterBitsBuilder *GetBuilderWithContext(const FilterBuildingContext& context) const override;
+
+    static FilterBitsBuilder *GetBuilderFromContext(const FilterBuildingContext& context);
+    // FilterBitsBuilder *GetFilterBitsBuilder() const override {return nullptr;}
+    FilterBitsReader *GetFilterBitsReader(const Slice& contents) const override; // {return default_policy->GetFilterBitsReader(contents);}
+
+    double optimal_false_positive_rate(size_t curr_level);
+    void allocate_bits_per_level();
+};
+
+const FilterPolicy* NewMonkeyFilterPolicy(double bits_per_key,
+                                          int size_ratio,
+                                          size_t levels);
 
 // Return a new filter policy that uses a bloom filter with approximately
 // the specified number of bits per key.
