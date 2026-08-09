@@ -31,6 +31,7 @@
 #include <cinttypes>
 #include <condition_variable>
 #include <cstddef>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -2287,24 +2288,18 @@ class ReporterAgent {
       if (!hist.Empty()) {
         std::string fname =
             output_dir_ / (OperationTypeString[op] + "-latency-us.json");
-        std::unique_ptr<WritableFile> file;
-        Status s = env_->NewWritableFile(fname, &file, EnvOptions());
-        if (!s.ok()) {
-          printf("Can't open %s: %s\n", fname.c_str(), s.ToString().c_str());
-        }
-        if (s.ok()) {
-          s = file->Append(
-              "{\n\t\"Average\": " + std::to_string(hist.Average()) +
-              ",\n\t\"10%\": " + std::to_string(hist.Percentile(10)) +
-              ",\n\t\"50%\": " + std::to_string(hist.Percentile(50)) +
-              ",\n\t\"90%\": " + std::to_string(hist.Percentile(90)) +
-              ",\n\t\"99%\": " + std::to_string(hist.Percentile(99)) +
-              ",\n\t\"99.9%\": " + std::to_string(hist.Percentile(99.9)) +
-              ",\n\t\"99.99%\": " + std::to_string(hist.Percentile(99.99)) +
-              "\n}\n");
-        }
-        if (s.ok()) {
-          s = file->Flush();
+        std::ofstream file(fname);
+        if (!file) {
+          printf("Can't open %s\n", fname.c_str());
+        } else {
+          file << "{\n\t\"Average\": " << hist.Average()
+               << ",\n\t\"10%\": " << hist.Percentile(10)
+               << ",\n\t\"50%\": " << hist.Percentile(50)
+               << ",\n\t\"90%\": " << hist.Percentile(90)
+               << ",\n\t\"99%\": " << hist.Percentile(99)
+               << ",\n\t\"99.9%\": " << hist.Percentile(99.9)
+               << ",\n\t\"99.99%\": " << hist.Percentile(99.99)
+               << "\n}\n";
         }
       }
     }
