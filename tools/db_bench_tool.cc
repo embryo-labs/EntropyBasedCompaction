@@ -7738,6 +7738,7 @@ class Benchmark {
    public:
     PerSec(const std::string& path)
         : cur_(0),
+          each_us_(0),
           cur_begin_us_(FLAGS_env->NowMicros()),
           last_recalc_us_(cur_begin_us_) {
       if (path.empty()) {
@@ -7752,8 +7753,22 @@ class Benchmark {
         }
         op_per_sec_.push_back(x);
       }
-      assert(op_per_sec_.size() > 0);
+      if (op_per_sec_.empty()) {
+        fprintf(stderr, "PerSec: no data in file %s\n", path.c_str());
+        db_bench_exit(1);
+      }
+      if (FLAGS_period_secs <= 0) {
+        fprintf(stderr, "PerSec: --period_secs must be > 0\n");
+        db_bench_exit(1);
+      }
       each_us_ = FLAGS_period_secs * 1000000 / op_per_sec_.size();
+      if (each_us_ == 0) {
+        fprintf(stderr,
+                "PerSec: --period_secs=%" PRId64
+                " is too short for %zu entries\n",
+                FLAGS_period_secs, op_per_sec_.size());
+        db_bench_exit(1);
+      }
     }
 
     std::optional<double> init() {
@@ -7766,6 +7781,7 @@ class Benchmark {
       if (op_per_sec_.empty()) {
         return std::nullopt;
       }
+      assert(each_us_ > 0);
       auto now_micros = FLAGS_env->NowMicros();
       if (now_micros - last_recalc_us_ < recalc_interval_us) {
         return std::nullopt;
