@@ -7844,30 +7844,27 @@ class Benchmark {
       }
 
       if (thread->tid == 0) {
-        if (thread->shared->write_rate_limiter.get() != nullptr) {
-          auto new_limit_write = writes_per_second.new_limit();
-          if (new_limit_write.has_value()) {
-            thread->shared->write_rate_limiter->SetBytesPerSecond(
-                new_limit_write.value());
-          }
+        auto new_limit_write = writes_per_second.new_limit();
+        if (new_limit_write.has_value()) {
+          assert(thread->shared->write_rate_limiter.get() != nullptr);
+          thread->shared->write_rate_limiter->SetBytesPerSecond(
+              *new_limit_write);
         }
 
-        if (open_options_.rate_limiter != nullptr) {
-          auto new_limit_compaction = compaction_limit.new_limit();
-          if (new_limit_compaction.has_value()) {
-            open_options_.rate_limiter->SetBytesPerSecond(
-                new_limit_compaction.value());
-          }
+        auto new_limit_compaction = compaction_limit.new_limit();
+        if (new_limit_compaction.has_value()) {
+          assert(open_options_.rate_limiter != nullptr);
+          open_options_.rate_limiter->SetBytesPerSecond(
+              *new_limit_compaction);
         }
 
         // There may be multiple readers, but only one writer. So we update read
         // rate limiter in the writer to avoid redundant updates.
-        if (thread->shared->read_rate_limiter.get() != nullptr) {
-          auto new_limit_read = reads_per_second.new_limit();
-          if (new_limit_read.has_value()) {
-            thread->shared->read_rate_limiter->SetBytesPerSecond(
-                new_limit_read.value());
-          }
+        auto new_limit_read = reads_per_second.new_limit();
+        if (new_limit_read.has_value()) {
+          assert(thread->shared->read_rate_limiter.get() != nullptr);
+          thread->shared->read_rate_limiter->SetBytesPerSecond(
+              *new_limit_read);
         }
       }
     }
