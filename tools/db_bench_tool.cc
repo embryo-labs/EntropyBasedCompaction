@@ -3911,10 +3911,10 @@ class Benchmark {
       benchmarks = std::stringstream(FLAGS_benchmarks);
     }
     bool first_benchmark = true;
+    std::unique_ptr<ExpiredTimeFilter> filter;
     for (;;) {
       std::string name;
       int num_threads;
-      std::unique_ptr<ExpiredTimeFilter> filter;
       if (benchmarks.index() == 0) {
         auto& [json, benchmarks_it] = std::get<0>(benchmarks);
         if (!first_benchmark) {
