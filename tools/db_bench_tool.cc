@@ -4556,9 +4556,9 @@ class Benchmark {
     } else if (!FLAGS_reads_per_second_file.empty()) {
       PerSec reads_per_second(FLAGS_reads_per_second_file);
       auto init = reads_per_second.init();
-      if (init >= 0) {
+      if (init.has_value()) {
         shared.read_rate_limiter.reset(NewGenericRateLimiter(
-            init, 100000 /* refill_period_us */, 10 /* fairness */,
+            *init, 100000 /* refill_period_us */, 10 /* fairness */,
             RateLimiter::Mode::kReadsOnly));
       }
     }
@@ -7750,9 +7750,9 @@ class Benchmark {
       each_us_ = FLAGS_period_secs * 1000000 / op_per_sec_.size();
     }
 
-    double init() {
+    std::optional<double> init() {
       if (op_per_sec_.empty()) {
-        return -1;
+        return std::nullopt;
       }
       return op_per_sec_[0];
     }
@@ -7799,8 +7799,8 @@ class Benchmark {
     PerSec writes_per_second(FLAGS_writes_per_second_file);
     if (thread->tid == 0) {
       auto init = writes_per_second.init();
-      if (init >= 0) {
-        thread->shared->write_rate_limiter.reset(NewGenericRateLimiter(init));
+      if (init.has_value()) {
+        thread->shared->write_rate_limiter.reset(NewGenericRateLimiter(*init));
       }
     }
 
