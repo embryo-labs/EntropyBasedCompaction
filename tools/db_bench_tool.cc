@@ -7797,9 +7797,11 @@ class Benchmark {
     Slice key = AllocateKey(&key_guard);
 
     PerSec writes_per_second(FLAGS_writes_per_second_file);
-    auto init = writes_per_second.init();
-    if (init >= 0) {
-      thread->shared->write_rate_limiter.reset(NewGenericRateLimiter(init));
+    if (thread->tid == 0) {
+      auto init = writes_per_second.init();
+      if (init >= 0) {
+        thread->shared->write_rate_limiter.reset(NewGenericRateLimiter(init));
+      }
     }
 
     PerSec compaction_limit(FLAGS_compaction_limit_file);
@@ -7820,27 +7822,37 @@ class Benchmark {
         ErrorExit();
       }
       thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kWrite);
-      thread->shared->write_rate_limiter->Request(1, Env::IO_HIGH,
-                                                  nullptr /*stats*/);
-
-      auto new_limit_write = writes_per_second.new_limit();
-      if (new_limit_write.has_value()) {
-        thread->shared->write_rate_limiter->SetBytesPerSecond(
-            new_limit_write.value());
+      if (thread->shared->write_rate_limiter.get() != nullptr) {
+        thread->shared->write_rate_limiter->Request(1, Env::IO_HIGH,
+                                                    nullptr /*stats*/);
       }
 
-      auto new_limit_compaction = compaction_limit.new_limit();
-      if (new_limit_compaction.has_value()) {
-        open_options_.rate_limiter->SetBytesPerSecond(
-            new_limit_compaction.value());
-      }
+      if (thread->tid == 0) {
+        if (thread->shared->write_rate_limiter.get() != nullptr) {
+          auto new_limit_write = writes_per_second.new_limit();
+          if (new_limit_write.has_value()) {
+            thread->shared->write_rate_limiter->SetBytesPerSecond(
+                new_limit_write.value());
+          }
+        }
 
-      // There may be multiple readers, but only one writer. So we update read
-      // rate limiter in the writer to avoid redundant updates.
-      auto new_limit_read = reads_per_second.new_limit();
-      if (new_limit_read.has_value()) {
-        thread->shared->read_rate_limiter->SetBytesPerSecond(
-            new_limit_read.value());
+        if (open_options_.rate_limiter != nullptr) {
+          auto new_limit_compaction = compaction_limit.new_limit();
+          if (new_limit_compaction.has_value()) {
+            open_options_.rate_limiter->SetBytesPerSecond(
+                new_limit_compaction.value());
+          }
+        }
+
+        // There may be multiple readers, but only one writer. So we update read
+        // rate limiter in the writer to avoid redundant updates.
+        if (thread->shared->read_rate_limiter.get() != nullptr) {
+          auto new_limit_read = reads_per_second.new_limit();
+          if (new_limit_read.has_value()) {
+            thread->shared->read_rate_limiter->SetBytesPerSecond(
+                new_limit_read.value());
+          }
+        }
       }
     }
   }
