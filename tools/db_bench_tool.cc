@@ -3943,7 +3943,9 @@ class Benchmark {
             (it != benchmark.end() ? static_cast<uint64_t>(*it)
                                    : FLAGS_benchmark_write_rate_limit);
       } else {
-        std::getline(std::get<1>(benchmarks), name, ',');
+        if (!std::getline(std::get<1>(benchmarks), name, ',')) {
+          break;
+        }
         num_threads = FLAGS_threads;
         duration_ = FLAGS_duration;
         writes_ = (FLAGS_writes < 0 ? FLAGS_num : FLAGS_writes);
