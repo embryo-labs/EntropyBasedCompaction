@@ -6961,9 +6961,9 @@ class Benchmark {
               std::min(FLAGS_num, key_rand + FLAGS_max_scan_distance);
           GenerateKeyFromInt(static_cast<uint64_t>(min_num), FLAGS_num,
                              &upper_bound);
-          read_options_.iterate_upper_bound = &upper_bound;
+          options.iterate_upper_bound = &upper_bound;
         }
-        Iterator* single_iter = db_with_cfh->db->NewIterator(read_options_);
+        Iterator* single_iter = db_with_cfh->db->NewIterator(options);
         if (single_iter != nullptr) {
           uint64_t scan_length;
           if (scan_length_cdf.empty()) {
@@ -6998,6 +6998,7 @@ class Benchmark {
           }
         }
         delete single_iter;
+        options.iterate_upper_bound = nullptr;
       } else {
         op_type = kPrefixScan;
         // Prefix scan
