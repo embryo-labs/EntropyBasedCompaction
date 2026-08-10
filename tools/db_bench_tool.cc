@@ -3196,6 +3196,7 @@ class Benchmark {
   uint64_t duration_;
   int64_t writes_;
   uint64_t benchmark_write_rate_limit_;
+  std::string writes_per_second_file_;
 
   int64_t readwrites_;
   int64_t merge_keys_;
@@ -3942,6 +3943,9 @@ class Benchmark {
         benchmark_write_rate_limit_ =
             (it != benchmark.end() ? static_cast<uint64_t>(*it)
                                    : FLAGS_benchmark_write_rate_limit);
+        it = benchmark.find("writes_per_second_file");
+        writes_per_second_file_ =
+            (it != benchmark.end() ? static_cast<std::string>(*it) : "");
       } else {
         if (!std::getline(std::get<1>(benchmarks), name, ',')) {
           break;
@@ -3950,6 +3954,7 @@ class Benchmark {
         duration_ = FLAGS_duration;
         writes_ = (FLAGS_writes < 0 ? FLAGS_num : FLAGS_writes);
         benchmark_write_rate_limit_ = FLAGS_benchmark_write_rate_limit;
+        writes_per_second_file_ = FLAGS_writes_per_second_file;
       }
       if (open_options_.json_log) {
         auto& json_log = *open_options_.json_log;
@@ -4548,8 +4553,8 @@ class Benchmark {
     if (benchmark_write_rate_limit_ > 0) {
       shared.write_rate_limiter.reset(
           NewGenericRateLimiter(benchmark_write_rate_limit_));
-    } else if (!FLAGS_writes_per_second_file.empty()) {
-      PerSec writes_per_second(FLAGS_writes_per_second_file);
+    } else if (!writes_per_second_file_.empty()) {
+      PerSec writes_per_second(writes_per_second_file_);
       auto init = writes_per_second.init();
       if (init.has_value()) {
         shared.write_rate_limiter.reset(NewGenericRateLimiter(*init));
@@ -7818,7 +7823,7 @@ class Benchmark {
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
 
-    PerSec writes_per_second(FLAGS_writes_per_second_file);
+    PerSec writes_per_second(writes_per_second_file_);
 
     PerSec compaction_limit(FLAGS_compaction_limit_file);
     PerSec reads_per_second(FLAGS_reads_per_second_file);
