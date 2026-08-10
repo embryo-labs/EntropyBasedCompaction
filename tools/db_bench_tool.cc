@@ -4548,6 +4548,12 @@ class Benchmark {
     if (benchmark_write_rate_limit_ > 0) {
       shared.write_rate_limiter.reset(
           NewGenericRateLimiter(benchmark_write_rate_limit_));
+    } else if (!FLAGS_writes_per_second_file.empty()) {
+      PerSec writes_per_second(FLAGS_writes_per_second_file);
+      auto init = writes_per_second.init();
+      if (init.has_value()) {
+        shared.write_rate_limiter.reset(NewGenericRateLimiter(*init));
+      }
     }
     if (FLAGS_benchmark_read_rate_limit > 0) {
       shared.read_rate_limiter.reset(NewGenericRateLimiter(
@@ -7797,12 +7803,6 @@ class Benchmark {
     Slice key = AllocateKey(&key_guard);
 
     PerSec writes_per_second(FLAGS_writes_per_second_file);
-    if (thread->tid == 0) {
-      auto init = writes_per_second.init();
-      if (init.has_value()) {
-        thread->shared->write_rate_limiter.reset(NewGenericRateLimiter(*init));
-      }
-    }
 
     PerSec compaction_limit(FLAGS_compaction_limit_file);
     PerSec reads_per_second(FLAGS_reads_per_second_file);
