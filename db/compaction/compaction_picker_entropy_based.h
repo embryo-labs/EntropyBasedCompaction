@@ -39,6 +39,8 @@ class CompactionPickerEntropyBased : public CompactionPicker {
 
   void print_status() const;
 
+  void Initialize(const VersionStorageInfo* vstorage);
+
   std::optional<std::pair<size_t, size_t>> PickCompaction(
       const MutableCFOptions& mutable_cf_options,
       VersionStorageInfo* vstorage) const;
@@ -47,5 +49,6 @@ class CompactionPickerEntropyBased : public CompactionPicker {
                                          last_sorted_run_picked_for_compaction);
 
   std::list<SortedRunInfo> sorted_runs_;
+  bool initialized_ = false;
 };
 }  // namespace ROCKSDB_NAMESPACE

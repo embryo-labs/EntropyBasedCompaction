@@ -560,6 +560,70 @@ TEST_F(DBCompactionTest, UniversalReduceFileLockingRepickNothing) {
   ASSERT_TRUE(bottom_pri_compaction_attempt_repick);
 }
 
+TEST_F(DBCompactionTest, EntropyBasedCompactionReopen) {
+  Options options = CurrentOptions();
+  options.compaction_style = kCompactionStyleEntropyBased;
+  options.num_levels = 1;
+  options.level0_file_num_compaction_trigger = 2;
+  options.entropy_threshold = 0;
+  DestroyAndReopen(options);
+
+  ASSERT_OK(Put("first", "value"));
+  ASSERT_OK(Flush());
+  ASSERT_EQ(1, NumTableFilesAtLevel(0));
+
+  Reopen(options);
+
+  ASSERT_OK(Put("second", "value"));
+  ASSERT_OK(Flush());
+  ASSERT_OK(dbfull()->TEST_WaitForCompact());
+  ASSERT_EQ(1, NumTableFilesAtLevel(0));
+}
+
+TEST_F(DBCompactionTest, EntropyBasedCompactionStartsFromUniversal) {
+  Options options = CurrentOptions();
+  options.compaction_style = kCompactionStyleUniversal;
+  options.num_levels = 1;
+  options.level0_file_num_compaction_trigger = 3;
+  DestroyAndReopen(options);
+
+  ASSERT_OK(Put("first", "value"));
+  ASSERT_OK(Flush());
+  ASSERT_OK(Put("second", "value"));
+  ASSERT_OK(Flush());
+  ASSERT_EQ(2, NumTableFilesAtLevel(0));
+
+  options.compaction_style = kCompactionStyleEntropyBased;
+  options.level0_file_num_compaction_trigger = 2;
+  options.entropy_threshold = 0;
+  Reopen(options);
+
+  ASSERT_OK(dbfull()->TEST_WaitForCompact());
+  ASSERT_EQ(1, NumTableFilesAtLevel(0));
+}
+
+TEST_F(DBCompactionTest, EntropyBasedCompactionStartsFromTiering) {
+  Options options = CurrentOptions();
+  options.compaction_style = kCompactionStyleTiering;
+  options.num_levels = 1;
+  options.max_bytes_for_level_multiplier = 3;
+  DestroyAndReopen(options);
+
+  ASSERT_OK(Put("first", "value"));
+  ASSERT_OK(Flush());
+  ASSERT_OK(Put("second", "value"));
+  ASSERT_OK(Flush());
+  ASSERT_EQ(2, NumTableFilesAtLevel(0));
+
+  options.compaction_style = kCompactionStyleEntropyBased;
+  options.level0_file_num_compaction_trigger = 2;
+  options.entropy_threshold = 0;
+  Reopen(options);
+
+  ASSERT_OK(dbfull()->TEST_WaitForCompact());
+  ASSERT_EQ(1, NumTableFilesAtLevel(0));
+}
+
 TEST_F(DBCompactionTest, SkipStatsUpdateTest) {
   // This test verify UpdateAccumulatedStats is not on
   // if options.skip_stats_update_on_db_open = true

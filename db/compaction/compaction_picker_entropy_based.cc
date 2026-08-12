@@ -39,6 +39,17 @@ void CompactionPickerEntropyBased::print_status() const {
   }
 }
 
+void CompactionPickerEntropyBased::Initialize(
+    const VersionStorageInfo* vstorage) {
+  assert(!initialized_);
+  assert(sorted_runs_.empty());
+  for (const auto* file : vstorage->LevelFiles(0)) {
+    assert(!file->being_compacted);
+    sorted_runs_.emplace_back(std::vector<uint64_t>({file->fd.GetFileSize()}));
+  }
+  initialized_ = true;
+}
+
 bool CompactionPickerEntropyBased::CalcNeedsCompaction(
     const ColumnFamilyData* cfd, const MutableCFOptions& mutable_cf_options,
     const VersionStorageInfo* vstorage) const {
@@ -313,6 +324,9 @@ Compaction* CompactionPickerEntropyBased::PickCompaction(
     const std::vector<SequenceNumber>& existing_snapshots,
     const SnapshotChecker* snapshot_checker, VersionStorageInfo* vstorage,
     LogBuffer* log_buffer, bool require_max_output_level) {
+  if (!initialized_) {
+    Initialize(vstorage);
+  }
   auto best = PickCompaction(mutable_cf_options, vstorage);
   if (!best.has_value()) {
     if (mutable_cf_options.last_compaction_io_sa) {
@@ -405,6 +419,10 @@ void CompactionPickerEntropyBased::CompactionFinished(
 }
 void CompactionPickerEntropyBased::Flushed(const VersionStorageInfo* vstorage,
                                            const FileMetaData& file) {
+  if (!initialized_) {
+    Initialize(vstorage);
+    return;
+  }
   // raw_key_size and raw_value_size seem to be zero
   sorted_runs_.emplace_front(std::vector<uint64_t>({file.fd.GetFileSize()}));
   print_status();
