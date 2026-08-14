@@ -1378,6 +1378,11 @@ if(WITH_BENCHMARK_TOOLS)
     tools/db_bench_tool.cc)
   target_link_libraries(db_bench${ARTIFACT_SUFFIX}
     ${ROCKSDB_LIB} ${THIRDPARTY_LIBS})
+  target_include_directories(db_bench${ARTIFACT_SUFFIX} PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/extern
+    ${CMAKE_SOURCE_DIR}/extern/rocksdb)
+  target_link_libraries(db_bench${ARTIFACT_SUFFIX} tmpdb)
 
   add_executable(cache_bench${ARTIFACT_SUFFIX}
     cache/cache_bench.cc
