@@ -4694,6 +4694,10 @@ class Benchmark {
     }
 
     if (FLAGS_use_endure_compactor) {
+      // Endure controls run sizes through CompactionOptions. A separate
+      // RocksDB compaction-size limit could split one logical run.
+      options.max_compaction_bytes = UINT64_MAX;
+
       tmpdb::FluidOptions fluid_options;
       fluid_options.size_ratio = FLAGS_max_bytes_for_level_multiplier;
       fluid_options.lower_level_run_max = FLAGS_endure_lower_level_run_max;
