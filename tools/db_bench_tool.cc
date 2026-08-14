@@ -7837,6 +7837,7 @@ class Benchmark {
                                                     nullptr /*stats*/);
       }
 
+      // Use one writer to update the shared rate limiters.
       if (thread->tid == 0) {
         auto new_limit_write = writes_per_second.new_limit();
         if (new_limit_write.has_value()) {
@@ -7845,8 +7846,6 @@ class Benchmark {
               *new_limit_write);
         }
 
-        // There may be multiple readers, but only one writer. So we update read
-        // rate limiter in the writer to avoid redundant updates.
         auto new_limit_read = reads_per_second.new_limit();
         if (new_limit_read.has_value()) {
           assert(thread->shared->read_rate_limiter.get() != nullptr);
