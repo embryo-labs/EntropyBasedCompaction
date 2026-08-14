@@ -5740,6 +5740,7 @@ class Benchmark {
     int num_keys = 0;
     int64_t key_rand = 0;
     ReadOptions options(FLAGS_verify_checksum, true);
+    options.readahead_size = FLAGS_readahead_size;
 
     QueryDecider query;
     query.Initiate({FLAGS_mix_get_ratio, FLAGS_mix_seek_ratio});
