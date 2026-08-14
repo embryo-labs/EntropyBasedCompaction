@@ -7759,7 +7759,7 @@ class Benchmark {
       each_us_ = FLAGS_period_secs * 1000000 / op_per_sec_.size();
       if (each_us_ == 0) {
         fprintf(stderr,
-                "PerSec: --period_secs=%" PRId64
+                "PerSec: --period_secs=%" PRIu64
                 " is too short for %zu entries\n",
                 FLAGS_period_secs, op_per_sec_.size());
         db_bench_exit(1);
