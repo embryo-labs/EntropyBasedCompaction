@@ -1609,7 +1609,6 @@ DEFINE_double(sine_d, 1, "D in f(x) = A sin(bx + c) + d");
 DEFINE_uint64(period_secs, 0, "");
 DEFINE_string(writes_per_second_file, "", "");
 DEFINE_string(reads_per_second_file, "", "");
-DEFINE_string(compaction_limit_file, "", "");
 DEFINE_string(scan_length_cdf_file, "", "");
 
 DEFINE_bool(rate_limit_bg_reads, false,
@@ -5468,14 +5467,6 @@ class Benchmark {
             FLAGS_rate_limiter_auto_tuned,
             FLAGS_rate_limiter_single_burst_bytes,
             FLAGS_rate_limiter_bytes_per_sec_io_sa));
-      } else if (!FLAGS_compaction_limit_file.empty()) {
-        int64_t initial_limit;
-        std::ifstream(FLAGS_compaction_limit_file) >> initial_limit;
-        options.rate_limiter.reset(NewGenericRateLimiter(
-            initial_limit, FLAGS_rate_limiter_refill_period_us, 10,
-            RateLimiter::Mode::kWritesOnly, false,
-            FLAGS_rate_limiter_single_burst_bytes,
-            FLAGS_rate_limiter_bytes_per_sec_io_sa));
       }
     }
 
@@ -7825,7 +7816,6 @@ class Benchmark {
 
     PerSec writes_per_second(writes_per_second_file_);
 
-    PerSec compaction_limit(FLAGS_compaction_limit_file);
     PerSec reads_per_second(FLAGS_reads_per_second_file);
 
     Duration duration(duration_, std::numeric_limits<int64_t>::max());
@@ -7854,13 +7844,6 @@ class Benchmark {
           assert(thread->shared->write_rate_limiter.get() != nullptr);
           thread->shared->write_rate_limiter->SetBytesPerSecond(
               *new_limit_write);
-        }
-
-        auto new_limit_compaction = compaction_limit.new_limit();
-        if (new_limit_compaction.has_value()) {
-          assert(open_options_.rate_limiter != nullptr);
-          open_options_.rate_limiter->SetBytesPerSecond(
-              *new_limit_compaction);
         }
 
         // There may be multiple readers, but only one writer. So we update read
