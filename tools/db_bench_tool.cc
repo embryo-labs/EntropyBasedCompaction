@@ -140,7 +140,6 @@ DEFINE_string(
     "multireadrandom,"
     "multiscan,"
     "mixgraph,"
-    "customperiodic,"
     "readseq,"
     "readtorowcache,"
     "readtocache,"
