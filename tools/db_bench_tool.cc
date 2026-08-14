@@ -112,7 +112,7 @@ using GFLAGS_NAMESPACE::SetVersionString;
 
 DEFINE_string(exec_before_exit, "", "");
 
-DEFINE_string(benchmarks_json, "", "");
+DEFINE_string(benchmarks_json, "", "JSON array describing benchmark phases");
 
 DEFINE_string(
     benchmarks,
@@ -1605,9 +1605,16 @@ DEFINE_double(sine_c, 0, "C in f(x) = A sin(bx + c) + d");
 
 DEFINE_double(sine_d, 1, "D in f(x) = A sin(bx + c) + d");
 
-DEFINE_uint64(period_secs, 0, "");
-DEFINE_string(writes_per_second_file, "", "");
-DEFINE_string(reads_per_second_file, "", "");
+DEFINE_uint64(period_secs, 0,
+              "Duration in seconds of one repetition of the workload defined "
+              "by --writes_per_second_file and --reads_per_second_file. The "
+              "workload repeats until --duration expires");
+DEFINE_string(writes_per_second_file, "",
+              "Path to whitespace-separated write rates in operations per "
+              "second");
+DEFINE_string(reads_per_second_file, "",
+              "Path to whitespace-separated read rates in operations per "
+              "second");
 DEFINE_string(scan_length_cdf_file, "", "");
 
 DEFINE_bool(rate_limit_bg_reads, false,
