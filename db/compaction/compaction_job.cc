@@ -10,6 +10,7 @@
 #include "db/compaction/compaction_job.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cinttypes>
 #include <memory>
 #include <optional>
@@ -23,6 +24,7 @@
 #include "db/builder.h"
 #include "db/compaction/clipping_iterator.h"
 #include "db/compaction/compaction_input_snapshot.h"
+#include "db/compaction/compaction_picker.h"
 #include "db/compaction/compaction_state.h"
 #include "db/db_impl/db_impl.h"
 #include "db/dbformat.h"
@@ -1172,6 +1174,19 @@ Status CompactionJob::Install(bool* compaction_released) {
            << pl_stats.num_output_files_blob;
     stream << "proximal_level_bytes_written_blob"
            << pl_stats.bytes_written_blob;
+  }
+
+  if (status.ok() && compact_->compaction->immutable_options().json_log) {
+    auto json_log = compact_->compaction->immutable_options().json_log;
+    std::unique_lock<std::mutex> lock(json_log->mutex);
+    json_log->out << "{\"timestamp(ns)\": "
+                  << std::chrono::duration_cast<std::chrono::nanoseconds>(
+                         std::chrono::steady_clock::now().time_since_epoch())
+                         .count()
+                  << ", \"event\": \"compaction-finished\", \"R_eff\": "
+                  << Reff(*compact_->compaction->inputs())
+                  << ", \"output_bytes\": " << stats.bytes_written << "}"
+                  << std::endl;
   }
 
   CleanupCompaction();
