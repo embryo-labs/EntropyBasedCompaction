@@ -2248,9 +2248,19 @@ class ReporterAgent {
         report_interval_secs_(report_interval_secs),
         stop_(false) {
     auto report_file_path = output_dir_ / FLAGS_report_file;
+    std::ifstream existing_report(report_file_path);
+    std::string last_line;
+    std::string line;
+    while (std::getline(existing_report, line) && !line.empty()) {
+      last_line = std::move(line);
+    }
+    uint64_t secs_elapsed_offset = 0;
+    if (!last_line.empty()) {
+      std::istringstream(last_line) >> secs_elapsed_offset;
+    }
     auto s =
         env_->ReopenWritableFile(report_file_path, &report_file_, EnvOptions());
-    if (s.ok()) {
+    if (s.ok() && last_line.empty()) {
       s = report_file_->Append(Header() + "\n");
     }
     if (s.ok()) {
@@ -2276,7 +2286,8 @@ class ReporterAgent {
       }
     }
 
-    reporting_thread_ = port::Thread([&]() { SleepAndReport(); });
+    reporting_thread_ = port::Thread(
+        [this, secs_elapsed_offset]() { SleepAndReport(secs_elapsed_offset); });
   }
 
   ~ReporterAgent() {
@@ -2369,7 +2380,7 @@ class ReporterAgent {
     }
     return header.str();
   }
-  void SleepAndReport() {
+  void SleepAndReport(uint64_t secs_elapsed_offset) {
     Options options = db_->GetOptions();
     BackgroundJobLimiter* background_job_limiter =
         options.background_job_limiter.get();
@@ -2393,8 +2404,9 @@ class ReporterAgent {
       auto total_ops_done_snapshot = total_ops_done_.load();
       // round the seconds elapsed
       auto secs_elapsed =
+          secs_elapsed_offset +
           (clock->NowMicros() - time_started + kMicrosInSecond / 2) /
-          kMicrosInSecond;
+              kMicrosInSecond;
 
       printf("secs elapsed: %lu\n", secs_elapsed);
 
