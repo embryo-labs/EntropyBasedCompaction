@@ -1244,6 +1244,17 @@ class DB {
     //      flushes.
     static const std::string kNumRunningFlushes;
 
+    // "rocksdb.num-compaction-picks" - returns the number of completed picker
+    // calls for this column family, including calls that select no compaction,
+    // since DB open or the last ResetStats().
+    static const std::string kNumCompactionPicks;
+
+    // "rocksdb.compaction-pick-nanos" - returns cumulative picker time in
+    // nanoseconds for this column family since DB open or the last
+    // ResetStats(). Includes finalizing input information for selected
+    // compactions.
+    static const std::string kCompactionPickNanos;
+
     //  "rocksdb.compaction-pending" - returns 1 if at least one compaction is
     //      pending; otherwise, returns 0.
     static const std::string kCompactionPending;

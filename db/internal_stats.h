@@ -850,6 +850,8 @@ class InternalStats {
   bool HandleMemTableFlushPending(uint64_t* value, DBImpl* db,
                                   Version* version);
   bool HandleNumRunningFlushes(uint64_t* value, DBImpl* db, Version* version);
+  bool HandleNumCompactionPicks(uint64_t* value, DBImpl* db, Version* version);
+  bool HandleCompactionPickNanos(uint64_t* value, DBImpl* db, Version* version);
   bool HandleCompactionPending(uint64_t* value, DBImpl* db, Version* version);
   bool HandleNumRunningCompactions(uint64_t* value, DBImpl* db,
                                    Version* version);

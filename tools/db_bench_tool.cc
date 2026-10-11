@@ -2339,6 +2339,27 @@ class ReporterAgent {
                      "\n}\n");
       }
     }
+
+    auto report_path = output_dir_ / "report.json";
+    std::ofstream report_file(report_path);
+    report_file << "{\n";
+    const char* separator = "";
+    for (const auto& property : {DB::Properties::kNumCompactionPicks,
+                                 DB::Properties::kCompactionPickNanos}) {
+      uint64_t value = 0;
+      if (!db_->GetIntProperty(property, &value)) {
+        fprintf(stderr, "Can't read property %s\n", property.c_str());
+        abort();
+      }
+      report_file << separator << "\t\"" << property << "\": " << value;
+      separator = ",\n";
+    }
+    report_file << "\n}\n";
+    report_file.close();
+    if (!report_file) {
+      fprintf(stderr, "Can't write %s\n", report_path.c_str());
+      abort();
+    }
   }
 
   std::filesystem::path output_dir() const { return output_dir_; }
