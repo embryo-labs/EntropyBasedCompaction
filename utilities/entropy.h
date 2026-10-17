@@ -12,10 +12,15 @@ class ReffCalculator {
  public:
   ReffCalculator() : sum_nlog2n_(0), sum_(0) {}
   void add_sorted_run(uint64_t size) {
+    if (size == 0) {
+      return;
+    }
     sum_nlog2n_ += size * std::log2((double)size);
     sum_ += size;
   }
-  double reff() const { return std::log2((double)sum_) - sum_nlog2n_ / sum_; }
+  double reff() const {
+    return sum_ == 0 ? 0 : std::log2((double)sum_) - sum_nlog2n_ / sum_;
+  }
   uint64_t size_sum() const { return sum_; }
 
  private:
