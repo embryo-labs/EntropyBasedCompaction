@@ -3829,11 +3829,6 @@ class Benchmark {
       memset(buf + sizeof(v), '0', size - sizeof(v));
     }
   }
-  uint64_t splitmix64(uint64_t v) {
-    v = (v ^ (v >> 30)) * 0xBF58476D1CE4E5B9;
-    v = (v ^ (v >> 27)) * 0x94D049BB133111EB;
-    return v ^ (v >> 31);
-  }
 
   // Generate key according to the given specification and random number.
   // The resulting key will have the following format:
@@ -5853,7 +5848,6 @@ class Benchmark {
   };
 
   std::unique_ptr<KeyGenerator> key_generator_for_read(uint64_t num) {
-    std::unique_ptr<KeyGenerator> key_gen;
     if (read_random_exp_range_ > 0) {
       return std::make_unique<KeyGeneratorExp>(read_random_exp_range_, num);
     } else if (read_zipfian_theta_ > 0) {
@@ -5863,7 +5857,6 @@ class Benchmark {
     }
   }
   std::unique_ptr<KeyGenerator> key_generator_for_write(uint64_t num) {
-    std::unique_ptr<KeyGenerator> key_gen;
     if (write_random_exp_range_ > 0) {
       return std::make_unique<KeyGeneratorExp>(write_random_exp_range_, num);
     } else if (write_zipfian_theta_ > 0) {

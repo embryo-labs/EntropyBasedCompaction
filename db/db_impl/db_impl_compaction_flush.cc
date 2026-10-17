@@ -3755,8 +3755,6 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
               s_ += (x - avg_) * (x - avg_new);
               avg_ = avg_new;
             }
-            uint64_t count() const { return n_; }
-            double average() const { return avg_; }
             double SampleVariance() const { return s_ / (n_ - 1); }
             double SampleCV() const {
               return std::sqrt(SampleVariance()) / avg_;

@@ -108,7 +108,6 @@ CompactionPickerVertiorizon::PickCompactionToL2(
     double score;
   };
   std::optional<Best> best;
-  uint64_t best_benefit, best_cost;
   // [l2_left, l2_right)
   size_t l2_left = 0;
   size_t l2_right = 0;

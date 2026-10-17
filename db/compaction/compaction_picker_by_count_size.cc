@@ -112,7 +112,6 @@ Compaction* CompactionPickerByCountSize::PickCompaction(
     }
   }
 
-  SortedRunInfo* merging_info;
   it = sorted_runs_.erase(first_to_erase, pick_result.last);
   assert(it == pick_result.last);
   it->num_sorted_runs = num;
